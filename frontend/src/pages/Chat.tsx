@@ -339,8 +339,8 @@ export function Chat() {
         </div>
         <p className="conversation-preview">{conversation.preview || 'Sem resumo disponível.'}</p>
         <div className="conversation-metrics">
-          <span>{conversation.total_tokens.toLocaleString()} tok</span>
-          <span>{formatUsd(conversation.estimated_cost_usd)}</span>
+          <span>{(conversation.total_tokens || 0).toLocaleString()} tok</span>
+          <span>{formatUsd(conversation.estimated_cost_usd || 0)}</span>
         </div>
       </button>
       <div className="conversation-actions">
