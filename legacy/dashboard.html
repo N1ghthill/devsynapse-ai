@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevSynapse Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        .header h1 {
+            color: #4a5568;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .header h1 .logo {
+            color: #667eea;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+        
+        .status-healthy {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        
+        .status-warning {
+            background: #feebc8;
+            color: #744210;
+        }
+        
+        .status-critical {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        }
+        
+        .card h2 {
+            color: #4a5568;
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card h2 i {
+            color: #667eea;
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            color: #718096;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .chart-container {
+            height: 300px;
+            margin-top: 20px;
+        }
+        
+        .alerts-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+        }
+        
+        .alert-item {
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            transition: all 0.3s ease;
+        }
+        
+        .alert-item:hover {
+            transform: translateX(5px);
+        }
+        
+        .alert-critical {
+            background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%);
+            border-left: 5px solid #e53e3e;
+        }
+        
+        .alert-warning {
+            background: linear-gradient(135deg, #feebc8 0%, #fbd38d 100%);
+            border-left: 5px solid #d69e2e;
+        }
+        
+        .alert-info {
+            background: linear-gradient(135deg, #bee3f8 0%, #90cdf4 100%);
+            border-left: 5px solid #3182ce;
+        }
+        
+        .alert-icon {
+            font-size: 1.5rem;
+        }
+        
+        .alert-content {
+            flex: 1;
+        }
+        
+        .alert-time {
+            color: #718096;
+            font-size: 0.8rem;
+            margin-top: 5px;
+        }
+        
+        .no-alerts {
+            text-align: center;
+            color: #718096;
+            padding: 40px;
+            font-style: italic;
+        }
+        
+        .refresh-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 50px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 20px auto;
+            transition: all 0.3s ease;
+        }
+        
+        .refresh-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+        
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <span class="logo">DevSynapse</span> Dashboard
+                <span id="statusBadge" class="status-badge status-healthy">Carregando...</span>
+            </h1>
+            <p>Monitoramento em tempo real do assistente de desenvolvimento inteligente</p>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="card">
+                <h2><i>📊</i> Estatísticas do Sistema</h2>
+                <div id="systemStats">
+                    <div class="loading">Carregando...</div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2><i>🔧</i> Comandos Executados</h2>
+                <div id="commandStats">
+                    <div class="loading">Carregando...</div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="commandChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2><i>🌐</i> Uso da API</h2>
+                <div id="apiStats">
+                    <div class="loading">Carregando...</div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="apiChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="alerts-container">
+            <h2><i>🚨</i> Alertas Ativos</h2>
+            <div id="alertsList">
+                <div class="loading">Carregando alertas...</div>
+            </div>
+        </div>
+        
+        <button class="refresh-btn" onclick="loadDashboardData()">
+            <i>🔄</i> Atualizar Dashboard
+        </button>
+    </div>
+
+    <script>
+        let commandChart = null;
+        let apiChart = null;
+        
+        async function loadDashboardData() {
+            try {
+                // Carregar dados do dashboard
+                const response = await fetch('/dashboard/stats?hours=24');
+                const data = await response.json();
+                
+                updateSystemStatus(data.system_health);
+                updateSystemStats(data.system_health);
+                updateCommandStats(data.command_stats);
+                updateApiStats(data.api_stats);
+                updateAlerts(data.active_alerts);
+                
+                updateCharts(data.command_stats, data.api_stats);
+                
+            } catch (error) {
+                console.error('Erro ao carregar dados:', error);
+                document.getElementById('statusBadge').textContent = 'Erro de conexão';
+                document.getElementById('statusBadge').className = 'status-badge status-critical';
+            }
+        }
+        
+        function updateSystemStatus(health) {
+            const badge = document.getElementById('statusBadge');
+            badge.textContent = health.overall_status.toUpperCase();
+            
+            if (health.overall_status === 'healthy') {
+                badge.className = 'status-badge status-healthy';
+            } else if (health.overall_status === 'warning') {
+                badge.className = 'status-badge status-warning';
+            } else {
+                badge.className = 'status-badge status-critical';
+            }
+        }
+        
+        function updateSystemStats(health) {
+            const html = `
+                <div class="stat-number">${health.overall_status.toUpperCase()}</div>
+                <div class="stat-label">Status do Sistema</div>
+                
+                <div style="margin-top: 20px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <span>Taxa de Erro Comandos:</span>
+                        <span style="font-weight: 600; color: ${health.command_error_rate > 0.1 ? '#e53e3e' : '#38a169'}">
+                            ${(health.command_error_rate * 100).toFixed(1)}%
+                        </span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <span>Taxa de Erro API:</span>
+                        <span style="font-weight: 600; color: ${health.api_error_rate > 0.1 ? '#e53e3e' : '#38a169'}">
+                            ${(health.api_error_rate * 100).toFixed(1)}%
+                        </span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>Alertas Ativos:</span>
+                        <span style="font-weight: 600; color: ${health.active_alerts > 0 ? '#d69e2e' : '#38a169'}">
+                            ${health.active_alerts}
+                        </span>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('systemStats').innerHTML = html;
+        }
+        
+        function updateCommandStats(stats) {
+            const html = `
+                <div class="stat-number">${stats.totals.total}</div>
+                <div class="stat-label">Total de Comandos (24h)</div>
+                
+                <div style="margin-top: 20px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <span>Sucesso:</span>
+                        <span style="font-weight: 600; color: #38a169">${stats.totals.successful}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>Falhas:</span>
+                        <span style="font-weight: 600; color: #e53e3e">${stats.totals.failed}</span>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('commandStats').innerHTML = html;
+        }
+        
+        function updateApiStats(stats) {
+            const html = `
+                <div class="stat-number">${stats.totals.total_requests}</div>
+                <div class="stat-label">Requisições API (24h)</div>
+                
+                <div style="margin-top: 20px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <span>Tempo Médio:</span>
+                        <span style="font-weight: 600; color: #3182ce">
+                            ${stats.totals.avg_response_time ? stats.totals.avg_response_time.toFixed(2) : '0.00'}s
+                        </span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>Endpoints:</span>
+                        <span style="font-weight: 600; color: #3182ce">${stats.totals.unique_endpoints}</span>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('apiStats').innerHTML = html;
+        }
+        
+        function updateAlerts(alerts) {
+            const container = document.getElementById('alertsList');
+            
+            if (alerts.length === 0) {
+                container.innerHTML = '<div class="no-alerts">🎉 Nenhum alerta ativo no momento!</div>';
+                return;
+            }
+            
+            let html = '';
+            alerts.forEach(alert => {
+                let icon = 'ℹ️';
+                let alertClass = 'alert-info';
+                
+                if (alert.severity === 'critical') {
+                    icon = '🔥';
+                    alertClass = 'alert-critical';
+                } else if (alert.severity === 'warning') {
+                    icon = '⚠️';
+                    alertClass = 'alert-warning';
+                }
+                
+                const time = new Date(alert.timestamp).toLocaleString('pt-BR');
+                
+                html += `
+                    <div class="alert-item ${alertClass}">
+                        <div class="alert-icon">${icon}</div>
+                        <div class="alert-content">
+                            <strong>${alert.alert_type.toUpperCase()}</strong>
+                            <p>${alert.message}</p>
+                            <div class="alert-time">${time}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        function updateCharts(commandStats, apiStats) {
+            // Gráfico de comandos por tipo
+            const commandCtx = document.getElementById('commandChart').getContext('2d');
+            
+            if (commandChart) {
+                commandChart.destroy();
+            }
+            
+            const commandTypes = commandStats.by_type.map(item => item.command_type);
+            const commandCounts = commandStats.by_type.map(item => item.count);
+            
+            commandChart = new Chart(commandCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: commandTypes,
+                    datasets: [{
+                        data: commandCounts,
+                        backgroundColor: [
+                            '#667eea', '#764ba2', '#ed64a6', '#f56565', 
+                            '#ed8936', '#ecc94b', '#48bb78', '#38b2ac'
+                        ],
+                        borderWidth: 2,
+                        borderColor: 'rgba(255, 255, 255, 0.8)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                usePointStyle: true
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Gráfico de status da API
+            const apiCtx = document.getElementById('apiChart').getContext('2d');
+            
+            if (apiChart) {
+                apiChart.destroy();
+            }
+            
+            const statusCodes = apiStats.status_codes.map(item => item.status_code);
+            const statusCounts = apiStats.status_codes.map(item => item.count);
+            
+            // Cores baseadas no status code
+            const statusColors = statusCodes.map(code => {
+                if (code >= 500) return '#e53e3e';
+                if (code >= 400) return '#ed8936';
+                if (code >= 300) return '#ecc94b';
+                return '#48bb78';
+            });
+            
+            apiChart = new Chart(apiCtx, {
+                type: 'bar',
+                data: {
+                    labels: statusCodes.map(code => `HTTP ${code}`),
+                    datasets: [{
+                        label: 'Requisições',
+                        data: statusCounts,
+                        backgroundColor: statusColors,
+                        borderColor: statusColors.map(color => color.replace('0.8', '1')),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Carregar dados inicialmente
+        loadDashboardData();
+        
+        // Atualizar a cada 30 segundos
+        setInterval(loadDashboardData, 30000);
+    </script>
+</body>
+</html>

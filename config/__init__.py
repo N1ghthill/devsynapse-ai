@@ -1,0 +1,1 @@
+"""DevSynapse AI - Configuration module"""

@@ -1,0 +1,162 @@
+import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
+import type {
+  AdminAuditLog,
+  AdminUser,
+  ChatRequest,
+  ChatResponse,
+  CommandResult,
+  ConversationSummary,
+  DashboardStats,
+  ExecuteCommandRequest,
+  Message,
+  SettingsData,
+} from '../types';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+
+const api: AxiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const token = localStorage.getItem('auth_token');
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('auth_token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+export const chatApi = {
+  sendMessage: async (data: ChatRequest): Promise<ChatResponse> => {
+    const response = await api.post<ChatResponse>('/chat', data);
+    return response.data;
+  },
+
+  getHistory: async (conversationId?: string) => {
+    const params = conversationId ? { conversation_id: conversationId } : {};
+    const response = await api.get('/chat/history', { params });
+    return response.data;
+  },
+
+  getConversation: async (conversationId: string): Promise<{ conversation_id: string; history: Message[] }> => {
+    const response = await api.get<{ conversation_id: string; history: Message[] }>(
+      `/conversations/${conversationId}`
+    );
+    return response.data;
+  },
+
+  listConversations: async (): Promise<{ conversations: ConversationSummary[] }> => {
+    const response = await api.get<{ conversations: ConversationSummary[] }>('/conversations');
+    return response.data;
+  },
+
+  renameConversation: async (conversationId: string, title: string) => {
+    const response = await api.put(`/conversations/${conversationId}`, { title });
+    return response.data;
+  },
+
+  deleteConversation: async (conversationId: string) => {
+    const response = await api.delete(`/conversations/${conversationId}`);
+    return response.data;
+  },
+
+  exportUsageCsv: async (): Promise<string> => {
+    const response = await api.get('/conversations/export/usage.csv', {
+      responseType: 'text',
+    });
+    return response.data as string;
+  },
+
+  executeCommand: async (data: ExecuteCommandRequest): Promise<CommandResult> => {
+    const response = await api.post<CommandResult>('/execute', data);
+    return response.data;
+  },
+};
+
+export const dashboardApi = {
+  getStats: async (hours = 24): Promise<DashboardStats> => {
+    const response = await api.get<DashboardStats>('/monitoring/stats', {
+      params: { hours },
+    });
+    return response.data;
+  },
+
+  getHealth: async () => {
+    const response = await api.get('/monitoring/health');
+    return response.data;
+  },
+
+  getAlerts: async () => {
+    const response = await api.get('/monitoring/alerts');
+    return response.data;
+  },
+};
+
+export const settingsApi = {
+  get: async (): Promise<SettingsData> => {
+    const response = await api.get<SettingsData>('/settings');
+    return response.data;
+  },
+
+  update: async (data: Partial<SettingsData>): Promise<SettingsData> => {
+    const response = await api.put<SettingsData>('/settings', data);
+    return response.data;
+  },
+};
+
+export const adminApi = {
+  listUsers: async (): Promise<{ users: AdminUser[] }> => {
+    const response = await api.get<{ users: AdminUser[] }>('/admin/users');
+    return response.data;
+  },
+
+  listAuditLogs: async (): Promise<{ logs: AdminAuditLog[] }> => {
+    const response = await api.get<{ logs: AdminAuditLog[] }>('/admin/audit-logs');
+    return response.data;
+  },
+
+  updateUserPermissions: async (
+    username: string,
+    projectMutationAllowlist: string[]
+  ): Promise<AdminUser> => {
+    const response = await api.put<AdminUser>(`/admin/users/${username}/permissions`, {
+      project_mutation_allowlist: projectMutationAllowlist,
+    });
+    return response.data;
+  },
+};
+
+export const authApi = {
+  login: async (username: string, password: string) => {
+    const response = await api.post('/auth/login', { username, password });
+    const token = response.data.token || response.data.access_token;
+    localStorage.setItem('auth_token', token);
+    return response.data;
+  },
+
+  logout: () => {
+    localStorage.removeItem('auth_token');
+  },
+
+  verify: async () => {
+    const response = await api.get('/auth/verify');
+    return response.data;
+  },
+};
+
+export default api;
