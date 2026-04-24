@@ -38,6 +38,8 @@ router = APIRouter(tags=["chat"])
 async def chat_endpoint(
     request: ChatRequest,
     brain: DevSynapseBrain = Depends(get_brain),
+    memory_system: MemorySystem = Depends(get_memory_system),
+    monitoring_system=Depends(get_monitoring_system),
 ):
     conversation_id = request.conversation_id or str(uuid.uuid4())
 
@@ -54,6 +56,7 @@ async def chat_endpoint(
         ) from exc
 
     requires_confirmation = opencode_command is not None and not request.execute_command
+    monitoring_system.sync_llm_budget_alerts(memory_system.get_llm_budget_status())
 
     return ChatResponse(
         response=response_text,

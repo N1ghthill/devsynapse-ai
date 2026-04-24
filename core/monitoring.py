@@ -186,6 +186,78 @@ class MonitoringSystem:
         
         conn.commit()
         conn.close()
+
+    def sync_llm_budget_alerts(self, budget_status: Dict):
+        """Create or resolve budget alerts based on current LLM spend."""
+
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        def resolve_window_alerts(window: str):
+            cursor.execute(
+                '''
+                UPDATE alerts
+                SET resolved = 1, resolved_at = ?
+                WHERE resolved = 0 AND alert_type = ?
+                ''',
+                (datetime.now().isoformat(), f"llm_budget_{window}"),
+            )
+
+        def upsert_window_alert(window: str, severity: str, message: str):
+            alert_type = f"llm_budget_{window}"
+
+            cursor.execute(
+                '''
+                SELECT id, severity, message
+                FROM alerts
+                WHERE resolved = 0 AND alert_type = ?
+                ORDER BY timestamp DESC
+                LIMIT 1
+                ''',
+                (alert_type,),
+            )
+            current = cursor.fetchone()
+
+            if current and current["severity"] == severity and current["message"] == message:
+                return
+
+            cursor.execute(
+                '''
+                UPDATE alerts
+                SET resolved = 1, resolved_at = ?
+                WHERE resolved = 0 AND alert_type = ?
+                ''',
+                (datetime.now().isoformat(), alert_type),
+            )
+            cursor.execute(
+                '''
+                INSERT INTO alerts (timestamp, alert_type, severity, message)
+                VALUES (?, ?, ?, ?)
+                ''',
+                (datetime.now().isoformat(), alert_type, severity, message[:1000]),
+            )
+
+        for window in ("daily", "monthly"):
+            snapshot = budget_status.get(window, {})
+            level = snapshot.get("level", "disabled")
+            budget_usd = float(snapshot.get("budget_usd") or 0.0)
+            actual_cost_usd = float(snapshot.get("actual_cost_usd") or 0.0)
+            usage_pct = float(snapshot.get("usage_pct") or 0.0)
+
+            if level in {"disabled", "healthy"} or budget_usd <= 0:
+                resolve_window_alerts(window)
+                continue
+
+            severity = "critical" if level == "critical" else "warning"
+            message = (
+                f"LLM {window} budget at {usage_pct:.1f}% "
+                f"(${actual_cost_usd:.6f} / ${budget_usd:.6f})."
+            )
+            upsert_window_alert(window, severity, message)
+
+        conn.commit()
+        conn.close()
     
     def get_command_stats(self, hours: int = 24) -> Dict:
         """Obtém estatísticas de comandos"""

@@ -58,6 +58,9 @@ async def get_monitoring_stats(
     monitoring_system=Depends(get_monitoring_system),
     memory_system: MemorySystem = Depends(get_memory_system),
 ):
+    budget_status = memory_system.get_llm_budget_status()
+    monitoring_system.sync_llm_budget_alerts(budget_status)
+
     return DashboardStats(
         system_health=monitoring_system.get_system_health(),
         command_stats=monitoring_system.get_command_stats(hours),
@@ -65,6 +68,7 @@ async def get_monitoring_stats(
         llm_usage={
             **memory_system.get_llm_usage_stats(hours=hours),
             "by_project": memory_system.get_project_usage_breakdown(hours=hours),
+            "budget": budget_status,
         },
         active_alerts=monitoring_system.get_active_alerts(),
     )

@@ -75,6 +75,7 @@ export function Dashboard() {
 
   const costSeries = stats?.llm_usage?.by_day || [];
   const projectSeries = stats?.llm_usage?.by_project || [];
+  const budget = stats?.llm_usage?.budget;
   const maxDailyCost = Math.max(...costSeries.map((item) => item.estimated_cost_usd), 0.000001);
   const maxProjectCost = Math.max(
     ...projectSeries.map((item) => item.estimated_cost_usd),
@@ -248,6 +249,46 @@ export function Dashboard() {
           </div>
         </div>
 
+        <div className="dashboard-card">
+          <h3>Budget Status</h3>
+          <div className="health-metrics">
+            <div className="health-item">
+              <span>Daily</span>
+              <span className={`health-value budget-${budget?.daily?.level || 'disabled'}`}>
+                {budget?.daily?.budget_usd
+                  ? `${formatUsd(budget?.daily?.actual_cost_usd || 0)} / ${formatUsd(
+                      budget?.daily?.budget_usd || 0
+                    )}`
+                  : 'Disabled'}
+              </span>
+            </div>
+            <div className="health-item">
+              <span>Daily Usage</span>
+              <span className={`health-value budget-${budget?.daily?.level || 'disabled'}`}>
+                {budget?.daily?.budget_usd ? `${(budget?.daily?.usage_pct || 0).toFixed(1)}%` : 'n/a'}
+              </span>
+            </div>
+            <div className="health-item">
+              <span>Monthly</span>
+              <span className={`health-value budget-${budget?.monthly?.level || 'disabled'}`}>
+                {budget?.monthly?.budget_usd
+                  ? `${formatUsd(budget?.monthly?.actual_cost_usd || 0)} / ${formatUsd(
+                      budget?.monthly?.budget_usd || 0
+                    )}`
+                  : 'Disabled'}
+              </span>
+            </div>
+            <div className="health-item">
+              <span>Monthly Usage</span>
+              <span className={`health-value budget-${budget?.monthly?.level || 'disabled'}`}>
+                {budget?.monthly?.budget_usd
+                  ? `${(budget?.monthly?.usage_pct || 0).toFixed(1)}%`
+                  : 'n/a'}
+              </span>
+            </div>
+          </div>
+        </div>
+
         <div className="dashboard-card full-width">
           <h3>Daily LLM Cost</h3>
           <div className="chart-container">
@@ -299,6 +340,44 @@ export function Dashboard() {
                 <p>Sem atribuição de projeto suficiente para o período.</p>
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="dashboard-card full-width">
+          <h3>Budget Thresholds</h3>
+          <div className="health-metrics">
+            <div className="health-item">
+              <span>Warning Threshold</span>
+              <span className="health-value">
+                {budget?.daily?.warning_threshold_pct ?? 0}% / {budget?.monthly?.warning_threshold_pct ?? 0}%
+              </span>
+            </div>
+            <div className="health-item">
+              <span>Critical Threshold</span>
+              <span className="health-value">
+                {budget?.daily?.critical_threshold_pct ?? 0}% / {budget?.monthly?.critical_threshold_pct ?? 0}%
+              </span>
+            </div>
+            <div className="health-item">
+              <span>Daily Trigger</span>
+              <span className="health-value">
+                {budget?.daily?.budget_usd
+                  ? `${formatUsd(budget?.daily?.warning_threshold_cost_usd || 0)} -> ${formatUsd(
+                      budget?.daily?.critical_threshold_cost_usd || 0
+                    )}`
+                  : 'Disabled'}
+              </span>
+            </div>
+            <div className="health-item">
+              <span>Monthly Trigger</span>
+              <span className="health-value">
+                {budget?.monthly?.budget_usd
+                  ? `${formatUsd(budget?.monthly?.warning_threshold_cost_usd || 0)} -> ${formatUsd(
+                      budget?.monthly?.critical_threshold_cost_usd || 0
+                    )}`
+                  : 'Disabled'}
+              </span>
+            </div>
           </div>
         </div>
 

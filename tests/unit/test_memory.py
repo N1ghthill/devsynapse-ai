@@ -281,6 +281,45 @@ class TestMemorySystem:
         assert breakdown[0]["total_tokens"] == 220
         assert breakdown[0]["estimated_cost_usd"] == pytest.approx(0.0000336)
 
+    def test_get_llm_budget_status(self, tmp_path):
+        db_path = tmp_path / "test_budget_status.db"
+        memory = _create_memory(db_path)
+        memory.update_app_settings(
+            {
+                "llm_daily_budget_usd": 0.01,
+                "llm_monthly_budget_usd": 0.05,
+                "llm_budget_warning_threshold_pct": 50,
+                "llm_budget_critical_threshold_pct": 80,
+            }
+        )
+
+        import asyncio
+
+        asyncio.run(
+            memory.save_interaction(
+                conversation_id="conv_budget",
+                user_message="Mensagem com custo de budget",
+                ai_response="Resposta com custo",
+                llm_usage={
+                    "provider": "deepseek",
+                    "model": "deepseek-v4-flash",
+                    "prompt_tokens": 100,
+                    "completion_tokens": 20,
+                    "total_tokens": 120,
+                    "prompt_cache_hit_tokens": 0,
+                    "prompt_cache_miss_tokens": 100,
+                    "reasoning_tokens": 0,
+                    "estimated_cost_usd": 0.0085,
+                },
+            )
+        )
+
+        budget = memory.get_llm_budget_status()
+        assert budget["overall_status"] == "critical"
+        assert budget["daily"]["level"] == "critical"
+        assert budget["daily"]["usage_pct"] == pytest.approx(85.0)
+        assert budget["monthly"]["level"] == "healthy"
+
     @pytest.mark.asyncio
     async def test_rename_and_delete_conversation(self, tmp_path):
         db_path = tmp_path / "test_conversation_mutations.db"

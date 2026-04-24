@@ -13,6 +13,7 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 - persisted execution status and conversation rehydration
 - token and cost telemetry for chat responses
 - dashboard-level LLM usage reporting and cost views
+- configurable LLM budget thresholds with dashboard/chat visibility and alert emission
 - CSV export for usage history
 - project-aware mutation authorization and admin audit flow
 

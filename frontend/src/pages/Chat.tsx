@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { Download, Loader2, MessageSquarePlus, Pencil, Search, Trash2 } from 'lucide-react';
 import { ChatMessage } from '../components/ChatMessage';
 import { ChatInput } from '../components/ChatInput';
-import { chatApi } from '../api/client';
-import type { ConversationSummary, Message, TokenUsage } from '../types';
+import { chatApi, dashboardApi } from '../api/client';
+import type { BudgetWindowStatus, ConversationSummary, Message, TokenUsage } from '../types';
 
 const CONVERSATION_STORAGE_KEY = 'devsynapse_conversation_id';
 
@@ -18,6 +18,11 @@ export function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationQuery, setConversationQuery] = useState('');
+  const [budgetStatus, setBudgetStatus] = useState<{
+    overall_status: 'disabled' | 'healthy' | 'warning' | 'critical';
+    daily: BudgetWindowStatus;
+    monthly: BudgetWindowStatus;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string>(
     () => localStorage.getItem(CONVERSATION_STORAGE_KEY) || `session_${Date.now()}`
@@ -69,6 +74,30 @@ export function Chat() {
     };
   }, [conversationId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadBudgetStatus = async () => {
+      try {
+        const stats = await dashboardApi.getStats(24);
+        if (!cancelled) {
+          setBudgetStatus(stats.llm_usage.budget);
+        }
+      } catch {
+        if (!cancelled) {
+          setBudgetStatus(null);
+        }
+      }
+    };
+
+    void loadBudgetStatus();
+    const interval = setInterval(loadBudgetStatus, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
   const updateMessage = (messageId: string, updates: Partial<Message>) => {
     setMessages((prev) =>
       prev.map((message) => (message.id === messageId ? { ...message, ...updates } : message))
@@ -114,6 +143,29 @@ export function Chat() {
     if (value == null) return 'n/d';
     return value < 0.01 ? `$${value.toFixed(6)}` : `$${value.toFixed(4)}`;
   };
+
+  const budgetSummary = (() => {
+    if (!budgetStatus) return null;
+    if (budgetStatus.overall_status === 'disabled') return null;
+
+    const highest =
+      budgetStatus.daily.level === 'critical' || budgetStatus.daily.level === 'warning'
+        ? budgetStatus.daily
+        : budgetStatus.monthly;
+
+    if (highest.level !== 'critical' && highest.level !== 'warning') {
+      return null;
+    }
+
+    return {
+      severity: highest.level,
+      text: `${
+        highest.window === 'daily' ? 'Daily' : 'Monthly'
+      } budget at ${highest.usage_pct.toFixed(1)}% (${formatUsd(
+        highest.actual_cost_usd
+      )} / ${formatUsd(highest.budget_usd)}).`,
+    };
+  })();
 
   const downloadUsageCsv = async () => {
     const csv = await chatApi.exportUsageCsv();
@@ -426,6 +478,11 @@ export function Chat() {
           <p className="chat-subtitle">
             {currentConversation?.title || 'Sessão atual'}
           </p>
+          {budgetSummary && (
+            <div className={`chat-budget-banner banner-${budgetSummary.severity}`}>
+              {budgetSummary.text}
+            </div>
+          )}
           {conversationUsage && (
             <div className="chat-usage-summary">
               <span className="usage-pill">

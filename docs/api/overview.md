@@ -73,7 +73,7 @@ Purpose:
 - the frontend should not invent payload shapes
 - `ChatResponse` carries `llm_usage` when provider usage metadata is available
 - `/execute` returns structured execution status, reason code and project context
-- `/monitoring/stats` includes `llm_usage` aggregates and project-level breakdown
+- `/monitoring/stats` includes `llm_usage` aggregates, project-level breakdown and budget status snapshots
 
 ## Authentication Behavior
 

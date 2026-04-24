@@ -121,6 +121,10 @@ class SettingsResponse(BaseModel):
     temperature: float
     max_tokens: int
     conversation_history_limit: int
+    llm_daily_budget_usd: float
+    llm_monthly_budget_usd: float
+    llm_budget_warning_threshold_pct: float
+    llm_budget_critical_threshold_pct: float
     api_host: str
     api_port: int
     project_mutation_allowlist: List[str]
@@ -133,6 +137,10 @@ class SettingsUpdateRequest(BaseModel):
     temperature: Optional[float] = Field(default=None, ge=0, le=2)
     max_tokens: Optional[int] = Field(default=None, ge=1, le=32000)
     conversation_history_limit: Optional[int] = Field(default=None, ge=1, le=100)
+    llm_daily_budget_usd: Optional[float] = Field(default=None, ge=0)
+    llm_monthly_budget_usd: Optional[float] = Field(default=None, ge=0)
+    llm_budget_warning_threshold_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    llm_budget_critical_threshold_pct: Optional[float] = Field(default=None, ge=0, le=200)
 
 
 class AdminUserSummary(BaseModel):

@@ -42,6 +42,9 @@ class _MonitoringStub:
     def get_active_alerts(self):
         return []
 
+    def sync_llm_budget_alerts(self, budget_status):
+        self.budget_status = budget_status
+
 
 @pytest.fixture
 def route_services(tmp_path, monkeypatch):
@@ -187,6 +190,15 @@ async def test_list_conversations_and_stats_include_llm_usage(route_services):
     from api.routes.chat import list_conversations
     from api.routes.monitoring import get_monitoring_stats
 
+    route_services.memory.update_app_settings(
+        {
+            "llm_daily_budget_usd": 0.00004,
+            "llm_monthly_budget_usd": 0.001,
+            "llm_budget_warning_threshold_pct": 80,
+            "llm_budget_critical_threshold_pct": 100,
+        }
+    )
+
     await route_services.memory.save_interaction(
         conversation_id="conv_usage_stats",
         user_message="Mensagem com custo sobre devsynapse-ai",
@@ -218,6 +230,51 @@ async def test_list_conversations_and_stats_include_llm_usage(route_services):
     assert stats.llm_usage["totals"]["total_tokens"] == 340
     assert stats.llm_usage["totals"]["estimated_cost_usd"] == pytest.approx(0.0000462)
     assert stats.llm_usage["by_project"][0]["project_name"] == "devsynapse-ai"
+    assert stats.llm_usage["budget"]["daily"]["level"] == "critical"
+    assert stats.llm_usage["budget"]["monthly"]["level"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_get_settings_includes_budget_fields(route_services):
+    from api.routes.settings import get_settings_route
+
+    route_services.memory.update_app_settings(
+        {
+            "llm_daily_budget_usd": 12.5,
+            "llm_monthly_budget_usd": 150.0,
+            "llm_budget_warning_threshold_pct": 70,
+            "llm_budget_critical_threshold_pct": 95,
+        }
+    )
+
+    response = await get_settings_route(
+        user=route_services.user,
+        memory_system=route_services.memory,
+    )
+
+    assert response.llm_daily_budget_usd == pytest.approx(12.5)
+    assert response.llm_monthly_budget_usd == pytest.approx(150.0)
+    assert response.llm_budget_warning_threshold_pct == pytest.approx(70)
+    assert response.llm_budget_critical_threshold_pct == pytest.approx(95)
+
+
+@pytest.mark.asyncio
+async def test_update_settings_rejects_critical_threshold_below_warning(route_services):
+    from api.models import SettingsUpdateRequest
+    from api.routes.settings import update_settings
+
+    with pytest.raises(HTTPException) as exc_info:
+        await update_settings(
+            settings_data=SettingsUpdateRequest(
+                llm_budget_warning_threshold_pct=90,
+                llm_budget_critical_threshold_pct=80,
+            ),
+            user=route_services.user,
+            memory_system=route_services.memory,
+            brain=route_services.brain,
+        )
+
+    assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio

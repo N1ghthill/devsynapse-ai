@@ -180,6 +180,91 @@ export function Settings() {
         </div>
 
         <div className="settings-card">
+          <h3>LLM Budget</h3>
+          <div className="setting-field">
+            <label>Daily Budget (USD)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={settings?.llm_daily_budget_usd ?? 0}
+              onChange={(e) =>
+                setSettings((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        llm_daily_budget_usd: parseFloat(e.target.value || '0'),
+                      }
+                    : prev
+                )
+              }
+            />
+            <small>Use `0` to disable the daily budget alert.</small>
+          </div>
+          <div className="setting-field">
+            <label>Monthly Budget (USD)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={settings?.llm_monthly_budget_usd ?? 0}
+              onChange={(e) =>
+                setSettings((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        llm_monthly_budget_usd: parseFloat(e.target.value || '0'),
+                      }
+                    : prev
+                )
+              }
+            />
+            <small>Uses the current calendar month, not a rolling 30-day window.</small>
+          </div>
+          <div className="setting-field">
+            <label>Warning Threshold (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              value={settings?.llm_budget_warning_threshold_pct ?? 80}
+              onChange={(e) =>
+                setSettings((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        llm_budget_warning_threshold_pct: parseFloat(e.target.value || '0'),
+                      }
+                    : prev
+                )
+              }
+            />
+          </div>
+          <div className="setting-field">
+            <label>Critical Threshold (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="200"
+              step="1"
+              value={settings?.llm_budget_critical_threshold_pct ?? 100}
+              onChange={(e) =>
+                setSettings((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        llm_budget_critical_threshold_pct: parseFloat(e.target.value || '0'),
+                      }
+                    : prev
+                )
+              }
+            />
+            <small>Critical can be above `100` if you want a soft overrun policy.</small>
+          </div>
+        </div>
+
+        <div className="settings-card">
           <h3>Project Access</h3>
           <div className="setting-field">
             <label>My Mutation Scope</label>

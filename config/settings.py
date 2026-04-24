@@ -51,6 +51,10 @@ class AppSettings(BaseSettings):
     deepseek_pro_input_cache_hit_price_usd_per_million: float = 0.145
     deepseek_pro_input_cache_miss_price_usd_per_million: float = 1.74
     deepseek_pro_output_price_usd_per_million: float = 3.48
+    llm_daily_budget_usd: float = 0.0
+    llm_monthly_budget_usd: float = 0.0
+    llm_budget_warning_threshold_pct: float = 80.0
+    llm_budget_critical_threshold_pct: float = 100.0
 
     jwt_secret_key: str = Field(
         default_factory=lambda: os.getenv("JWT_SECRET_KEY", "") or secrets.token_urlsafe(48)

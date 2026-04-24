@@ -115,6 +115,11 @@ export interface DashboardStats {
       total_tokens: number;
       estimated_cost_usd: number;
     }>;
+    budget: {
+      overall_status: 'disabled' | 'healthy' | 'warning' | 'critical';
+      daily: BudgetWindowStatus;
+      monthly: BudgetWindowStatus;
+    };
     timeframe_hours: number;
   };
   system_health: {
@@ -132,6 +137,18 @@ export interface DashboardStats {
   }>;
 }
 
+export interface BudgetWindowStatus {
+  window: 'daily' | 'monthly';
+  budget_usd: number;
+  actual_cost_usd: number;
+  usage_pct: number;
+  warning_threshold_pct: number;
+  critical_threshold_pct: number;
+  warning_threshold_cost_usd: number;
+  critical_threshold_cost_usd: number;
+  level: 'disabled' | 'healthy' | 'warning' | 'critical';
+}
+
 export interface AuthState {
   token: string | null;
   user: { username: string; role: string } | null;
@@ -146,6 +163,10 @@ export interface SettingsData {
   temperature: number;
   max_tokens: number;
   conversation_history_limit: number;
+  llm_daily_budget_usd: number;
+  llm_monthly_budget_usd: number;
+  llm_budget_warning_threshold_pct: number;
+  llm_budget_critical_threshold_pct: number;
   api_host: string;
   api_port: number;
   project_mutation_allowlist: string[];

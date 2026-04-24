@@ -2,7 +2,7 @@
 Settings and project routes.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from api.dependencies import get_brain, get_memory_system, require_user
 from api.models import SettingsResponse, SettingsUpdateRequest
@@ -30,6 +30,24 @@ async def get_settings_route(
         conversation_history_limit=int(
             persisted.get("conversation_history_limit", settings.conversation_history_limit)
         ),
+        llm_daily_budget_usd=float(
+            persisted.get("llm_daily_budget_usd", settings.llm_daily_budget_usd)
+        ),
+        llm_monthly_budget_usd=float(
+            persisted.get("llm_monthly_budget_usd", settings.llm_monthly_budget_usd)
+        ),
+        llm_budget_warning_threshold_pct=float(
+            persisted.get(
+                "llm_budget_warning_threshold_pct",
+                settings.llm_budget_warning_threshold_pct,
+            )
+        ),
+        llm_budget_critical_threshold_pct=float(
+            persisted.get(
+                "llm_budget_critical_threshold_pct",
+                settings.llm_budget_critical_threshold_pct,
+            )
+        ),
         api_host=settings.api_host,
         api_port=settings.api_port,
         project_mutation_allowlist=user_allowlist,
@@ -44,6 +62,18 @@ async def update_settings(
     brain: DevSynapseBrain = Depends(get_brain),
 ):
     updates = settings_data.model_dump(exclude_none=True)
+    warning_threshold = updates.get("llm_budget_warning_threshold_pct")
+    critical_threshold = updates.get("llm_budget_critical_threshold_pct")
+    if (
+        warning_threshold is not None
+        and critical_threshold is not None
+        and critical_threshold < warning_threshold
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Critical budget threshold must be greater than or equal to warning threshold",
+        )
+
     if "deepseek_api_key" in updates and updates["deepseek_api_key"]:
         brain.api_key = updates["deepseek_api_key"]
 

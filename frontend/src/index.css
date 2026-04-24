@@ -431,6 +431,29 @@ body {
   color: var(--text-muted);
 }
 
+.chat-budget-banner {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.chat-budget-banner.banner-warning {
+  background: rgba(234, 179, 8, 0.12);
+  color: var(--warning);
+  border-color: rgba(234, 179, 8, 0.28);
+}
+
+.chat-budget-banner.banner-critical {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.28);
+}
+
 .chat-usage-summary {
   display: flex;
   flex-wrap: wrap;
@@ -1163,6 +1186,10 @@ body {
 .health-value.success { color: var(--success); }
 .health-value.warning { color: var(--warning); }
 .health-value.danger { color: var(--danger); }
+.health-value.budget-healthy { color: var(--success); }
+.health-value.budget-warning { color: var(--warning); }
+.health-value.budget-critical { color: var(--danger); }
+.health-value.budget-disabled { color: var(--text-muted); }
 
 /* Alerts */
 .alerts-list {

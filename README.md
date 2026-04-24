@@ -7,7 +7,7 @@ DevSynapse AI is an open source development assistant that combines:
 - project-aware technical chat;
 - persistent memory for conversations, preferences and projects;
 - controlled command execution with explicit authorization boundaries;
-- operational visibility through monitoring, usage tracking and alerts.
+- operational visibility through monitoring, usage tracking, budget thresholds and alerts.
 
 The repository is organized for contributors, not only for local use. Backend contracts, frontend behavior, persistence and runtime workflows are documented and versioned in-repo.
 
@@ -34,6 +34,7 @@ DevSynapse AI provides:
 - a constrained execution bridge for `bash`, `read`, `glob`, `grep`, `edit` and `write`;
 - per-user, project-scoped mutation authorization for non-admin users;
 - token and cost telemetry for LLM usage.
+- configurable daily/monthly LLM budgets with warning and critical thresholds.
 
 ## Repository Map
 

@@ -10,10 +10,11 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-from config.settings import DEFAULT_PREFERENCES, KNOWN_PROJECTS, MEMORY_DB_PATH
+from config.settings import DEFAULT_PREFERENCES, KNOWN_PROJECTS, MEMORY_DB_PATH, get_settings
 from core.migrations import build_memory_migration_manager
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class MemorySystem:
@@ -298,6 +299,144 @@ class MemorySystem:
                 for row in by_day
             ],
             "timeframe_hours": hours,
+        }
+
+    def _aggregate_llm_usage_between(
+        self,
+        start_time: str,
+        end_time: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+
+        if end_time is None:
+            cursor.execute(
+                '''
+                SELECT
+                    COUNT(*) AS request_count,
+                    COUNT(DISTINCT conversation_id) AS conversation_count,
+                    SUM(COALESCE(prompt_tokens, 0)) AS prompt_tokens,
+                    SUM(COALESCE(completion_tokens, 0)) AS completion_tokens,
+                    SUM(COALESCE(total_tokens, 0)) AS total_tokens,
+                    SUM(COALESCE(prompt_cache_hit_tokens, 0)) AS prompt_cache_hit_tokens,
+                    SUM(COALESCE(prompt_cache_miss_tokens, 0)) AS prompt_cache_miss_tokens,
+                    SUM(COALESCE(reasoning_tokens, 0)) AS reasoning_tokens,
+                    SUM(COALESCE(estimated_cost_usd, 0)) AS estimated_cost_usd
+                FROM conversations
+                WHERE timestamp >= ?
+                  AND total_tokens IS NOT NULL
+                ''',
+                (start_time,),
+            )
+        else:
+            cursor.execute(
+                '''
+                SELECT
+                    COUNT(*) AS request_count,
+                    COUNT(DISTINCT conversation_id) AS conversation_count,
+                    SUM(COALESCE(prompt_tokens, 0)) AS prompt_tokens,
+                    SUM(COALESCE(completion_tokens, 0)) AS completion_tokens,
+                    SUM(COALESCE(total_tokens, 0)) AS total_tokens,
+                    SUM(COALESCE(prompt_cache_hit_tokens, 0)) AS prompt_cache_hit_tokens,
+                    SUM(COALESCE(prompt_cache_miss_tokens, 0)) AS prompt_cache_miss_tokens,
+                    SUM(COALESCE(reasoning_tokens, 0)) AS reasoning_tokens,
+                    SUM(COALESCE(estimated_cost_usd, 0)) AS estimated_cost_usd
+                FROM conversations
+                WHERE timestamp >= ?
+                  AND timestamp < ?
+                  AND total_tokens IS NOT NULL
+                ''',
+                (start_time, end_time),
+            )
+
+        row = dict(cursor.fetchone())
+        conn.close()
+
+        return {
+            "request_count": int(row.get("request_count") or 0),
+            "conversation_count": int(row.get("conversation_count") or 0),
+            "prompt_tokens": int(row.get("prompt_tokens") or 0),
+            "completion_tokens": int(row.get("completion_tokens") or 0),
+            "total_tokens": int(row.get("total_tokens") or 0),
+            "prompt_cache_hit_tokens": int(row.get("prompt_cache_hit_tokens") or 0),
+            "prompt_cache_miss_tokens": int(row.get("prompt_cache_miss_tokens") or 0),
+            "reasoning_tokens": int(row.get("reasoning_tokens") or 0),
+            "estimated_cost_usd": float(row.get("estimated_cost_usd") or 0.0),
+        }
+
+    def get_llm_budget_status(self) -> Dict[str, Any]:
+        persisted = self.get_app_settings()
+        daily_budget_usd = float(
+            persisted.get("llm_daily_budget_usd", settings.llm_daily_budget_usd)
+        )
+        monthly_budget_usd = float(
+            persisted.get("llm_monthly_budget_usd", settings.llm_monthly_budget_usd)
+        )
+        warning_threshold_pct = float(
+            persisted.get(
+                "llm_budget_warning_threshold_pct",
+                settings.llm_budget_warning_threshold_pct,
+            )
+        )
+        critical_threshold_pct = float(
+            persisted.get(
+                "llm_budget_critical_threshold_pct",
+                settings.llm_budget_critical_threshold_pct,
+            )
+        )
+
+        now = datetime.now()
+        last_24h_start = (now - timedelta(hours=24)).isoformat()
+        month_start = datetime(now.year, now.month, 1).isoformat()
+
+        daily_usage = self._aggregate_llm_usage_between(last_24h_start)
+        monthly_usage = self._aggregate_llm_usage_between(month_start)
+
+        def build_status(window: str, actual_cost_usd: float, budget_usd: float) -> Dict[str, Any]:
+            warning_cost = budget_usd * (warning_threshold_pct / 100) if budget_usd > 0 else 0.0
+            critical_cost = budget_usd * (critical_threshold_pct / 100) if budget_usd > 0 else 0.0
+            usage_pct = (actual_cost_usd / budget_usd * 100) if budget_usd > 0 else 0.0
+
+            if budget_usd <= 0:
+                level = "disabled"
+            elif actual_cost_usd >= critical_cost:
+                level = "critical"
+            elif actual_cost_usd >= warning_cost:
+                level = "warning"
+            else:
+                level = "healthy"
+
+            return {
+                "window": window,
+                "budget_usd": budget_usd,
+                "actual_cost_usd": actual_cost_usd,
+                "usage_pct": usage_pct,
+                "warning_threshold_pct": warning_threshold_pct,
+                "critical_threshold_pct": critical_threshold_pct,
+                "warning_threshold_cost_usd": warning_cost,
+                "critical_threshold_cost_usd": critical_cost,
+                "level": level,
+            }
+
+        daily_status = build_status("daily", daily_usage["estimated_cost_usd"], daily_budget_usd)
+        monthly_status = build_status(
+            "monthly",
+            monthly_usage["estimated_cost_usd"],
+            monthly_budget_usd,
+        )
+
+        overall_status = "disabled"
+        if any(item["level"] == "critical" for item in (daily_status, monthly_status)):
+            overall_status = "critical"
+        elif any(item["level"] == "warning" for item in (daily_status, monthly_status)):
+            overall_status = "warning"
+        elif any(item["level"] == "healthy" for item in (daily_status, monthly_status)):
+            overall_status = "healthy"
+
+        return {
+            "overall_status": overall_status,
+            "daily": daily_status,
+            "monthly": monthly_status,
         }
 
     def get_project_usage_breakdown(self, hours: int = 24) -> list[Dict[str, Any]]:

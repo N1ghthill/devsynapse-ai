@@ -19,6 +19,23 @@ Current checks:
 - regular users may receive mutation permission for explicit projects through per-user settings, but only when project context can be resolved from the request or command path.
 - administrative changes to per-user project permissions are exposed through `/admin/users/{username}/permissions` and tracked in `/admin/audit-logs`.
 
+## LLM Budget Controls
+
+Runtime-adjustable budget settings are exposed through `/settings` and persisted in SQLite-backed app settings.
+
+Current controls:
+- `LLM_DAILY_BUDGET_USD`
+- `LLM_MONTHLY_BUDGET_USD`
+- `LLM_BUDGET_WARNING_THRESHOLD_PCT`
+- `LLM_BUDGET_CRITICAL_THRESHOLD_PCT`
+
+Operational behavior:
+- `0` disables the corresponding budget window
+- daily budget uses the last `24h`
+- monthly budget uses the current calendar month
+- `/monitoring/stats` exposes the current budget snapshot for UI/reporting
+- active alerts are created when warning or critical thresholds are crossed
+
 ## Database Schema Management
 
 SQLite schema changes are versioned through the in-repo migration layer.
