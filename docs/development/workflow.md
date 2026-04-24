@@ -14,6 +14,8 @@ make verify
 make run
 ```
 
+For first-time setup from a new public clone, use [onboarding.md](onboarding.md).
+
 For frontend development:
 
 ```bash
@@ -31,6 +33,17 @@ npm run dev
 - `make seed-users`: ensure default users exist
 - `make migrate`: apply all SQLite migrations
 - `make migration-status`: inspect current schema versions
+
+## Revalidated Public Onboarding
+
+The contributor path was revalidated from a clean public clone on `2026-04-24` with:
+
+- fresh backend dependency install in a new `venv`
+- `cp .env.example .env`
+- `make migrate`
+- `make seed-users`
+- `./venv/bin/pytest -q tests/integration/test_api_routes.py`
+- `cd frontend && npm install && npm run build`
 
 ## User Administration
 

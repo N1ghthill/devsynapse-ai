@@ -19,6 +19,7 @@ This directory is the technical documentation entrypoint for contributors and ma
 
 ## Development
 
+- contributor onboarding: [development/onboarding.md](development/onboarding.md)
 - local workflow: [development/workflow.md](development/workflow.md)
 - testing guide: [development/testing.md](development/testing.md)
 

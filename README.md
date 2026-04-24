@@ -21,6 +21,7 @@ Documentation refresh validated on `2026-04-24`:
 - backend test suite: `106 passed`
 - frontend production build: passed
 - local API + frontend integration validated manually during development
+- public onboarding flow revalidated from a clean clone with fresh dependency installs, migrations, seeded users, route-level test pass and frontend build
 - LLM usage telemetry, conversation persistence, execution workflow and dashboard metrics are active in the current codebase
 
 ## What The Project Does
@@ -55,6 +56,8 @@ devsynapse-ai/
 
 ## Quick Start
 
+Before you start, see the contributor-focused setup path in [docs/development/onboarding.md](docs/development/onboarding.md).
+
 ### Backend
 
 ```bash
@@ -81,6 +84,10 @@ npm run dev
 - OpenAPI docs: `http://127.0.0.1:8000/docs`
 - health endpoint: `http://127.0.0.1:8000/health`
 
+### Screenshots
+
+Curated product screenshots are available in [docs/screenshots/README.md](docs/screenshots/README.md).
+
 ## Main Development Commands
 
 ```bash
@@ -102,6 +109,7 @@ Start here:
 - documentation index: [docs/README.md](docs/README.md)
 
 Technical guides:
+- contributor onboarding: [docs/development/onboarding.md](docs/development/onboarding.md)
 - architecture overview: [docs/architecture/overview.md](docs/architecture/overview.md)
 - persistence and data model: [docs/architecture/data-model.md](docs/architecture/data-model.md)
 - API overview: [docs/api/overview.md](docs/api/overview.md)
@@ -132,6 +140,7 @@ Contributions are welcome for:
 - security hardening and test coverage expansion
 
 Before opening a PR, read [CONTRIBUTING.md](CONTRIBUTING.md).
+For the shortest setup path from a new clone, read [docs/development/onboarding.md](docs/development/onboarding.md).
 
 ## Security Boundary
 

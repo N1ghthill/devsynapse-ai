@@ -15,12 +15,13 @@ This repository favors explicit contracts and verifiable behavior over implicit 
 
 1. Read [README.md](README.md).
 2. Read [docs/README.md](docs/README.md).
-3. Check whether your change affects:
+3. Read [docs/development/onboarding.md](docs/development/onboarding.md) if this is your first setup from a fresh clone.
+4. Check whether your change affects:
    - API contracts
    - authorization behavior
    - persistence schema
    - contributor workflows
-4. If it does, update documentation in the same change.
+5. If it does, update documentation in the same change.
 
 ## Local Setup
 
@@ -40,6 +41,8 @@ cd frontend
 npm install
 ```
 
+This setup path was revalidated from a clean public clone on `2026-04-24`.
+
 ## Development Workflow
 
 Recommended backend loop:
@@ -53,6 +56,13 @@ Full repository verification:
 
 ```bash
 make verify
+```
+
+Recommended first-pass verification for a new environment:
+
+```bash
+./venv/bin/pytest -q tests/integration/test_api_routes.py
+cd frontend && npm run build
 ```
 
 If you changed migrations or persistence logic:
@@ -107,6 +117,7 @@ cd frontend && npm run build
 ```
 
 At the time of the latest documentation refresh, local verification produced `106` passing backend tests and a successful frontend production build.
+The contributor onboarding path was also revalidated from a clean clone with fresh installs, migrations, seeded users, route-level API tests and a frontend build.
 
 ## Scope Notes
 
