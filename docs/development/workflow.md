@@ -32,6 +32,8 @@ npm run dev
 - `make frontend-lint`: run frontend ESLint
 - `make frontend-build`: build the frontend bundle
 - `make verify`: run Python lint, backend tests, script checks, frontend lint and frontend build in one pass
+- `make ui-smoke`: build and smoke-test the served UI with Playwright against temporary local databases
+- `make update-locks`: regenerate Python dependency lock constraints from the manifests
 - `make seed-users`: ensure default users exist
 - `make migrate`: apply all SQLite migrations
 - `make migration-status`: inspect current schema versions
@@ -40,6 +42,10 @@ Python dependency manifests are split by purpose:
 - `requirements.txt`: runtime dependencies
 - `requirements-dev.txt`: development and test dependencies
 - `requirements.lock` / `requirements-dev.lock`: resolved constraints used by Makefile and CI when installing
+
+Dependabot watches GitHub Actions, Python and frontend manifests weekly. The `Dependency Locks` workflow also runs weekly and can be dispatched manually to regenerate Python lock constraints and open a pull request when they change.
+
+GitHub Releases are published from pushed `v*.*.*` tags by reading `docs/releases/<tag>.md`. Create the release notes before pushing the tag; manual dispatch is available for an existing tag.
 
 ## Revalidated Public Onboarding
 

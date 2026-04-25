@@ -6,6 +6,12 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+### Added
+- CI browser smoke coverage for login, dashboard, settings save and admin navigation
+- Dependabot configuration for GitHub Actions, Python and frontend dependencies
+- Weekly Python lock-refresh workflow and local `make update-locks` command
+- Tag-driven GitHub Release publishing workflow
+
 ## [v0.3.1] - 2026-04-25
 
 ### Added

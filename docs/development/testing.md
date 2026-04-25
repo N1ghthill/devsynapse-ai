@@ -7,6 +7,7 @@ At the latest documentation refresh on `2026-04-25`, local verification produced
 - successful script checks
 - successful frontend lint and production build
 - passing installer/uninstaller and development-server smoke tests
+- browser UI smoke coverage for login, dashboard, settings save and admin navigation
 
 ## Test Layout
 
@@ -68,6 +69,19 @@ Frontend validation:
 cd frontend
 npm run lint
 npm run build
+```
+
+Browser UI smoke:
+
+```bash
+make ui-smoke
+```
+
+`make ui-smoke` starts a temporary API with disposable SQLite databases, builds the frontend with a matching API URL and runs Playwright against the production bundle served by FastAPI. Install the Chromium browser once with:
+
+```bash
+cd frontend
+npx playwright install chromium
 ```
 
 Screenshot evidence:

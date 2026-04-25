@@ -3,7 +3,7 @@ PIP ?= ./venv/bin/pip
 PYTEST ?= ./venv/bin/pytest
 RUFF ?= ./venv/bin/ruff
 
-.PHONY: setup dev install install-dev run test lint frontend-lint frontend-build script-check verify seed-users migrate migration-status
+.PHONY: setup dev install install-dev run test lint frontend-lint frontend-build script-check ui-smoke update-locks verify seed-users migrate migration-status
 
 setup:
 	python3 -m venv venv
@@ -52,13 +52,21 @@ frontend-build:
 script-check:
 	bash -n scripts/install.sh
 	bash -n scripts/uninstall.sh
+	bash -n scripts/ui_smoke.sh
+	bash -n scripts/update_locks.sh
 	bash -n devsynapse.sh
 	$(PYTHON) -m py_compile scripts/dev.py scripts/migrate.py scripts/manage_users.py
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck scripts/install.sh scripts/uninstall.sh devsynapse.sh; \
+		shellcheck scripts/install.sh scripts/uninstall.sh scripts/ui_smoke.sh scripts/update_locks.sh devsynapse.sh; \
 	else \
 		echo "shellcheck not installed; skipping shell script lint"; \
 	fi
+
+ui-smoke:
+	bash scripts/ui_smoke.sh
+
+update-locks:
+	bash scripts/update_locks.sh
 
 verify: lint test script-check frontend-lint frontend-build
 

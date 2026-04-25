@@ -1,0 +1,62 @@
+name: Dependency Locks
+
+on:
+  schedule:
+    - cron: "30 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Refresh Python lock constraints
+        run: bash scripts/update_locks.sh
+
+      - name: Open pull request when locks change
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH_NAME: automation/refresh-dependency-locks
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- requirements.lock requirements-dev.lock; then
+            echo "Dependency locks are already current."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH_NAME"
+          git add requirements.lock requirements-dev.lock
+          git commit -m "chore: refresh dependency locks"
+          git push --force-with-lease origin "$BRANCH_NAME"
+
+          open_pr_count="$(
+            gh pr list \
+              --head "$BRANCH_NAME" \
+              --state open \
+              --json number \
+              --jq 'length'
+          )"
+
+          if [ "$open_pr_count" = "0" ]; then
+            gh pr create \
+              --base main \
+              --head "$BRANCH_NAME" \
+              --title "chore: refresh dependency locks" \
+              --body "Automated weekly refresh of Python dependency lock constraints."
+          else
+            echo "An open dependency-lock refresh PR already exists."
+          fi

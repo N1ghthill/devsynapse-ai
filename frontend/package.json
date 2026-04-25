@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "smoke:ui": "node scripts/smoke-ui.mjs",
     "capture:docs-screenshots": "node scripts/capture-doc-screenshots.mjs"
   },
   "dependencies": {
