@@ -6,6 +6,7 @@
 #   bash devsynapse.sh          # from the project directory
 #   devsynapse                  # via the bash alias (set up by scripts/install.sh)
 #
+# Compatibility: Debian / Ubuntu / any Linux with bash, python3, npm.
 # Starts the backend and frontend, then prints connection info and credentials.
 
 set -euo pipefail
@@ -28,34 +29,54 @@ banner() {
     echo ""
 }
 
-check_requirements() {
+check_cli_tools() {
     local missing=()
 
-    if [ ! -f ".env" ]; then
-        echo -e "${YELLOW}⚠  .env não encontrado. Execute 'bash scripts/install.sh' primeiro.${NC}"
-        echo "   Ou copie .env.example para .env e configure DEEPSEEK_API_KEY."
-        return 1
+    if ! command -v python3 >/dev/null 2>&1; then
+        missing+=("python3")
     fi
-
-    if ! grep -q "DEEPSEEK_API_KEY=" .env 2>/dev/null || grep -q 'DEEPSEEK_API_KEY=$' .env 2>/dev/null; then
-        echo -e "${YELLOW}⚠  DEEPSEEK_API_KEY não configurada no .env${NC}"
-        echo "   Edite .env e adicione sua API key do DeepSeek."
-        return 1
-    fi
-
-    if [ ! -d "venv" ]; then
-        missing+=("venv")
-    fi
-    if [ ! -d "frontend/node_modules" ]; then
-        missing+=("frontend/node_modules")
-    fi
-    if [ ! -f "data/devsynapse_memory.db" ]; then
-        missing+=("data/")
+    if ! command -v npm >/dev/null 2>&1; then
+        missing+=("npm")
     fi
 
     if [ ${#missing[@]} -gt 0 ]; then
-        echo -e "${YELLOW}⚠  Artefatos faltando: ${missing[*]}${NC}"
-        echo "   Execute 'bash scripts/install.sh' para configurar."
+        echo -e "${RED}✗ Ferramentas não encontradas: ${missing[*]}${NC}"
+        echo "  Instale com: sudo apt install python3 python3-venv python3-pip nodejs npm"
+        return 1
+    fi
+    return 0
+}
+
+check_requirements() {
+    if ! check_cli_tools; then
+        return 1
+    fi
+
+    if [ ! -f ".env" ]; then
+        echo -e "${YELLOW}⚠  .env não encontrado. Execute 'bash scripts/install.sh' primeiro.${NC}"
+        return 1
+    fi
+
+    local has_key=0
+    local key_value=""
+    if grep -qE '^DEEPSEEK_API_KEY=' .env 2>/dev/null; then
+        key_value=$(grep -E '^DEEPSEEK_API_KEY=' .env 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
+        if [ -n "$key_value" ] \
+           && [ "$key_value" != "your-key-here" ] \
+           && [ "$key_value" != "sk-your-key-here" ] \
+           && [ "${key_value:0:3}" = "sk-" ]; then
+            has_key=1
+        fi
+    fi
+
+    if [ "$has_key" -eq 0 ]; then
+        echo -e "${YELLOW}⚠  DEEPSEEK_API_KEY inválida ou não configurada no .env${NC}"
+        echo "   Edite .env:  DEEPSEEK_API_KEY=sk-sua-chave-aqui"
+        return 1
+    fi
+
+    if [ ! -d "venv" ] || [ ! -d "frontend/node_modules" ] || [ ! -f "data/devsynapse_memory.db" ]; then
+        echo -e "${YELLOW}⚠  Setup incompleto. Execute 'bash scripts/install.sh'.${NC}"
         return 1
     fi
 
@@ -64,6 +85,7 @@ check_requirements() {
 
 source_venv() {
     if [ -f "venv/bin/activate" ]; then
+        # shellcheck disable=SC1091
         source venv/bin/activate
     fi
 }
@@ -71,20 +93,17 @@ source_venv() {
 get_admin_password() {
     local password=""
     if [ -f ".env" ]; then
-        password=$(grep -E '^DEFAULT_ADMIN_PASSWORD=' .env 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        password=$(grep -E '^DEFAULT_ADMIN_PASSWORD=' .env 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
     fi
-    if [ -z "$password" ]; then
-        password="admin"
-    fi
-    echo "$password"
+    echo "${password:-admin}"
 }
 
 get_api_key_status() {
     if [ -f ".env" ]; then
         local key=""
-        key=$(grep -E '^DEEPSEEK_API_KEY=' .env 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
-        if [ -n "$key" ] && [ "$key" != "your-key-here" ] && [ "$key" != "sk-" ]; then
-            echo -e "${GREEN}configurada${NC}"
+        key=$(grep -E '^DEEPSEEK_API_KEY=' .env 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
+        if [ -n "$key" ] && [ "${key:0:3}" = "sk-" ]; then
+            echo -e "${GREEN}configurada (${key:0:12}...)${NC}"
             return
         fi
     fi
@@ -138,7 +157,7 @@ start() {
 
     echo -e "${GREEN}Iniciando servidores...${NC}"
 
-    python -m uvicorn api.app:app \
+    python3 -m uvicorn api.app:app \
         --host 127.0.0.1 \
         --port 8000 \
         --reload \
@@ -156,7 +175,7 @@ start() {
     sleep 2
     print_info
 
-    wait
+    wait 2>/dev/null || true
 }
 
 start
