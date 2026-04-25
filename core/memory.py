@@ -54,6 +54,21 @@ class MemorySystem:
         
         logger.info(f"Banco de dados inicializado: {self.db_path}")
 
+    def add_project(self, name: str, path: str, project_type: str = "project",
+                    priority: str = "medium"):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO projects
+            (name, path, type, priority, last_accessed, access_count)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (name, path, project_type, priority, datetime.now().isoformat(), 0),
+        )
+        conn.commit()
+        conn.close()
+
     def get_db_connection(self) -> sqlite3.Connection:
         """Return a SQLite connection for internal/service use."""
         conn = sqlite3.connect(self.db_path)
@@ -72,6 +87,7 @@ class MemorySystem:
             "conversation_messages": [],
             "user_preferences": self.get_user_preferences(),
             "projects_context": self.get_projects_context(),
+            "project_name": None,
             "recent_decisions": []
         }
         
@@ -117,6 +133,11 @@ class MemorySystem:
                 "timestamp": row["timestamp"],
             }
 
+            if row["conversation_project_name"]:
+                context["project_name"] = row["conversation_project_name"]
+                user_message["projectName"] = row["conversation_project_name"]
+                assistant_message["projectName"] = row["conversation_project_name"]
+
             if row["opencode_command"]:
                 assistant_message["command"] = row["opencode_command"]
                 assistant_message["commandStatus"] = (
@@ -140,9 +161,6 @@ class MemorySystem:
                     "reasoning_tokens": row["reasoning_tokens"] or 0,
                     "estimated_cost_usd": row["estimated_cost_usd"],
                 }
-
-            if row["conversation_project_name"]:
-                assistant_message["projectName"] = row["conversation_project_name"]
 
             context["conversation_history"].extend([
                 {"role": "user", "content": row["user_message"]},
@@ -182,6 +200,7 @@ class MemorySystem:
                 c.user_message,
                 c.ai_response,
                 c.conversation_title,
+                c.conversation_project_name,
                 COALESCE(agg.total_tokens, 0) AS total_tokens,
                 COALESCE(agg.estimated_cost_usd, 0) AS estimated_cost_usd
             FROM conversations c
@@ -224,6 +243,7 @@ class MemorySystem:
                     "updated_at": row["updated_at"],
                     "total_tokens": int(row["total_tokens"] or 0),
                     "estimated_cost_usd": float(row["estimated_cost_usd"] or 0.0),
+                    "project_name": row["conversation_project_name"],
                 }
             )
 
@@ -468,13 +488,6 @@ class MemorySystem:
         project_totals: dict[str, dict[str, Any]] = {}
 
         for row in rows:
-            blob = " ".join(
-                part for part in [
-                    row["user_message"],
-                    row["ai_response"],
-                    row["opencode_command"],
-                ] if part
-            ).lower()
             matched_project = row["conversation_project_name"] or self._infer_project_name_from_text(
                 row["user_message"],
                 row["ai_response"],
@@ -715,23 +728,25 @@ class MemorySystem:
         conn.commit()
         conn.close()
         
-        # Atualizar contador de acesso se mencionar projeto (após fechar conexão)
-        self._update_project_access(user_message)
+        # Atualizar contador de acesso se houver projeto explícito ou mencionado.
+        self._update_project_access(user_message, inferred_project_name)
         
         logger.debug(f"Interação salva: {user_message[:50]}...")
     
-    def _update_project_access(self, message: str):
+    def _update_project_access(self, message: str, project_name: Optional[str] = None):
         """Atualiza contador de acesso para projetos mencionados"""
         
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
-        # Verificar se mensagem menciona algum projeto conhecido
-        cursor.execute('SELECT name FROM projects')
-        projects = [row[0] for row in cursor.fetchall()]
-        
+
+        if project_name:
+            projects = [project_name]
+        else:
+            cursor.execute('SELECT name FROM projects')
+            projects = [row[0] for row in cursor.fetchall()]
+
         for project in projects:
-            if project.lower() in message.lower():
+            if project_name or project.lower() in message.lower():
                 cursor.execute('''
                     UPDATE projects 
                     SET access_count = access_count + 1, 

@@ -5,6 +5,7 @@ Route-level integration tests for chat and conversation APIs.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import BackgroundTasks
@@ -69,6 +70,62 @@ def route_services(tmp_path, monkeypatch):
         monitoring=monitoring,
         user=user,
     )
+
+
+@pytest.mark.asyncio
+async def test_chat_route_forwards_and_returns_explicit_project_name(route_services):
+    from api.models import ChatRequest
+    from api.routes.chat import chat_endpoint
+
+    route_services.brain.process_message = AsyncMock(
+        return_value=("Resposta do projeto", None, None)
+    )
+
+    response = await chat_endpoint(
+        request=ChatRequest(
+            message="Analise o repositório",
+            conversation_id="conv_chat_project",
+            project_name="devsynapse-ai",
+        ),
+        brain=route_services.brain,
+        memory_system=route_services.memory,
+        monitoring_system=route_services.monitoring,
+    )
+
+    route_services.brain.process_message.assert_awaited_once_with(
+        user_message="Analise o repositório",
+        conversation_id="conv_chat_project",
+        project_name="devsynapse-ai",
+    )
+    assert response.project_name == "devsynapse-ai"
+
+
+@pytest.mark.asyncio
+async def test_chat_route_returns_persisted_project_name(route_services):
+    from api.models import ChatRequest
+    from api.routes.chat import chat_endpoint
+
+    await route_services.memory.save_interaction(
+        conversation_id="conv_chat_existing_project",
+        user_message="Contexto inicial",
+        ai_response="Resposta inicial",
+        project_name="devsynapse-ai",
+    )
+    route_services.brain.process_message = AsyncMock(
+        return_value=("Resposta de continuidade", None, None)
+    )
+
+    response = await chat_endpoint(
+        request=ChatRequest(
+            message="Continue",
+            conversation_id="conv_chat_existing_project",
+        ),
+        brain=route_services.brain,
+        memory_system=route_services.memory,
+        monitoring_system=route_services.monitoring,
+    )
+
+    assert response.project_name == "devsynapse-ai"
 
 
 @pytest.mark.asyncio
@@ -170,6 +227,39 @@ async def test_execute_returns_structured_success_status(route_services, tmp_pat
     assert response.reason_code is None
     assert "linha 1" in (response.output or "")
     assert response.project_name is None
+
+
+@pytest.mark.asyncio
+async def test_execute_returns_resolved_project_name(route_services):
+    from api.models import CommandExecutionRequest
+    from api.routes.chat import execute_command
+
+    route_services.bridge.execute_command = AsyncMock(
+        return_value=(
+            True,
+            "Arquivo lido",
+            "conteúdo",
+            "success",
+            None,
+            "devsynapse-ai",
+        )
+    )
+
+    response = await execute_command(
+        request=CommandExecutionRequest(
+            conversation_id="conv_exec_project",
+            command='read "/home/irving/ruas/repos/devsynapse-ai/README.md"',
+            confirm=True,
+        ),
+        background_tasks=BackgroundTasks(),
+        user=route_services.user,
+        bridge=route_services.bridge,
+        memory_system=route_services.memory,
+        monitoring_system=route_services.monitoring,
+    )
+
+    assert response.success is True
+    assert response.project_name == "devsynapse-ai"
 
 
 @pytest.mark.asyncio

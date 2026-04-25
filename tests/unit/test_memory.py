@@ -10,10 +10,13 @@ from unittest.mock import patch
 
 def _create_memory(db_path):
     """Create MemorySystem with a specific DB path"""
-    # Must patch the module-level imported constant in core.memory
     with patch('core.memory.MEMORY_DB_PATH', str(db_path)):
         from core.memory import MemorySystem
         memory = MemorySystem()
+        memory.add_project("devsynapse-ai", "/home/irving/ruas/repos/devsynapse-ai",
+                           "ai-assistant", "high")
+        memory.add_project("botassist-whatsapp", "/home/irving/ruas/repos/botassist-whatsapp",
+                           "electron-app", "high")
         return memory
 
 
@@ -73,6 +76,7 @@ class TestMemorySystem:
         context = await memory.get_conversation_context("test_conv_1")
         assert "conversation_history" in context
         assert len(context["conversation_history"]) > 0
+        assert context["project_name"] is None
         assert context["conversation_history"][0]["role"] == "user"
         assert context["conversation_history"][0]["content"] == "Hello!"
         assert context["conversation_messages"][1]["tokenUsage"]["total_tokens"] == 15
@@ -177,8 +181,30 @@ class TestMemorySystem:
         )
 
         context = await memory.get_conversation_context("conv_project_infer")
+        assert context["project_name"] == "devsynapse-ai"
+        assert context["conversation_messages"][0]["projectName"] == "devsynapse-ai"
         assistant_message = context["conversation_messages"][1]
         assert assistant_message["projectName"] == "devsynapse-ai"
+
+    @pytest.mark.asyncio
+    async def test_save_interaction_persists_explicit_project_name(self, tmp_path):
+        db_path = tmp_path / "test_project_explicit.db"
+        memory = _create_memory(db_path)
+
+        await memory.save_interaction(
+            conversation_id="conv_project_explicit",
+            user_message="Analise este repositório",
+            ai_response="Resposta com contexto explícito",
+            project_name="devsynapse-ai",
+        )
+
+        context = await memory.get_conversation_context("conv_project_explicit")
+        conversations = memory.list_conversations()
+
+        assert context["project_name"] == "devsynapse-ai"
+        assert context["conversation_messages"][0]["projectName"] == "devsynapse-ai"
+        assert context["conversation_messages"][1]["projectName"] == "devsynapse-ai"
+        assert conversations[0]["project_name"] == "devsynapse-ai"
 
     @pytest.mark.asyncio
     async def test_list_conversations_returns_recent_summaries(self, tmp_path):

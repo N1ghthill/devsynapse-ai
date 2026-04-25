@@ -60,6 +60,14 @@ class TestDevSynapseBrain:
         assert "Irving" in prompt or "N1ghthill" in prompt
         assert "OpenCode" in prompt or "OPENCODE" in prompt
 
+    def test_generate_system_prompt_includes_active_project(self, mock_memory, mock_bridge):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        prompt = brain.generate_system_prompt({"project_name": "devsynapse-ai"})
+
+        assert "PROJETO ATIVO" in prompt
+        assert "devsynapse-ai" in prompt
+
     @pytest.mark.asyncio
     async def test_process_message_calls_api(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
@@ -77,6 +85,41 @@ class TestDevSynapseBrain:
         mock_memory.save_interaction.assert_called_once()
         args = mock_memory.save_interaction.call_args[1]
         assert args["user_message"] == "Hello!"
+
+    @pytest.mark.asyncio
+    async def test_process_message_persists_explicit_project_name(self, mock_memory, mock_bridge):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = "Resposta sobre o projeto"
+
+            await brain.process_message(
+                "Analise este projeto",
+                "test_session",
+                project_name="devsynapse-ai",
+            )
+
+        args = mock_memory.save_interaction.call_args[1]
+        assert args["project_name"] == "devsynapse-ai"
+
+    @pytest.mark.asyncio
+    async def test_process_message_reuses_persisted_project_name(self, mock_memory, mock_bridge):
+        mock_memory.get_conversation_context.return_value = {
+            "conversation_history": [],
+            "user_preferences": "Python",
+            "projects_context": "DevSynapse",
+            "project_name": "devsynapse-ai",
+            "recent_decisions": [],
+        }
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = "Resposta de continuidade"
+
+            await brain.process_message("Continue", "test_session")
+
+        args = mock_memory.save_interaction.call_args[1]
+        assert args["project_name"] == "devsynapse-ai"
 
     @pytest.mark.asyncio
     async def test_process_message_with_opencode_command(self, mock_memory, mock_bridge):
@@ -137,7 +180,7 @@ class TestDevSynapseBrain:
         with patch.object(brain, '_call_deepseek_api', new_callable=AsyncMock) as mock_deepseek:
             mock_deepseek.side_effect = Exception("API connection failed")
 
-            # Mock the fallback to test it's called
+            # Mock the degraded response to test it's called
             with patch.object(brain, '_get_fallback_response') as mock_fallback:
                 mock_fallback.return_value = "Fallback response"
 
