@@ -8,14 +8,19 @@ from pathlib import Path
 from unittest.mock import patch
 
 
+PROJECT_NAME = "devsynapse-ai"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+BOTASSIST_ROOT = PROJECT_ROOT.parent / "botassist-whatsapp"
+
+
 def _create_memory(db_path):
     """Create MemorySystem with a specific DB path"""
     with patch('core.memory.MEMORY_DB_PATH', str(db_path)):
         from core.memory import MemorySystem
         memory = MemorySystem()
-        memory.add_project("devsynapse-ai", "/home/irving/ruas/repos/devsynapse-ai",
+        memory.add_project(PROJECT_NAME, str(PROJECT_ROOT),
                            "ai-assistant", "high")
-        memory.add_project("botassist-whatsapp", "/home/irving/ruas/repos/botassist-whatsapp",
+        memory.add_project("botassist-whatsapp", str(BOTASSIST_ROOT),
                            "electron-app", "high")
         return memory
 
@@ -176,8 +181,8 @@ class TestMemorySystem:
         await memory.save_interaction(
             conversation_id="conv_project_infer",
             user_message="Analise o devsynapse-ai",
-            ai_response='read "/home/irving/ruas/repos/devsynapse-ai/README.md"',
-            opencode_command='read "/home/irving/ruas/repos/devsynapse-ai/README.md"',
+            ai_response=f'read "{PROJECT_ROOT / "README.md"}"',
+            opencode_command=f'read "{PROJECT_ROOT / "README.md"}"',
         )
 
         context = await memory.get_conversation_context("conv_project_infer")
@@ -286,8 +291,8 @@ class TestMemorySystem:
             memory.save_interaction(
                 conversation_id="conv_project",
                 user_message="Analise o projeto devsynapse-ai",
-                ai_response='read "/home/irving/ruas/repos/devsynapse-ai/README.md"',
-                opencode_command='read "/home/irving/ruas/repos/devsynapse-ai/README.md"',
+                ai_response=f'read "{PROJECT_ROOT / "README.md"}"',
+                opencode_command=f'read "{PROJECT_ROOT / "README.md"}"',
                 llm_usage={
                     "provider": "deepseek",
                     "model": "deepseek-v4-flash",

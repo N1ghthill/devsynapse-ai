@@ -41,7 +41,11 @@ CommandExecutionTuple = Tuple[bool, str, Optional[str], str, Optional[str], Opti
 class OpenCodeBridge:
     """Gerencia comunicação segura com OpenCode"""
     
-    def __init__(self):
+    def __init__(
+        self,
+        known_projects: Optional[Dict[str, Dict[str, str]]] = None,
+        allowed_directories: Optional[List[str]] = None,
+    ):
         self.allowed_commands = ALLOWED_COMMANDS
         self.allowed_bash_commands = ALLOWED_BASH_COMMANDS
         self.read_only_commands = READ_ONLY_COMMANDS
@@ -49,7 +53,9 @@ class OpenCodeBridge:
         self.admin_only_commands = ADMIN_ONLY_COMMANDS
         self.admin_only_bash_commands = ADMIN_ONLY_BASH_COMMANDS
         self.blacklisted_patterns = BLACKLISTED_PATTERNS
-        self.allowed_directories = [Path(d) for d in ALLOWED_DIRECTORIES]
+        self.known_projects = known_projects if known_projects is not None else KNOWN_PROJECTS
+        directory_source = allowed_directories if allowed_directories is not None else ALLOWED_DIRECTORIES
+        self.allowed_directories = [Path(d) for d in directory_source]
         self.allowed_file_extensions = ALLOWED_FILE_EXTENSIONS
         self.backup_enabled = OPENCODE_BACKUP_ENABLED
         self.backup_suffix = OPENCODE_BACKUP_SUFFIX
@@ -303,7 +309,7 @@ class OpenCodeBridge:
     ) -> Optional[str]:
         """Infer project context from an explicit project name or command arguments."""
 
-        if explicit_project_name and explicit_project_name in KNOWN_PROJECTS:
+        if explicit_project_name and explicit_project_name in self.known_projects:
             return explicit_project_name
 
         if command_type is None or not args:
@@ -339,9 +345,11 @@ class OpenCodeBridge:
         best_match: Optional[str] = None
         best_score: int = -1
 
-        for project_name, project_info in KNOWN_PROJECTS.items():
+        text_lower = text.lower()
+
+        for project_name, project_info in self.known_projects.items():
             project_path = str(Path(project_info["path"]).resolve())
-            if project_name in text or project_path in text:
+            if project_name.lower() in text_lower or project_path.lower() in text_lower:
                 score = len(project_name)
                 if score > best_score:
                     best_score = score
@@ -355,7 +363,7 @@ class OpenCodeBridge:
         except Exception:
             return None
 
-        for project_name, project_info in KNOWN_PROJECTS.items():
+        for project_name, project_info in self.known_projects.items():
             project_path = Path(project_info["path"]).resolve()
             try:
                 if path.is_relative_to(project_path):
@@ -370,8 +378,8 @@ class OpenCodeBridge:
     
     def _resolve_project_cwd(self, project_name: Optional[str]) -> str:
         """Resolve the working directory for a project, falling back to default."""
-        if project_name and project_name in KNOWN_PROJECTS:
-            project_path = Path(KNOWN_PROJECTS[project_name]["path"])
+        if project_name and project_name in self.known_projects:
+            project_path = Path(self.known_projects[project_name]["path"])
             if project_path.is_dir():
                 return str(project_path)
         return str(get_settings().default_execution_cwd)
@@ -735,11 +743,11 @@ class OpenCodeBridge:
     def get_project_context(self, project_name: str) -> Optional[Dict]:
         """Obtém contexto sobre um projeto específico"""
         
-        if project_name in KNOWN_PROJECTS:
-            return KNOWN_PROJECTS[project_name]
+        if project_name in self.known_projects:
+            return self.known_projects[project_name]
         
         # Tentar encontrar por nome similar
-        for name, info in KNOWN_PROJECTS.items():
+        for name, info in self.known_projects.items():
             if project_name.lower() in name.lower():
                 return info
         

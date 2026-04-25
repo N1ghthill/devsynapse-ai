@@ -8,7 +8,10 @@ Current checks:
 - Python dependency installation
 - Ruff lint pass
 - backend test suite
+- shell script syntax and ShellCheck pass
+- Python utility script compilation
 - frontend dependency installation
+- frontend lint pass
 - frontend production build
 
 ## Authorization Boundary
@@ -74,5 +77,7 @@ Before production use, validate:
 
 A change should be considered integration-ready only when:
 - backend tests pass;
+- script checks pass;
+- frontend lint passes;
 - frontend build passes;
 - documentation is updated when contracts or operational flows change.

@@ -50,6 +50,7 @@ Recommended backend loop:
 ```bash
 make lint
 make test
+make script-check
 ```
 
 Full repository verification:
@@ -62,7 +63,7 @@ Recommended first-pass verification for a new environment:
 
 ```bash
 ./venv/bin/pytest -q tests/integration/test_api_routes.py
-cd frontend && npm run build
+cd frontend && npm run lint && npm run build
 ```
 
 If you changed migrations or persistence logic:

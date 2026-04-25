@@ -28,8 +28,10 @@ npm run dev
 - `make dev`: run backend and frontend dev servers together
 - `make test`: run backend tests
 - `make lint`: run Python lint checks with Ruff
+- `make script-check`: run shell syntax checks, Python script compilation and ShellCheck when installed
+- `make frontend-lint`: run frontend ESLint
 - `make frontend-build`: build the frontend bundle
-- `make verify`: lint, test and build in one pass
+- `make verify`: run Python lint, backend tests, script checks, frontend lint and frontend build in one pass
 - `make seed-users`: ensure default users exist
 - `make migrate`: apply all SQLite migrations
 - `make migration-status`: inspect current schema versions

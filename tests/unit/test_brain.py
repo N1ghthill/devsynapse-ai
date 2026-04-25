@@ -313,9 +313,9 @@ class TestDevSynapseBrain:
     def test_extract_opencode_command_normalizes_unquoted_bash_line(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
-        response = "Vou listar a pasta agora.\n`bash ls -la /home/irving/ruas/repos`"
+        response = "Vou listar a pasta agora.\n`bash ls -la /workspace/repos`"
         command = brain._extract_opencode_command(response)
-        assert command == 'bash "ls -la /home/irving/ruas/repos"'
+        assert command == 'bash "ls -la /workspace/repos"'
 
     def test_extract_opencode_command_normalizes_bare_shell_line(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
@@ -327,9 +327,9 @@ class TestDevSynapseBrain:
     def test_extract_opencode_command_normalizes_touch_line(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
-        response = "touch /home/irving/Documentos/TESTE_ESCRITA.md"
+        response = "touch /workspace/TESTE_ESCRITA.md"
         command = brain._extract_opencode_command(response)
-        assert command == 'bash "touch /home/irving/Documentos/TESTE_ESCRITA.md"'
+        assert command == 'bash "touch /workspace/TESTE_ESCRITA.md"'
 
     def test_extract_opencode_command_none(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)

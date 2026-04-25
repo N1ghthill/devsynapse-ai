@@ -25,9 +25,6 @@ ok()   { echo -e "  ${GREEN}✓${NC} $1"; }
 warn() { echo -e "  ${YELLOW}⚠${NC} $1"; }
 info() { echo -e "  ${CYAN}→${NC} $1"; }
 
-ALIAS_MARKER="# >>> devsynapse alias (managed by scripts/install.sh) >>>"
-ALIAS_UNINSTALL_MARKER="# >>> uninstall-devsynapse alias (managed by scripts/install.sh) >>>"
-
 ALIAS_BLOCK_START="# >>> devsynapse"
 ALIAS_BLOCK_END="# <<< devsynapse"
 
@@ -61,7 +58,7 @@ remove_alias_block() {
     local tmp_file
     tmp_file="${rc_file}.devsynapse_tmp"
 
-    sed -e "/^# >>> devsynapse/,/^# <<< devsynapse/d" "$rc_file" > "$tmp_file"
+    sed -e "/^${ALIAS_BLOCK_START}/,/^${ALIAS_BLOCK_END}/d" "$rc_file" > "$tmp_file"
     mv "$tmp_file" "$rc_file"
 
     ok "Aliases removidos de $rc_name"
@@ -132,7 +129,6 @@ main() {
     echo ""
     echo -e "${BOLD}6. Diretório do projeto...${NC}"
 
-    local delete_project="n"
     echo ""
     echo -e "  Para remover completamente, delete o diretório:"
     echo -e "  ${CYAN}rm -rf $ROOT_DIR${NC}"

@@ -187,12 +187,15 @@ npm run dev
 
 Backend:
 ```bash
+make lint
 ./venv/bin/pytest -q
+make script-check
 ```
 
 Frontend:
 ```bash
 cd frontend
+npm run lint
 npm run build
 ```
 

@@ -763,11 +763,41 @@ class MemorySystem:
         if not blob:
             return None
 
-        for project_name, info in KNOWN_PROJECTS.items():
-            if project_name.lower() in blob or str(info["path"]).lower() in blob:
+        for project_name, info in self._get_project_lookup().items():
+            project_path = str(info.get("path", "")).lower()
+            if project_name.lower() in blob or (project_path and project_path in blob):
                 return project_name
 
         return None
+
+    def _get_project_lookup(self) -> Dict[str, Dict[str, str]]:
+        """Return configured projects plus projects persisted in this memory database."""
+
+        projects = {name: dict(info) for name, info in KNOWN_PROJECTS.items()}
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                '''
+                SELECT name, path, type, priority
+                FROM projects
+                '''
+            )
+            for row in cursor.fetchall():
+                projects[row["name"]] = {
+                    "path": row["path"],
+                    "type": row["type"],
+                    "priority": row["priority"],
+                }
+        except sqlite3.Error as exc:
+            logger.debug("Não foi possível carregar projetos persistidos: %s", exc)
+        finally:
+            if conn is not None:
+                conn.close()
+
+        return projects
     
     async def save_command_execution(
         self,

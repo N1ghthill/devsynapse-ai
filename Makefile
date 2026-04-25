@@ -3,7 +3,7 @@ PIP ?= ./venv/bin/pip
 PYTEST ?= ./venv/bin/pytest
 RUFF ?= ./venv/bin/ruff
 
-.PHONY: setup dev install install-dev run test lint frontend-build verify seed-users migrate migration-status
+.PHONY: setup dev install install-dev run test lint frontend-lint frontend-build script-check verify seed-users migrate migration-status
 
 setup:
 	python3 -m venv venv
@@ -31,10 +31,24 @@ test:
 lint:
 	$(RUFF) check .
 
+frontend-lint:
+	cd frontend && npm run lint
+
 frontend-build:
 	cd frontend && npm run build
 
-verify: lint test frontend-build
+script-check:
+	bash -n scripts/install.sh
+	bash -n scripts/uninstall.sh
+	bash -n devsynapse.sh
+	$(PYTHON) -m py_compile scripts/dev.py scripts/migrate.py scripts/manage_users.py
+	@if command -v shellcheck >/dev/null 2>&1; then \
+		shellcheck scripts/install.sh scripts/uninstall.sh devsynapse.sh; \
+	else \
+		echo "shellcheck not installed; skipping shell script lint"; \
+	fi
+
+verify: lint test script-check frontend-lint frontend-build
 
 seed-users:
 	$(PYTHON) scripts/manage_users.py seed-defaults

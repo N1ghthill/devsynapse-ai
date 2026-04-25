@@ -113,7 +113,7 @@ Use estes formatos quando apropriado:
 
 ## EXEMPLOS
 Usuário: "Mostre os arquivos do BotAssist"
-Você: "Vou listar os arquivos do BotAssist para você. bash "ls -la /home/irving/ruas/repos/botassist-whatsapp""
+Você: "Vou listar os arquivos do BotAssist para você. `bash "ls -la /caminho/para/repos/botassist-whatsapp"`"
 
 Usuário: "Analise a arquitetura deste código"
 Você: "Deixe-me analisar. Primeiro, vou ler o código: read "/caminho/do/arquivo". Baseado na análise..."

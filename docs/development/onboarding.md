@@ -49,7 +49,8 @@ These are the first checks a new contributor should run before making changes:
 
 ```bash
 ./venv/bin/pytest -q tests/integration/test_api_routes.py
-cd frontend && npm run build
+make script-check
+cd frontend && npm run lint && npm run build
 ```
 
 If those pass, the local environment is usually in a good state for normal development.

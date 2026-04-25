@@ -6,6 +6,7 @@ Run the DevSynapse backend and frontend development servers together.
 from __future__ import annotations
 
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -68,26 +69,33 @@ def start_process(name: str, command: list[str], cwd: Path) -> subprocess.Popen:
     env = os.environ.copy()
     env.setdefault("VITE_API_URL", f"http://{API_HOST}:{API_PORT}")
     print(f"Starting {name}: {' '.join(command)}")
-    return subprocess.Popen(command, cwd=cwd, env=env)
+    return subprocess.Popen(command, cwd=cwd, env=env, start_new_session=True)
 
 
 def stop_processes(processes: list[subprocess.Popen]) -> None:
     for process in processes:
         if process.poll() is None:
-            process.terminate()
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
 
     deadline = time.monotonic() + 5
     for process in processes:
         while process.poll() is None and time.monotonic() < deadline:
             time.sleep(0.1)
         if process.poll() is None:
-            process.kill()
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 def main() -> int:
     if not check_ready():
         return 1
 
+    shutting_down = False
     processes = [
         start_process(
             "backend",
@@ -110,6 +118,18 @@ def main() -> int:
             FRONTEND_DIR,
         ),
     ]
+
+    def handle_shutdown(signum, _frame) -> None:
+        nonlocal shutting_down
+        if shutting_down:
+            return
+        shutting_down = True
+        print("\nStopping DevSynapse...")
+        stop_processes(processes)
+        raise SystemExit(0 if signum in {signal.SIGINT, signal.SIGTERM} else 1)
+
+    signal.signal(signal.SIGTERM, handle_shutdown)
+    signal.signal(signal.SIGINT, handle_shutdown)
 
     print("")
     print("╔══════════════════════════════════════════════════╗")

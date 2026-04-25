@@ -27,6 +27,16 @@ jobs:
       - name: Lint backend
         run: ruff check .
 
+      - name: Check scripts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          bash -n scripts/install.sh
+          bash -n scripts/uninstall.sh
+          bash -n devsynapse.sh
+          python -m py_compile scripts/dev.py scripts/migrate.py scripts/manage_users.py
+          shellcheck scripts/install.sh scripts/uninstall.sh devsynapse.sh
+
       - name: Run backend tests
         run: pytest -q
 
@@ -48,6 +58,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Lint frontend
+        run: npm run lint
 
       - name: Build frontend
         run: npm run build

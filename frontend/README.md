@@ -36,6 +36,7 @@ VITE_API_URL=http://127.0.0.1:8000
 ## Build
 
 ```bash
+npm run lint
 npm run build
 ```
 

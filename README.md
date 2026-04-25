@@ -139,6 +139,8 @@ make setup
 make dev
 make test
 make lint
+make script-check
+make frontend-lint
 make frontend-build
 make verify
 make migrate

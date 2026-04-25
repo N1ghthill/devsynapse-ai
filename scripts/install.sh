@@ -9,13 +9,14 @@
 #
 # O que faz:
 #   1. Verifica dependências de sistema (python3, python3-venv, npm)
-#   2. Cria venv e instala dependências Python
-#   3. Instala dependências do frontend (npm)
-#   4. Pergunta e configura API key DeepSeek e diretório de repositórios
-#   5. Executa migrações do banco
-#   6. Cria usuário admin padrão (admin / admin)
-#   7. Build do frontend para produção
-#   8. Adiciona aliases `devsynapse` e `uninstall-devsynapse` ao shell
+#   2. Cria venv
+#   3. Instala dependências Python
+#   4. Instala dependências do frontend (npm)
+#   5. Pergunta e configura API key DeepSeek e diretório de repositórios
+#   6. Executa migrações do banco
+#   7. Cria usuário admin padrão (admin / admin)
+#   8. Build do frontend para produção
+#   9. Adiciona aliases `devsynapse` e `uninstall-devsynapse` ao shell
 
 set -euo pipefail
 
@@ -33,6 +34,45 @@ step()  { echo -e "\n${BOLD}${CYAN}[$1]${NC} ${BOLD}$2${NC}"; }
 ok()    { echo -e "  ${GREEN}✓${NC} $1"; }
 warn()  { echo -e "  ${YELLOW}⚠${NC} $1"; }
 fail()  { echo -e "  ${RED}✗${NC} $1"; }
+
+set_env_value() {
+    local key="$1"
+    local value="$2"
+    local env_file="$ROOT_DIR/.env"
+    local tmp_file
+
+    tmp_file="$(mktemp)"
+    if [ -f "$env_file" ]; then
+        awk -v key="$key" -v value="$value" '
+            BEGIN { updated = 0 }
+            $0 ~ "^" key "=" {
+                print key "=" value
+                updated = 1
+                next
+            }
+            { print }
+            END {
+                if (updated == 0) {
+                    print key "=" value
+                }
+            }
+        ' "$env_file" > "$tmp_file"
+    else
+        echo "$key=$value" > "$tmp_file"
+    fi
+
+    mv "$tmp_file" "$env_file"
+}
+
+ensure_env_value() {
+    local key="$1"
+    local value="$2"
+    local env_file="$ROOT_DIR/.env"
+
+    if ! grep -qE "^${key}=" "$env_file" 2>/dev/null; then
+        set_env_value "$key" "$value"
+    fi
+}
 
 # ---- System dependency check ----
 
@@ -76,12 +116,12 @@ install() {
     echo -e "${BOLD}${CYAN}║        DevSynapse AI Installer v0.3.0           ║${NC}"
     echo -e "${BOLD}${CYAN}╚══════════════════════════════════════════════════╝${NC}"
 
-    step "1/8" "Verificando dependências de sistema..."
+    step "1/9" "Verificando dependências de sistema..."
     if ! check_system_deps; then
         exit 1
     fi
 
-    step "2/8" "Criando ambiente virtual Python..."
+    step "2/9" "Criando ambiente virtual Python..."
     if [ ! -d "$ROOT_DIR/venv" ]; then
         python3 -m venv "$ROOT_DIR/venv" || {
             fail "Falha ao criar venv"
@@ -95,11 +135,11 @@ install() {
     # shellcheck disable=SC1091
     source "$ROOT_DIR/venv/bin/activate"
 
-    step "3/8" "Instalando dependências Python..."
+    step "3/9" "Instalando dependências Python..."
     pip install -r "$ROOT_DIR/requirements.txt" 2>&1 | tail -3
     ok "Dependências Python instaladas"
 
-    step "4/8" "Instalando dependências do frontend..."
+    step "4/9" "Instalando dependências do frontend..."
     cd "$ROOT_DIR/frontend"
     npm install 2>&1 | tail -3
     ok "Dependências frontend instaladas"
@@ -128,11 +168,7 @@ install() {
         if [ "${api_key:0:3}" != "sk-" ]; then
             warn "A chave não começa com 'sk-'. Será salva mesmo assim, mas pode não funcionar."
         fi
-        if grep -qE '^DEEPSEEK_API_KEY=' "$ROOT_DIR/.env" 2>/dev/null; then
-            sed -i "s|^DEEPSEEK_API_KEY=.*|DEEPSEEK_API_KEY=$api_key|" "$ROOT_DIR/.env"
-        else
-            echo "DEEPSEEK_API_KEY=$api_key" >> "$ROOT_DIR/.env"
-        fi
+        set_env_value "DEEPSEEK_API_KEY" "$api_key"
         ok "API key configurada"
     else
         echo -e "  ${YELLOW}⚠  API key não configurada. Edite .env manualmente antes de iniciar:${NC}"
@@ -166,14 +202,8 @@ install() {
         warn "O diretório '$repos_root' não existe. Os comandos usarão \$HOME como fallback."
     fi
 
-    if grep -qE '^DEV_REPOS_ROOT=' "$ROOT_DIR/.env" 2>/dev/null; then
-        sed -i "s|^DEV_REPOS_ROOT=.*|DEV_REPOS_ROOT=$repos_root|" "$ROOT_DIR/.env"
-    else
-        echo "DEV_REPOS_ROOT=$repos_root" >> "$ROOT_DIR/.env"
-    fi
-    if ! grep -qE '^DEV_WORKSPACE_ROOT=' "$ROOT_DIR/.env" 2>/dev/null; then
-        echo "DEV_WORKSPACE_ROOT=$HOME" >> "$ROOT_DIR/.env"
-    fi
+    set_env_value "DEV_REPOS_ROOT" "$repos_root"
+    ensure_env_value "DEV_WORKSPACE_ROOT" "$HOME"
     ok "Diretório de repositórios: $repos_root"
 
     step "6/9" "Executando migrações do banco..."

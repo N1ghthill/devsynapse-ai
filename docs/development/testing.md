@@ -52,10 +52,20 @@ Run repository verification:
 make verify
 ```
 
+Script validation:
+
+```bash
+make script-check
+```
+
+`make script-check` always runs shell syntax checks and Python script compilation.
+If `shellcheck` is installed locally, it also runs ShellCheck against the shell entrypoints.
+
 Frontend validation:
 
 ```bash
 cd frontend
+npm run lint
 npm run build
 ```
 

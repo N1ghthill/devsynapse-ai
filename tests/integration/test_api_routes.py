@@ -4,12 +4,17 @@ Route-level integration tests for chat and conversation APIs.
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import BackgroundTasks
 from fastapi import HTTPException
+
+
+PROJECT_NAME = "devsynapse-ai"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class _MonitoringStub:
@@ -58,6 +63,7 @@ def route_services(tmp_path, monkeypatch):
     monkeypatch.setattr(memory_module, "MEMORY_DB_PATH", db_path)
 
     memory = MemorySystem()
+    memory.add_project(PROJECT_NAME, str(PROJECT_ROOT), "ai-assistant", "high")
     bridge = OpenCodeBridge()
     brain = DevSynapseBrain(memory, bridge)
     monitoring = _MonitoringStub()
@@ -248,7 +254,7 @@ async def test_execute_returns_resolved_project_name(route_services):
     response = await execute_command(
         request=CommandExecutionRequest(
             conversation_id="conv_exec_project",
-            command='read "/home/irving/ruas/repos/devsynapse-ai/README.md"',
+            command=f'read "{PROJECT_ROOT / "README.md"}"',
             confirm=True,
         ),
         background_tasks=BackgroundTasks(),
@@ -292,8 +298,8 @@ async def test_list_conversations_and_stats_include_llm_usage(route_services):
     await route_services.memory.save_interaction(
         conversation_id="conv_usage_stats",
         user_message="Mensagem com custo sobre devsynapse-ai",
-        ai_response='Resposta com custo read "/home/irving/ruas/repos/devsynapse-ai/README.md"',
-        opencode_command='read "/home/irving/ruas/repos/devsynapse-ai/README.md"',
+        ai_response=f'Resposta com custo read "{PROJECT_ROOT / "README.md"}"',
+        opencode_command=f'read "{PROJECT_ROOT / "README.md"}"',
         llm_usage={
             "provider": "deepseek",
             "model": "deepseek-v4-flash",

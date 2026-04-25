@@ -5,6 +5,7 @@ import pytest
 import sqlite3
 from unittest.mock import Mock, patch, AsyncMock
 import os
+from pathlib import Path
 
 from core.brain import DevSynapseBrain
 from core.memory import MemorySystem
@@ -12,11 +13,16 @@ from core.opencode_bridge import OpenCodeBridge
 from core.monitoring import MonitoringSystem
 
 
+PROJECT_NAME = "devsynapse-ai"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
 def _create_memory(db_path):
     """Create MemorySystem with a specific DB path"""
     from unittest.mock import patch as mock_patch
     with mock_patch('core.memory.MEMORY_DB_PATH', str(db_path)):
         memory = MemorySystem()
+        memory.add_project(PROJECT_NAME, str(PROJECT_ROOT), "ai-assistant", "high")
         return memory
 
 
