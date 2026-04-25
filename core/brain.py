@@ -1,12 +1,12 @@
 """
-Núcleo do DevSynapse - Integração com Deepseek API
+Núcleo do DevSynapse - Integração com DeepSeek API
 """
 
-from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
+from typing import AsyncIterator, Dict, List, Optional, Tuple
 
 import requests
 
@@ -25,17 +25,15 @@ class LLMResult:
 
 
 class DevSynapseBrain:
-    """Gerencia a inteligência do DevSynapse via APIs de LLM"""
+    """Gerencia a inteligência do DevSynapse via API DeepSeek."""
     
     def __init__(self, memory_system, opencode_bridge):
         self.memory = memory_system
         self.opencode = opencode_bridge
         settings = app_settings.get_settings()
         self.api_key = app_settings.DEEPSEEK_API_KEY
-        self.fallback_api_key = app_settings.OPENAI_API_KEY
         self.deepseek_model = settings.deepseek_model
         self.deepseek_base_url = settings.deepseek_base_url
-        self.openai_model = settings.openai_model
         self.temperature = settings.llm_temperature
         self.max_tokens = settings.llm_max_tokens
         self.request_timeout = settings.llm_request_timeout
@@ -59,13 +57,19 @@ class DevSynapseBrain:
         }
         
         if not self.api_key:
-            logger.warning("Deepseek API key não configurada")
+            logger.warning("DeepSeek API key não configurada")
         
     def generate_system_prompt(self, context: Dict) -> str:
         """Gera prompt de sistema personalizado baseado no contexto"""
         
         user_prefs = self.memory.get_user_preferences()
         projects_info = self.memory.get_projects_context()
+        active_project_name = context.get("project_name")
+        active_project_section = (
+            f"\n## PROJETO ATIVO\n{active_project_name}\n"
+            if active_project_name
+            else ""
+        )
         
         system_prompt = f"""Você é DevSynapse (Development Synapse),
 assistente de desenvolvimento inteligente do Irving Ruas (também conhecido como N1ghthill).
@@ -79,6 +83,7 @@ Combine habilidades técnicas profundas com comunicação conversacional natural
 
 ## PROJETOS ATUAIS
 {projects_info}
+{active_project_section}
 
 ## HABILIDADES DISPONÍVEIS
 1. **Conversação técnica** - Discuta arquitetura, design patterns, trade-offs
@@ -125,9 +130,10 @@ Você: "Baseado nas suas preferências por soluções simples e de baixo custo, 
         return system_prompt
     
     async def process_message(
-        self, 
-        user_message: str, 
-        conversation_id: Optional[str] = None
+        self,
+        user_message: str,
+        conversation_id: Optional[str] = None,
+        project_name: Optional[str] = None,
     ) -> Tuple[str, Optional[str], Optional[Dict]]:
         """
         Processa uma mensagem do usuário e retorna resposta + comando OpenCode
@@ -139,6 +145,7 @@ Você: "Baseado nas suas preferências por soluções simples e de baixo custo, 
         event_data = {
             "user_message": user_message,
             "conversation_id": conversation_id,
+            "project_name": project_name,
         }
 
         bp_event = await plugin_manager.emit_event("brain:before_process", event_data)
@@ -146,14 +153,22 @@ Você: "Baseado nas suas preferências por soluções simples e de baixo custo, 
             return "Processamento cancelado por plugin.", None
         user_message = bp_event.data.get("user_message", user_message)
         conversation_id = bp_event.data.get("conversation_id", conversation_id)
+        project_name = bp_event.data.get("project_name", project_name)
 
         # Obter contexto da conversa
         context = await self.memory.get_conversation_context(conversation_id)
+        effective_project_name = project_name or context.get("project_name")
+        if effective_project_name:
+            context["project_name"] = effective_project_name
 
-        mem_before = {"user_message": user_message, "conversation_id": conversation_id}
+        mem_before = {
+            "user_message": user_message,
+            "conversation_id": conversation_id,
+            "project_name": effective_project_name,
+        }
         await plugin_manager.emit_event("memory:before_save", mem_before)
 
-        # Preparar mensagens para o LLM
+        # Preparar mensagens para o DeepSeek
         messages = self._prepare_messages(user_message, context)
 
         llm_event = await plugin_manager.emit_event("brain:before_llm_call", {"messages": messages})
@@ -187,12 +202,14 @@ Você: "Baseado nas suas preferências por soluções simples e de baixo custo, 
             ai_response=response_text,
             opencode_command=opencode_command,
             llm_usage=aggregated_usage,
+            project_name=effective_project_name,
         )
 
         await plugin_manager.emit_event("memory:after_save", {
             "conversation_id": conversation_id,
             "user_message": user_message,
             "response": response_text,
+            "project_name": effective_project_name,
         })
 
         ap_event = await plugin_manager.emit_event("brain:after_process", {
@@ -224,27 +241,19 @@ Você: "Baseado nas suas preferências por soluções simples e de baixo custo, 
         return messages
     
     async def _call_llm_api(self, messages: List[Dict]) -> LLMResult:
-        """Chama API do Deepseek (com fallback para OpenAI)"""
+        """Chama API do DeepSeek e retorna resposta degradada se a API falhar."""
         
-        # Tentar Deepseek primeiro
+        # Tentar DeepSeek primeiro
         if self.api_key:
             try:
                 return await self._call_deepseek_api(messages)
             except Exception as e:
-                logger.warning(f"Deepseek API falhou: {e}. Tentando fallback...")
-        
-        # Fallback para OpenAI se disponível
-        if self.fallback_api_key:
-            try:
-                return await self._call_openai_api(messages)
-            except Exception as e:
-                logger.error(f"OpenAI API também falhou: {e}")
-        
-        # Se ambas falharem, retornar resposta de fallback
+                logger.warning(f"DeepSeek API falhou: {e}. Usando resposta degradada.")
+
         return LLMResult(content=self._get_fallback_response(messages))
     
     async def _call_deepseek_api(self, messages: List[Dict]) -> LLMResult:
-        """Chama API do Deepseek"""
+        """Chama API do DeepSeek"""
         
         url = f"{self.deepseek_base_url}/chat/completions"
         
@@ -281,17 +290,148 @@ Você: "Baseado nas suas preferências por soluções simples e de baixo custo, 
             model=result.get("model") or self.deepseek_model,
             usage=usage,
         )
-    
-    async def _call_openai_api(self, messages: List[Dict]) -> LLMResult:
-        """Chama API do OpenAI (fallback)"""
-        
-        # Implementação similar para OpenAI
-        # Por enquanto, retornar placeholder
-        return LLMResult(
-            content="⚠️ OpenAI integration em desenvolvimento. Usando resposta simulada.",
-            provider="openai",
-            model=self.openai_model,
+
+    async def _call_deepseek_api_streaming(
+        self, messages: List[Dict]
+    ) -> AsyncIterator[Dict]:
+        """Call DeepSeek API with streaming, yielding delta chunks."""
+        import httpx
+
+        url = f"{self.deepseek_base_url}/chat/completions"
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "model": self.deepseek_model,
+            "messages": messages,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "stream": True,
+        }
+
+        collected_content = ""
+        collected_usage: Optional[Dict] = None
+
+        async with httpx.AsyncClient() as client:
+            async with client.stream(
+                "POST",
+                url,
+                headers=headers,
+                json=payload,
+                timeout=httpx.Timeout(5.0, read=self.request_timeout),
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    data_str = line[6:]
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        import json
+
+                        chunk = json.loads(data_str)
+                    except Exception:
+                        continue
+
+                    choices = chunk.get("choices", [])
+                    if choices:
+                        delta = choices[0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            collected_content += content
+                            yield {"type": "text", "content": content}
+
+                    usage_chunk = chunk.get("usage")
+                    if usage_chunk:
+                        collected_usage = usage_chunk
+
+        usage = self._build_usage_snapshot(
+            provider="deepseek",
+            model=self.deepseek_model,
+            usage=collected_usage or {},
         )
+        yield {"type": "done", "content": collected_content, "usage": usage}
+
+    async def process_message_streaming(
+        self,
+        user_message: str,
+        conversation_id: Optional[str] = None,
+        project_name: Optional[str] = None,
+    ) -> AsyncIterator[Dict]:
+        """Process a message and stream the response as SSE events.
+
+        Yields:
+            {"type": "text", "content": "..."}
+            {"type": "command", "command": "..."}
+            {"type": "done", "usage": {...}, ...}
+        """
+
+        context = await self.memory.get_conversation_context(conversation_id)
+        effective_project_name = project_name or context.get("project_name")
+        if effective_project_name:
+            context["project_name"] = effective_project_name
+
+        messages = self._prepare_messages(user_message, context)
+
+        if not self.api_key:
+            yield {"type": "text", "content": self._get_fallback_response(messages)}
+            yield {"type": "done", "usage": None}
+            return
+
+        full_response = ""
+        try:
+            async for chunk in self._call_deepseek_api_streaming(messages):
+                if chunk["type"] == "text":
+                    full_response += chunk["content"]
+                    yield chunk
+                elif chunk["type"] == "done":
+                    full_response = chunk.get("content", full_response)
+                    usage = chunk.get("usage")
+                    break
+        except Exception as e:
+            logger.warning(f"DeepSeek streaming failed: {e}")
+            fallback = self._get_fallback_response(messages)
+            yield {"type": "text", "content": fallback}
+            yield {"type": "done", "usage": None}
+            return
+
+        opencode_command = self._extract_opencode_command(full_response)
+
+        if self._needs_command_repair(full_response, opencode_command):
+            repair_messages = self._build_command_repair_messages(messages, full_response)
+            yield {"type": "text", "content": "\n\n"}
+            try:
+                async for chunk in self._call_deepseek_api_streaming(repair_messages):
+                    if chunk["type"] == "text":
+                        full_response += chunk["content"]
+                        yield chunk
+                    elif chunk["type"] == "done":
+                        full_response = chunk.get("content", full_response)
+                        repair_usage = chunk.get("usage")
+                        usage = self._merge_usage(usage, repair_usage)
+                        break
+            except Exception:
+                pass
+
+            opencode_command = self._extract_opencode_command(full_response)
+
+        if opencode_command:
+            yield {"type": "command", "command": opencode_command}
+
+        await self.memory.save_interaction(
+            conversation_id=conversation_id,
+            user_message=user_message,
+            ai_response=full_response,
+            opencode_command=opencode_command,
+            llm_usage=usage,
+            project_name=effective_project_name,
+        )
+
+        yield {"type": "done", "usage": usage}
 
     def _coerce_llm_result(self, result: str | LLMResult) -> LLMResult:
         if isinstance(result, LLMResult):
@@ -616,13 +756,13 @@ Você: "Baseado nas suas preferências por soluções simples e de baixo custo, 
         ]
     
     def _get_fallback_response(self, messages: List[Dict]) -> str:
-        """Resposta de fallback quando APIs falham"""
+        """Resposta degradada quando a API DeepSeek falha."""
         
         fallback_responses = [
-            "O provedor de IA demorou além do limite e eu entrei em fallback. "
+            "A API DeepSeek demorou além do limite e eu entrei em modo degradado. "
             "Posso ainda ajudar com comandos OpenCode básicos se você especificar o que precisa.",
             
-            "Sistema de IA temporariamente indisponível. "
+            "DeepSeek está temporariamente indisponível. "
             "Você pode me pedir para executar comandos específicos como 'bash ls' ou 'read arquivo'.",
             
             "Desculpe, estou tendo dificuldades técnicas. "

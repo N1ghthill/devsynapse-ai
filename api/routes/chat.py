@@ -1,12 +1,13 @@
 """
 Chat and execution routes.
 """
+import json
 import logging
 import time
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from api.dependencies import (
     get_brain,
@@ -47,6 +48,7 @@ async def chat_endpoint(
         response_text, opencode_command, llm_usage = await brain.process_message(
             user_message=request.message,
             conversation_id=conversation_id,
+            project_name=request.project_name,
         )
     except Exception as exc:
         logger.error("Erro processando chat: %s", exc)
@@ -57,6 +59,10 @@ async def chat_endpoint(
 
     requires_confirmation = opencode_command is not None and not request.execute_command
     monitoring_system.sync_llm_budget_alerts(memory_system.get_llm_budget_status())
+    response_project_name = request.project_name
+    if response_project_name is None:
+        context = await memory_system.get_conversation_context(conversation_id)
+        response_project_name = context.get("project_name")
 
     return ChatResponse(
         response=response_text,
@@ -65,6 +71,36 @@ async def chat_endpoint(
         command=opencode_command,
         requires_confirmation=requires_confirmation,
         llm_usage=llm_usage,
+        project_name=response_project_name,
+    )
+
+
+@router.post("/chat/stream")
+async def chat_stream_endpoint(
+    request: ChatRequest,
+    brain: DevSynapseBrain = Depends(get_brain),
+):
+    async def event_generator():
+        conversation_id = request.conversation_id or str(uuid.uuid4())
+        try:
+            async for chunk in brain.process_message_streaming(
+                user_message=request.message,
+                conversation_id=conversation_id,
+                project_name=request.project_name,
+            ):
+                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+        except Exception as exc:
+            logger.error("Erro no streaming: %s", exc)
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
@@ -77,6 +113,7 @@ async def get_history(
     return {
         "conversation_id": conversation_id,
         "history": context.get("conversation_messages", []),
+        "project_name": context.get("project_name"),
     }
 
 
@@ -89,6 +126,7 @@ async def get_conversation(
     return {
         "conversation_id": conversation_id,
         "history": context.get("conversation_messages", []),
+        "project_name": context.get("project_name"),
         "preferences": memory_system.get_user_preferences(),
     }
 
@@ -193,6 +231,7 @@ async def execute_command(
             output=output,
             status=status,
             reason_code=reason_code,
+            project_name=project_name,
         )
     except Exception as exc:
         logger.error("Erro executando comando: %s", exc)
