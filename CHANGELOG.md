@@ -12,6 +12,9 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 - Weekly Python lock-refresh workflow and local `make update-locks` command
 - Tag-driven GitHub Release publishing workflow
 
+### Fixed
+- Launcher output no longer prints a custom admin password from `.env`
+
 ## [v0.3.1] - 2026-04-25
 
 ### Added

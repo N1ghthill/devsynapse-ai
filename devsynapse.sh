@@ -122,7 +122,11 @@ print_info() {
     echo ""
     echo -e "${BOLD}🔑 Credenciais padrão:${NC}"
     echo -e "   Usuário   → ${GREEN}admin${NC}"
-    echo -e "   Senha     → ${GREEN}${admin_password}${NC}"
+    if [ "$admin_password" = "admin" ]; then
+        echo -e "   Senha     → ${GREEN}admin${NC}"
+    else
+        echo -e "   Senha     → ${GREEN}valor atual de DEFAULT_ADMIN_PASSWORD no .env${NC}"
+    fi
     echo ""
     echo -e "${BOLD}🔌 API Key DeepSeek:${NC} $(get_api_key_status)"
     echo ""
