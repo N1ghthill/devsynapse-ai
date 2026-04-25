@@ -42,12 +42,17 @@ class AuthService:
                 self.settings.default_admin_password,
                 "admin",
             ),
-            (
-                self.settings.default_user_username,
-                self.settings.default_user_password,
-                "user",
-            ),
         ]
+
+        default_user = self.settings.default_user_username
+        if default_user:
+            defaults.append(
+                (
+                    default_user,
+                    self.settings.default_user_password or default_user,
+                    "user",
+                )
+            )
 
         for username, password, role in defaults:
             existing = self.memory.get_user(username)

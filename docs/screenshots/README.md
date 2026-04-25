@@ -37,7 +37,7 @@ npm run capture:docs-screenshots
 Requirements:
 - frontend available on `http://127.0.0.1:5173`
 - backend available on `http://127.0.0.1:8000`
-- default local users seeded: `irving` and `admin`
+- default local user seeded: `admin`
 - credentials are read from `DEFAULT_USER_*` and `DEFAULT_ADMIN_*` in `.env` when present
 
 The automation script is stored in [../../frontend/scripts/capture-doc-screenshots.mjs](../../frontend/scripts/capture-doc-screenshots.mjs).

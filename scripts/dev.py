@@ -19,6 +19,20 @@ API_PORT = 8000
 FRONTEND_PORT = 5173
 
 
+def _read_env(key: str, default: str = "") -> str:
+    env_file = ROOT_DIR / ".env"
+    if not env_file.is_file():
+        return default
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        if k.strip() == key:
+            return v.strip().strip('"').strip("'")
+    return default
+
+
 def is_port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(0.5)
@@ -98,8 +112,17 @@ def main() -> int:
     ]
 
     print("")
-    print(f"Frontend: http://{API_HOST}:{FRONTEND_PORT}")
-    print(f"API docs:  http://{API_HOST}:{API_PORT}/docs")
+    print("╔══════════════════════════════════════════════════╗")
+    print("║              DevSynapse AI v0.3.0               ║")
+    print("╚══════════════════════════════════════════════════╝")
+    print("")
+    print(f"Frontend:  http://{API_HOST}:{FRONTEND_PORT}")
+    print(f"API Docs:  http://{API_HOST}:{API_PORT}/docs")
+    print(f"Health:    http://{API_HOST}:{API_PORT}/health")
+    print("")
+    admin_pw = _read_env("DEFAULT_ADMIN_PASSWORD", "admin")
+    print(f"Login:     admin / {admin_pw}")
+    print("")
     print("Press Ctrl+C to stop both servers.")
     print("")
 

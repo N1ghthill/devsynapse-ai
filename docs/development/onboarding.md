@@ -69,10 +69,11 @@ Default local URLs:
 
 ## Seeded Local Users
 
-The local setup seeds two users by default. Change these immediately for any non-local environment.
+The local setup seeds one admin user by default. Change these credentials immediately for any non-local environment.
 
-- `admin` / value from `DEFAULT_ADMIN_PASSWORD` in `.env`
-- `irving` / value from `DEFAULT_USER_PASSWORD` in `.env`
+- `admin` / value from `DEFAULT_ADMIN_PASSWORD` in `.env` (default: `admin`)
+
+To add a non-admin user, set `DEFAULT_USER_USERNAME` and `DEFAULT_USER_PASSWORD` in `.env`.
 
 ## Manual Server Commands
 

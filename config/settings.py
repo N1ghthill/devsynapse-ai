@@ -100,9 +100,9 @@ class AppSettings(BaseSettings):
     log_file: Path = LOGS_DIR / "devsynapse.log"
 
     default_admin_username: str = "admin"
-    default_admin_password: str = "devsynapse2026"
-    default_user_username: str = "irving"
-    default_user_password: str = "n1ghthill2026"
+    default_admin_password: str = "admin"
+    default_user_username: str = ""
+    default_user_password: str = ""
 
     def build_allowed_directories(self) -> List[str]:
         roots = {str(self.dev_repos_root.resolve()), str(self.dev_workspace_root.resolve())}

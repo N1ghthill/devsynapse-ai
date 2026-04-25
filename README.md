@@ -83,9 +83,25 @@ devsynapse-ai/
 
 ## Quick Start
 
-Before you start, see the contributor-focused setup path in [docs/development/onboarding.md](docs/development/onboarding.md).
+```bash
+bash scripts/install.sh
+```
 
-### Easy Path
+Edit `.env` and set your DeepSeek key:
+
+```env
+DEEPSEEK_API_KEY=sk-your-key-here
+```
+
+Then launch:
+
+```bash
+devsynapse
+```
+
+Or open a new terminal and type `devsynapse` — the install script sets up the alias automatically.
+
+### Manual Path
 
 ```bash
 python3 -m venv venv
@@ -93,13 +109,7 @@ source venv/bin/activate
 make setup
 ```
 
-Add your DeepSeek key to `.env`:
-
-```env
-DEEPSEEK_API_KEY=your-key-here
-```
-
-Then run the whole local app:
+Add your DeepSeek key to `.env`, then:
 
 ```bash
 make dev
