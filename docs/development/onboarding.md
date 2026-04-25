@@ -11,6 +11,27 @@ This guide is the shortest reliable path for a first-time contributor.
 
 ## Fresh Clone Setup
 
+Recommended one-command setup:
+
+```bash
+bash scripts/install.sh
+```
+
+The installer checks system dependencies, creates the Python venv, installs frontend
+and backend packages, configures `.env` (asks for your DeepSeek API key and
+repositories directory interactively), runs database migrations, seeds the admin
+user, builds the frontend, and registers the `devsynapse` and `uninstall-devsynapse`
+shell aliases.
+
+After install, reload your shell and launch:
+
+```bash
+source ~/.bashrc
+devsynapse
+```
+
+### Manual alternative
+
 ```bash
 git clone https://github.com/N1ghthill/devsynapse-ai.git
 cd devsynapse-ai
@@ -20,21 +41,7 @@ source venv/bin/activate
 make setup
 ```
 
-Then edit `.env` and set:
-
-```env
-DEEPSEEK_API_KEY=your-key-here
-```
-
-The app auto-detects your workspace and repos directory from `$HOME`. If your layout is non-standard, set the optional variables:
-
-```env
-DEV_WORKSPACE_ROOT=/home/your-user
-DEV_REPOS_ROOT=/home/your-user/path/to/repos
-DEV_PROJECTS_JSON={"my-project":{"path":"/path/to/project","type":"python","priority":"high"}}
-```
-
-See `.env.example` for the full list of tunables.
+Then edit `.env` and set `DEEPSEEK_API_KEY`.
 
 ## First Verification Pass
 

@@ -87,19 +87,13 @@ devsynapse-ai/
 bash scripts/install.sh
 ```
 
-Edit `.env` and set your DeepSeek key:
-
-```env
-DEEPSEEK_API_KEY=sk-your-key-here
-```
-
-Then launch:
+The installer asks for your DeepSeek API key and repositories directory, then sets up
+everything automatically. Two shell aliases are registered:
 
 ```bash
-devsynapse
+devsynapse              # start the app
+uninstall-devsynapse    # remove local artifacts
 ```
-
-Or open a new terminal and type `devsynapse` — the install script sets up the alias automatically.
 
 ### Manual Path
 
