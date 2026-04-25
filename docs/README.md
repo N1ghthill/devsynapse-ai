@@ -39,7 +39,7 @@ This directory is the technical documentation entrypoint for contributors and ma
 
 ## Releases
 
-- latest release notes: [releases/v0.3.1.md](releases/v0.3.1.md)
+- latest release notes: [releases/v0.3.2.md](releases/v0.3.2.md)
 
 ## Documentation Rule
 

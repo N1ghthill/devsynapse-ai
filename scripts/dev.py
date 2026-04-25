@@ -34,6 +34,12 @@ def _read_env(key: str, default: str = "") -> str:
     return default
 
 
+def format_admin_password_for_display(password: str) -> str:
+    if password == "admin":
+        return "admin"
+    return "value from DEFAULT_ADMIN_PASSWORD in .env"
+
+
 def is_port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(0.5)
@@ -133,7 +139,7 @@ def main() -> int:
 
     print("")
     print("╔══════════════════════════════════════════════════╗")
-    print("║              DevSynapse AI v0.3.1               ║")
+    print("║              DevSynapse AI v0.3.2               ║")
     print("╚══════════════════════════════════════════════════╝")
     print("")
     print(f"Frontend:  http://{API_HOST}:{FRONTEND_PORT}")
@@ -141,7 +147,7 @@ def main() -> int:
     print(f"Health:    http://{API_HOST}:{API_PORT}/health")
     print("")
     admin_pw = _read_env("DEFAULT_ADMIN_PASSWORD", "admin")
-    print(f"Login:     admin / {admin_pw}")
+    print(f"Login:     admin / {format_admin_password_for_display(admin_pw)}")
     print("")
     print("Press Ctrl+C to stop both servers.")
     print("")

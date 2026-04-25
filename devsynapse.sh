@@ -24,7 +24,7 @@ NC='\033[0m'
 banner() {
     echo ""
     echo -e "${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}${BOLD}║              DevSynapse AI v0.3.1               ║${NC}"
+    echo -e "${CYAN}${BOLD}║              DevSynapse AI v0.3.2               ║${NC}"
     echo -e "${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
 }
@@ -139,15 +139,35 @@ cleanup() {
     echo -e "${YELLOW}Parando DevSynapse...${NC}"
 
     if [ -n "${BACKEND_PID:-}" ]; then
-        kill "$BACKEND_PID" 2>/dev/null || true
+        stop_process_group "$BACKEND_PID"
     fi
     if [ -n "${FRONTEND_PID:-}" ]; then
-        kill "$FRONTEND_PID" 2>/dev/null || true
+        stop_process_group "$FRONTEND_PID"
     fi
 
     wait 2>/dev/null || true
     echo -e "${GREEN}DevSynapse parado.${NC}"
     exit 0
+}
+
+stop_process_group() {
+    local pid="$1"
+    local attempts=0
+
+    if ! kill -0 "$pid" 2>/dev/null; then
+        return
+    fi
+
+    kill -TERM -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
+
+    while kill -0 "$pid" 2>/dev/null && [ "$attempts" -lt 50 ]; do
+        sleep 0.1
+        attempts=$((attempts + 1))
+    done
+
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+    fi
 }
 
 start() {
@@ -161,17 +181,12 @@ start() {
 
     echo -e "${GREEN}Iniciando servidores...${NC}"
 
-    python3 -m uvicorn api.app:app \
-        --host 127.0.0.1 \
-        --port 8000 \
-        --reload \
-        --log-level warning \
-        2>&1 | sed 's/^/[backend] /' &
+    setsid bash -c 'set -o pipefail; python3 -m uvicorn api.app:app --host 127.0.0.1 --port 8000 --reload --log-level warning 2>&1 | sed "s/^/[backend] /"' &
     BACKEND_PID=$!
 
     sleep 1.5
 
-    (cd frontend && npm run dev -- --host 127.0.0.1 2>&1) | sed 's/^/[frontend] /' &
+    setsid bash -c 'set -o pipefail; cd frontend && npm run dev -- --host 127.0.0.1 2>&1 | sed "s/^/[frontend] /"' &
     FRONTEND_PID=$!
 
     trap cleanup SIGINT SIGTERM

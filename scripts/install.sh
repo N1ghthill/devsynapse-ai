@@ -146,7 +146,7 @@ check_system_deps() {
 install() {
     echo ""
     echo -e "${BOLD}${CYAN}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}${CYAN}║        DevSynapse AI Installer v0.3.1           ║${NC}"
+    echo -e "${BOLD}${CYAN}║        DevSynapse AI Installer v0.3.2           ║${NC}"
     echo -e "${BOLD}${CYAN}╚══════════════════════════════════════════════════╝${NC}"
 
     step "1/9" "Verificando dependências de sistema..."

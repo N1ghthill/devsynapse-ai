@@ -6,6 +6,8 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+## [v0.3.2] - 2026-04-25
+
 ### Added
 - CI browser smoke coverage for login, dashboard, settings save and admin navigation
 - Dependabot configuration for GitHub Actions, Python and frontend dependencies
@@ -14,6 +16,7 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ### Fixed
 - Launcher output no longer prints a custom admin password from `.env`
+- Shell launcher shutdown now terminates backend and frontend process groups cleanly
 
 ## [v0.3.1] - 2026-04-25
 

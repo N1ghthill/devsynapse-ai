@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.3.1-blue)
+![Version](https://img.shields.io/badge/version-0.3.2-blue)
 
 DevSynapse AI is an open source development assistant that combines:
 - DeepSeek-first LLM access through a user-provided API key;
@@ -43,9 +43,9 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Verified Baseline
 
-Release validation completed on `2026-04-25` (v0.3.1):
+Release validation completed on `2026-04-25` (v0.3.2):
 - full repository verification: `make verify`
-- backend test suite: `119 passed`
+- backend test suite: `120 passed`
 - Python/Ruff checks, shell syntax checks, Python script compilation and frontend ESLint: passed
 - frontend production build: passed
 - GitHub Actions CI: passed on `main`
@@ -171,7 +171,7 @@ Technical guides:
 - testing guide: [docs/development/testing.md](docs/development/testing.md)
 - development roadmap: [docs/development/roadmap.md](docs/development/roadmap.md)
 - runtime and delivery notes: [docs/deployment/runtime.md](docs/deployment/runtime.md)
-- latest release notes: [docs/releases/v0.3.1.md](docs/releases/v0.3.1.md)
+- latest release notes: [docs/releases/v0.3.2.md](docs/releases/v0.3.2.md)
 
 Supplementary references:
 - engineering guide: [README_PROFESSIONAL.md](README_PROFESSIONAL.md)

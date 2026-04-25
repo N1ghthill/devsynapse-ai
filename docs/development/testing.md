@@ -3,7 +3,7 @@
 ## Current Verification Baseline
 
 At the latest documentation refresh on `2026-04-25`, local verification produced:
-- `119` passing backend tests
+- `120` passing backend tests
 - successful script checks
 - successful frontend lint and production build
 - passing installer/uninstaller and development-server smoke tests
