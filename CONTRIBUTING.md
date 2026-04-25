@@ -116,7 +116,7 @@ Run the relevant tests before submitting:
 cd frontend && npm run build
 ```
 
-At the time of the latest documentation refresh, local verification produced `106` passing backend tests and a successful frontend production build.
+At the time of the latest documentation refresh, local verification produced `116` passing backend tests and a successful frontend production build.
 The contributor onboarding path was also revalidated from a clean clone with fresh installs, migrations, seeded users, route-level API tests and a frontend build.
 
 ## Scope Notes

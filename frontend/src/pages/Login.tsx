@@ -21,7 +21,7 @@ export function Login() {
 
     try {
       await login(username, password);
-    } catch (err) {
+    } catch {
       setError('Invalid credentials');
     }
 

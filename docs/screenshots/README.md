@@ -1,6 +1,7 @@
 # Screenshots and Evidence
 
 This directory contains curated screenshots for public documentation, release notes and contributor context.
+They are product evidence, not mockups. Use them to show what the local FastAPI + React/Vite app currently exposes.
 
 ## Current Set
 
@@ -11,9 +12,17 @@ This directory contains curated screenshots for public documentation, release no
 - [2026-04-24-dashboard-llm-usage.png](2026-04-24-dashboard-llm-usage.png)
   Dashboard view with command stats, LLM usage and project cost reporting.
 - [2026-04-24-settings-project-access.png](2026-04-24-settings-project-access.png)
-  Settings view with model configuration and project mutation scope.
+  Settings view with DeepSeek API key state, model configuration, budget controls and project mutation scope.
 - [2026-04-24-admin-project-permissions.png](2026-04-24-admin-project-permissions.png)
   Admin panel showing project mutation permissions and audit history.
+
+## Use-Case Mapping
+
+- **Budget-conscious developer:** settings and dashboard screenshots show DeepSeek configuration, token/cost reporting and budget thresholds.
+- **Freelancer with multiple projects:** dashboard, settings and admin screenshots show project attribution, project mutation scope and permission management.
+- **Local coding operator:** chat screenshot shows command proposal/execution state instead of hidden shell access.
+
+The narrative version is maintained in [../product/showcase.md](../product/showcase.md).
 
 ## Regenerating Screenshots
 
@@ -29,6 +38,7 @@ Requirements:
 - frontend available on `http://127.0.0.1:5173`
 - backend available on `http://127.0.0.1:8000`
 - default local users seeded: `irving` and `admin`
+- credentials are read from `DEFAULT_USER_*` and `DEFAULT_ADMIN_*` in `.env` when present
 
 The automation script is stored in [../../frontend/scripts/capture-doc-screenshots.mjs](../../frontend/scripts/capture-doc-screenshots.mjs).
 
@@ -38,3 +48,4 @@ The automation script is stored in [../../frontend/scripts/capture-doc-screensho
 - avoid exposing secrets, tokens or unrelated personal data
 - keep file names descriptive and date-stamped
 - refresh this index when screenshots are added, replaced or removed
+- refresh screenshots when UI labels or supported provider/model behavior changes

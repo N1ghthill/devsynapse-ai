@@ -28,6 +28,7 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     conversation_id: Optional[str] = None
     execute_command: bool = Field(default=False)
+    project_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
 
 
 class LLMUsageResponse(BaseModel):
@@ -50,6 +51,7 @@ class ChatResponse(BaseModel):
     command: Optional[str] = None
     requires_confirmation: bool = Field(default=False)
     llm_usage: Optional[LLMUsageResponse] = None
+    project_name: Optional[str] = None
 
 
 class ConversationSummaryResponse(BaseModel):
@@ -57,6 +59,9 @@ class ConversationSummaryResponse(BaseModel):
     title: str
     preview: str
     updated_at: str
+    total_tokens: int = 0
+    estimated_cost_usd: float = 0.0
+    project_name: Optional[str] = None
 
 
 class ConversationListResponse(BaseModel):
@@ -117,7 +122,6 @@ class DashboardStats(BaseModel):
 class SettingsResponse(BaseModel):
     deepseek_api_key: bool | str
     deepseek_model: str
-    openai_model: str
     temperature: float
     max_tokens: int
     conversation_history_limit: int
@@ -133,7 +137,6 @@ class SettingsResponse(BaseModel):
 class SettingsUpdateRequest(BaseModel):
     deepseek_api_key: Optional[str] = None
     deepseek_model: Optional[str] = None
-    openai_model: Optional[str] = None
     temperature: Optional[float] = Field(default=None, ge=0, le=2)
     max_tokens: Optional[int] = Field(default=None, ge=1, le=32000)
     conversation_history_limit: Optional[int] = Field(default=None, ge=1, le=100)

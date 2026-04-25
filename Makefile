@@ -3,7 +3,18 @@ PIP ?= ./venv/bin/pip
 PYTEST ?= ./venv/bin/pytest
 RUFF ?= ./venv/bin/ruff
 
-.PHONY: install install-dev run test lint frontend-build verify seed-users migrate migration-status
+.PHONY: setup dev install install-dev run test lint frontend-build verify seed-users migrate migration-status
+
+setup:
+	python3 -m venv venv
+	$(PIP) install -r requirements-dev.txt
+	test -f .env || cp .env.example .env
+	$(PYTHON) scripts/migrate.py apply
+	$(PYTHON) scripts/manage_users.py seed-defaults
+	cd frontend && npm install
+
+dev:
+	$(PYTHON) scripts/dev.py
 
 install:
 	$(PIP) install -r requirements.txt

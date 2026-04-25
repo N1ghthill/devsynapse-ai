@@ -28,7 +28,7 @@ def run_server():
     🔧 Componentes:
     - ✅ Memory System: {memory_system.db_path}
     - ✅ OpenCode Bridge: {len(opencode_bridge.allowed_commands)} comandos permitidos
-    - {'✅' if devsynapse_brain.api_key else '❌'} Deepseek API: {'Configurada' if devsynapse_brain.api_key else 'Não configurada'}
+    - {'✅' if devsynapse_brain.api_key else '❌'} DeepSeek API: {'Configurada' if devsynapse_brain.api_key else 'Não configurada'}
     """
     )
 

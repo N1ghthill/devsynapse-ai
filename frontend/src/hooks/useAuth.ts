@@ -18,23 +18,27 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [auth, setAuth] = useState<AuthState>({
-    token: localStorage.getItem('auth_token'),
-    user: null,
-    isAuthenticated: false,
-    isLoading: true,
+  const [auth, setAuth] = useState<AuthState>(() => {
+    const token = localStorage.getItem('auth_token');
+    return {
+      token,
+      user: null,
+      isAuthenticated: false,
+      isLoading: Boolean(token),
+    };
   });
 
   useEffect(() => {
+    let cancelled = false;
     const token = localStorage.getItem('auth_token');
     if (!token) {
-      setAuth({ token: null, user: null, isAuthenticated: false, isLoading: false });
-      return;
+      return undefined;
     }
 
     authApi
       .verify()
       .then((data) => {
+        if (cancelled) return;
         if (data.valid) {
           setAuth({ token, user: data.user, isAuthenticated: true, isLoading: false });
           return;
@@ -43,9 +47,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuth({ token: null, user: null, isAuthenticated: false, isLoading: false });
       })
       .catch(() => {
+        if (cancelled) return;
         localStorage.removeItem('auth_token');
         setAuth({ token: null, user: null, isAuthenticated: false, isLoading: false });
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = async (username: string, password: string) => {

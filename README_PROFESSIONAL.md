@@ -3,7 +3,7 @@
 ## Purpose
 
 DevSynapse AI is a development assistant platform for technical workflows. Its role is to combine:
-- conversational assistance with project-aware context;
+- DeepSeek-backed conversational assistance with project-aware context;
 - persistent memory of interactions and preferences;
 - controlled execution of development-oriented commands;
 - operational visibility through monitoring and alerts.
@@ -15,7 +15,7 @@ This document describes the engineering baseline of the repository. It is intent
 ### Backend responsibilities
 
 - expose HTTP routes for auth, chat, command execution, monitoring, settings and administration;
-- orchestrate LLM requests and inject project/user context;
+- orchestrate DeepSeek API requests and inject project/user context;
 - persist conversation history, user state and runtime settings;
 - validate and execute constrained file and shell operations;
 - emit monitoring events and plugin lifecycle hooks.
@@ -59,7 +59,7 @@ Files:
 - [core/plugin_system.py](core/plugin_system.py)
 
 Responsibilities:
-- `brain.py`: prompt assembly, LLM invocation, command extraction;
+- `brain.py`: prompt assembly, DeepSeek invocation, command extraction;
 - `auth.py`: password hashing, JWT issuance and token validation;
 - `memory.py`: SQLite persistence for conversations, preferences, users, runtime settings and admin audit events;
 - `opencode_bridge.py`: command parsing, path validation and constrained execution;
@@ -198,11 +198,12 @@ npm run build
 
 ## Engineering Debt Register
 
-Highest-priority remaining work:
-- tighten linting and formatting policy enforcement across both backend and frontend;
-- decide whether real-time transport is needed before adding WebSocket complexity;
-- replace legacy/obsolete artifacts or clearly mark them as deprecated;
-- deepen authorization from project allowlists into clearer policy objects if the product scope expands.
+The canonical planning source is [docs/development/roadmap.md](docs/development/roadmap.md).
+Current engineering debt remains concentrated around:
+- linting and formatting policy enforcement across backend and frontend;
+- the WebSocket decision, if real-time transport becomes necessary;
+- legacy artifact cleanup;
+- clearer authorization policy objects if the product scope expands.
 
 Legacy artifacts are now isolated under [legacy/README.md](legacy/README.md). They remain available for reference but are no longer part of the main runtime path.
 

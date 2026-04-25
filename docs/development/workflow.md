@@ -7,11 +7,9 @@ Recommended sequence:
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements-dev.txt
-cp .env.example .env
-make migrate
+make setup
 make verify
-make run
+make dev
 ```
 
 For first-time setup from a new public clone, use [onboarding.md](onboarding.md).
@@ -26,6 +24,8 @@ npm run dev
 
 ## Standard Commands
 
+- `make setup`: install backend/frontend dependencies, create `.env` if missing, apply migrations and seed local users
+- `make dev`: run backend and frontend dev servers together
 - `make test`: run backend tests
 - `make lint`: run Python lint checks with Ruff
 - `make frontend-build`: build the frontend bundle
@@ -38,10 +38,9 @@ npm run dev
 
 The contributor path was revalidated from a clean public clone on `2026-04-24` with:
 
-- fresh backend dependency install in a new `venv`
-- `cp .env.example .env`
-- `make migrate`
-- `make seed-users`
+- `python3 -m venv venv`
+- `source venv/bin/activate`
+- `make setup`
 - `./venv/bin/pytest -q tests/integration/test_api_routes.py`
 - `cd frontend && npm install && npm run build`
 

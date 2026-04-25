@@ -5,7 +5,10 @@ This directory is the technical documentation entrypoint for contributors and ma
 ## Start Here
 
 - repository overview: [../README.md](../README.md)
+- product showcase and use cases: [product/showcase.md](product/showcase.md)
+- product positioning analysis: [../DevSynapse_IA.md](../DevSynapse_IA.md)
 - contribution guide: [../CONTRIBUTING.md](../CONTRIBUTING.md)
+- agent/contributor operating guide: [../AGENTS.md](../AGENTS.md)
 - security policy: [../SECURITY.md](../SECURITY.md)
 
 ## Architecture
@@ -17,11 +20,18 @@ This directory is the technical documentation entrypoint for contributors and ma
 
 - HTTP routes and runtime contracts: [api/overview.md](api/overview.md)
 
+## Product Evidence
+
+- product showcase and use cases: [product/showcase.md](product/showcase.md)
+- screenshot evidence index: [screenshots/README.md](screenshots/README.md)
+
 ## Development
 
 - contributor onboarding: [development/onboarding.md](development/onboarding.md)
 - local workflow: [development/workflow.md](development/workflow.md)
 - testing guide: [development/testing.md](development/testing.md)
+- project attribution plan: [development/project-attribution.md](development/project-attribution.md)
+- development roadmap: [development/roadmap.md](development/roadmap.md)
 
 ## Deployment
 

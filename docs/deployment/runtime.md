@@ -22,6 +22,7 @@ Current checks:
 ## LLM Budget Controls
 
 Runtime-adjustable budget settings are exposed through `/settings` and persisted in SQLite-backed app settings.
+The runtime is DeepSeek-first and API-key based; local quantized model execution is not part of the supported product direction.
 
 Current controls:
 - `LLM_DAILY_BUDGET_USD`

@@ -29,6 +29,7 @@ This table is central to:
 - execution status persistence
 - token and cost reporting
 - conversation lists and export
+- project-aware authorization, telemetry and dashboard reporting
 
 ### Users
 
@@ -38,6 +39,25 @@ Stores:
 - role
 - active state
 - login timestamps
+
+### Runtime settings
+
+Stores:
+- mutable application settings
+- DeepSeek model and generation parameters
+- daily/monthly budget controls
+- budget threshold percentages
+
+These values back `/settings` and supplement environment defaults.
+
+### Project and preference context
+
+Stores:
+- known project name, path, type, priority and access metadata
+- learned user preferences
+- historical decisions and lessons
+
+This context supports assistant prompt construction and project-aware reporting.
 
 ### Project permissions
 
@@ -85,6 +105,7 @@ Contributors should add a new migration when:
 - newer conversation rows can carry richer telemetry than older rows
 - historical rows are intentionally tolerated with partial fields
 - project attribution now prefers explicit persisted project names over text-only inference
+- explicit chat project context should be persisted as `conversation_project_name`
 
 ## Current Tradeoff
 

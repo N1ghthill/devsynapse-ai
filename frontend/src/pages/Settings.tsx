@@ -19,7 +19,7 @@ export function Settings() {
       try {
         const data = await settingsApi.get();
         setSettings(data);
-      } catch (err) {
+      } catch {
         setMessage({ type: 'error', text: 'Failed to load settings' });
       }
       setLoading(false);
@@ -35,7 +35,7 @@ export function Settings() {
     try {
       await settingsApi.update(settings);
       setMessage({ type: 'success', text: 'Settings saved successfully' });
-    } catch (err) {
+    } catch {
       setMessage({ type: 'error', text: 'Failed to save settings' });
     }
 
@@ -75,11 +75,11 @@ export function Settings() {
         <div className="settings-card">
           <h3>API Keys</h3>
           <div className="setting-field">
-            <label>Deepseek API Key</label>
+            <label>DeepSeek API Key</label>
             <div className="key-input-row">
               <input
                 type="password"
-                placeholder={typeof settings?.deepseek_api_key === 'boolean' && settings.deepseek_api_key ? '•••••••• (configured)' : 'Enter your Deepseek API key'}
+                placeholder={typeof settings?.deepseek_api_key === 'boolean' && settings.deepseek_api_key ? '•••••••• (configured)' : 'Enter your DeepSeek API key'}
                 value={typeof settings?.deepseek_api_key === 'string' ? settings.deepseek_api_key : ''}
                 onChange={(e) =>
                   setSettings((prev) =>
@@ -97,25 +97,13 @@ export function Settings() {
         <div className="settings-card">
           <h3>Model Configuration</h3>
           <div className="setting-field">
-            <label>Deepseek Model</label>
+            <label>DeepSeek Model</label>
             <input
               type="text"
               value={settings?.deepseek_model || ''}
               onChange={(e) =>
                 setSettings((prev) =>
                   prev ? { ...prev, deepseek_model: e.target.value } : prev
-                )
-              }
-            />
-          </div>
-          <div className="setting-field">
-            <label>OpenAI Model (Fallback)</label>
-            <input
-              type="text"
-              value={settings?.openai_model || ''}
-              onChange={(e) =>
-                setSettings((prev) =>
-                  prev ? { ...prev, openai_model: e.target.value } : prev
                 )
               }
             />

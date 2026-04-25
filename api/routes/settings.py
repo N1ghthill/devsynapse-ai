@@ -24,7 +24,6 @@ async def get_settings_route(
     return SettingsResponse(
         deepseek_api_key=bool(settings.deepseek_api_key),
         deepseek_model=persisted.get("deepseek_model", settings.deepseek_model),
-        openai_model=persisted.get("openai_model", settings.openai_model),
         temperature=float(persisted.get("temperature", settings.llm_temperature)),
         max_tokens=int(persisted.get("max_tokens", settings.llm_max_tokens)),
         conversation_history_limit=int(

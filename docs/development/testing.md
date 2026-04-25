@@ -3,8 +3,9 @@
 ## Current Verification Baseline
 
 At the latest documentation refresh on `2026-04-24`, local verification produced:
-- `106` passing backend tests
+- `116` passing backend tests
 - successful frontend production build
+- curated UI screenshots captured from the local runtime for documentation evidence
 
 ## Test Layout
 
@@ -58,6 +59,15 @@ cd frontend
 npm run build
 ```
 
+Screenshot evidence:
+
+```bash
+cd frontend
+npm run capture:docs-screenshots
+```
+
+The screenshot workflow requires a running backend and frontend with seeded local users. See [../screenshots/README.md](../screenshots/README.md).
+
 ## Expectations For Contributors
 
 Add or update tests when you change:
@@ -73,5 +83,6 @@ The repository currently emphasizes:
 - small unit tests for logic-heavy services
 - route-level integration tests for contract safety
 - frontend build verification as a compatibility gate
+- product screenshots as visual evidence for documented workflows
 
 This is sufficient for the current local-first scope, but future contributors should continue expanding higher-confidence integration coverage where it adds real value.

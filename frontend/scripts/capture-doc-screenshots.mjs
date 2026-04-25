@@ -10,6 +10,28 @@ const screenshotDir = path.join(repoRoot, 'docs', 'screenshots');
 const baseUrl = process.env.DEVSYNAPSE_UI_URL || 'http://127.0.0.1:5173';
 const apiUrl = process.env.DEVSYNAPSE_API_URL || 'http://127.0.0.1:8000';
 
+async function loadLocalEnv() {
+  try {
+    const content = await fs.readFile(path.join(repoRoot, '.env'), 'utf8');
+    return Object.fromEntries(
+      content
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith('#') && line.includes('='))
+        .map((line) => {
+          const [key, ...valueParts] = line.split('=');
+          return [key.trim(), valueParts.join('=').trim()];
+        })
+    );
+  } catch {
+    return {};
+  }
+}
+
+function readConfig(localEnv, key, fallback) {
+  return process.env[key] || localEnv[key] || fallback;
+}
+
 async function apiPost(route, payload, token) {
   const response = await fetch(`${apiUrl}${route}`, {
     method: 'POST',
@@ -182,15 +204,22 @@ async function main() {
   });
 
   try {
-    const irvingToken = await login('irving', 'n1ghthill2026');
-    const adminToken = await login('admin', 'devsynapse2026');
+    const localEnv = await loadLocalEnv();
+    const userToken = await login(
+      readConfig(localEnv, 'DEFAULT_USER_USERNAME', 'irving'),
+      readConfig(localEnv, 'DEFAULT_USER_PASSWORD', 'n1ghthill2026')
+    );
+    const adminToken = await login(
+      readConfig(localEnv, 'DEFAULT_ADMIN_USERNAME', 'admin'),
+      readConfig(localEnv, 'DEFAULT_ADMIN_PASSWORD', 'devsynapse2026')
+    );
     const conversationId = `docs-shot-${Date.now()}`;
 
-    await seedConversation(irvingToken, conversationId);
+    await seedConversation(userToken, conversationId);
     await captureLogin(browser);
-    await captureChat(browser, irvingToken, conversationId);
-    await captureDashboard(browser, irvingToken);
-    await captureSettings(browser, irvingToken);
+    await captureChat(browser, userToken, conversationId);
+    await captureDashboard(browser, userToken);
+    await captureSettings(browser, userToken);
     await captureAdmin(browser, adminToken);
 
     console.log(
