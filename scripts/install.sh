@@ -106,15 +106,37 @@ install() {
     cd "$ROOT_DIR"
 
     step "5/8" "Configurando .env..."
+    local api_key=""
+
     if [ ! -f "$ROOT_DIR/.env" ]; then
         cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
         ok ".env criado a partir de .env.example"
-        echo ""
-        echo -e "  ${YELLOW}⚠  Configure DEEPSEEK_API_KEY no .env antes de iniciar:${NC}"
-        echo -e "     ${CYAN}DEEPSEEK_API_KEY=sk-sua-chave-aqui${NC}"
-        echo ""
     else
         ok ".env já existe"
+    fi
+
+    echo ""
+    echo -e "  ${BOLD}DeepSeek API Key${NC}"
+    echo -e "  Necessária para o chat funcionar. Obtenha em ${CYAN}https://platform.deepseek.com/api_keys${NC}"
+    echo ""
+    read -r -p "  Cole sua API key (ou Enter para pular): " api_key
+    echo ""
+
+    if [ -n "$api_key" ]; then
+        api_key=$(echo "$api_key" | xargs)
+        if [ "${api_key:0:3}" != "sk-" ]; then
+            warn "A chave não começa com 'sk-'. Será salva mesmo assim, mas pode não funcionar."
+        fi
+        if grep -qE '^DEEPSEEK_API_KEY=' "$ROOT_DIR/.env" 2>/dev/null; then
+            sed -i "s|^DEEPSEEK_API_KEY=.*|DEEPSEEK_API_KEY=$api_key|" "$ROOT_DIR/.env"
+        else
+            echo "DEEPSEEK_API_KEY=$api_key" >> "$ROOT_DIR/.env"
+        fi
+        ok "API key configurada"
+    else
+        echo -e "  ${YELLOW}⚠  API key não configurada. Edite .env manualmente antes de iniciar:${NC}"
+        echo -e "     ${CYAN}DEEPSEEK_API_KEY=sk-sua-chave-aqui${NC}"
+        echo ""
     fi
 
     step "6/8" "Executando migrações do banco..."

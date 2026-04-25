@@ -103,7 +103,7 @@ get_api_key_status() {
         local key=""
         key=$(grep -E '^DEEPSEEK_API_KEY=' .env 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
         if [ -n "$key" ] && [ "${key:0:3}" = "sk-" ]; then
-            echo -e "${GREEN}configurada (${key:0:12}...)${NC}"
+            echo -e "${GREEN}configurada${NC}"
             return
         fi
     fi
