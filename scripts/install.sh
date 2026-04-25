@@ -11,11 +11,11 @@
 #   1. Verifica dependências de sistema (python3, python3-venv, npm)
 #   2. Cria venv e instala dependências Python
 #   3. Instala dependências do frontend (npm)
-#   4. Cria .env a partir de .env.example se não existir
+#   4. Pergunta e configura API key DeepSeek e diretório de repositórios
 #   5. Executa migrações do banco
 #   6. Cria usuário admin padrão (admin / admin)
 #   7. Build do frontend para produção
-#   8. Adiciona alias `devsynapse` ao ~/.bashrc e ~/.zshrc
+#   8. Adiciona aliases `devsynapse` e `uninstall-devsynapse` ao shell
 
 set -euo pipefail
 
@@ -105,8 +105,9 @@ install() {
     ok "Dependências frontend instaladas"
     cd "$ROOT_DIR"
 
-    step "5/8" "Configurando .env..."
+    step "5/9" "Configurando .env..."
     local api_key=""
+    local repos_root=""
 
     if [ ! -f "$ROOT_DIR/.env" ]; then
         cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
@@ -139,31 +140,71 @@ install() {
         echo ""
     fi
 
-    step "6/8" "Executando migrações do banco..."
+    echo ""
+    echo -e "  ${BOLD}Diretório de repositórios${NC}"
+    echo -e "  Onde ficam seus projetos Git? O DevSynapse usa isso para executar comandos"
+    echo -e "  e buscar código no escopo correto."
+    echo ""
+
+    local auto_repos
+    auto_repos="$HOME/repos"
+    if [ -d "$HOME/ruas/repos" ]; then
+        auto_repos="$HOME/ruas/repos"
+    elif [ -d "$HOME/projetos" ]; then
+        auto_repos="$HOME/projetos"
+    elif [ -d "$HOME/Projetos" ]; then
+        auto_repos="$HOME/Projetos"
+    elif [ -d "$HOME/Projects" ]; then
+        auto_repos="$HOME/Projects"
+    fi
+
+    read -r -p "  Caminho [${auto_repos}]: " repos_root
+    repos_root="${repos_root:-$auto_repos}"
+    echo ""
+
+    if [ ! -d "$repos_root" ]; then
+        warn "O diretório '$repos_root' não existe. Os comandos usarão \$HOME como fallback."
+    fi
+
+    if grep -qE '^DEV_REPOS_ROOT=' "$ROOT_DIR/.env" 2>/dev/null; then
+        sed -i "s|^DEV_REPOS_ROOT=.*|DEV_REPOS_ROOT=$repos_root|" "$ROOT_DIR/.env"
+    else
+        echo "DEV_REPOS_ROOT=$repos_root" >> "$ROOT_DIR/.env"
+    fi
+    if ! grep -qE '^DEV_WORKSPACE_ROOT=' "$ROOT_DIR/.env" 2>/dev/null; then
+        echo "DEV_WORKSPACE_ROOT=$HOME" >> "$ROOT_DIR/.env"
+    fi
+    ok "Diretório de repositórios: $repos_root"
+
+    step "6/9" "Executando migrações do banco..."
     python3 "$ROOT_DIR/scripts/migrate.py" apply || {
         fail "Falha nas migrações"
         exit 1
     }
     ok "Migrações aplicadas"
 
-    step "7/8" "Criando usuário admin padrão..."
+    step "7/9" "Criando usuário admin padrão..."
     python3 "$ROOT_DIR/scripts/manage_users.py" seed-defaults || {
         fail "Falha ao criar usuário"
         exit 1
     }
     ok "Usuário admin padrão criado (admin / admin)"
 
-    step "8/8" "Build do frontend para produção..."
+    step "8/9" "Build do frontend para produção..."
     cd "$ROOT_DIR/frontend"
     npm run build 2>&1 | tail -3
     ok "Frontend build concluído"
     cd "$ROOT_DIR"
 
-    # ---- Alias ----
+    # ---- Aliases ----
 
-    ALIAS_LINE="alias devsynapse='cd \"$ROOT_DIR\" && bash devsynapse.sh'"
+    step "9/9" "Configurando aliases..."
+
     ALIAS_MARKER="# >>> devsynapse alias (managed by scripts/install.sh) >>>"
     ALIAS_END="# <<< devsynapse alias <<<"
+
+    ALIAS_LINE="alias devsynapse='cd \"$ROOT_DIR\" && bash devsynapse.sh'"
+    UNINSTALL_LINE="alias uninstall-devsynapse='cd \"$ROOT_DIR\" && bash scripts/uninstall.sh'"
 
     setup_alias() {
         local rc_file="$1"
@@ -175,7 +216,7 @@ install() {
         fi
 
         if grep -qF "$ALIAS_MARKER" "$rc_file" 2>/dev/null; then
-            warn "Alias já configurado em $rc_name"
+            warn "Aliases já configurados em $rc_name"
             return
         fi
 
@@ -183,14 +224,12 @@ install() {
             echo ""
             echo "$ALIAS_MARKER"
             echo "$ALIAS_LINE"
+            echo "$UNINSTALL_LINE"
             echo "$ALIAS_END"
         } >> "$rc_file"
 
-        ok "Alias adicionado a $rc_name"
+        ok "devsynapse e uninstall-devsynapse → $rc_name"
     }
-
-    echo ""
-    echo -e "${BOLD}${CYAN}Configurando alias...${NC}"
 
     for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
         setup_alias "$rc"
@@ -223,6 +262,9 @@ install() {
     echo ""
     echo -e "  2. Inicie o DevSynapse:"
     echo -e "     ${CYAN}devsynapse${NC}"
+    echo ""
+    echo -e "  Para desinstalar:"
+    echo -e "     ${CYAN}uninstall-devsynapse${NC}"
     echo ""
     echo -e "${BOLD}Credenciais padrão:${NC}"
     echo -e "   Login: ${GREEN}admin${NC}"
