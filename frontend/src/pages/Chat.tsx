@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { Download, Loader2, MessageSquarePlus, Pencil, Search, Trash2 } from 'lucide-react';
 import { ChatMessage } from '../components/ChatMessage';
 import { ChatInput } from '../components/ChatInput';
-import { chatApi, dashboardApi } from '../api/client';
-import type { BudgetWindowStatus, ConversationSummary, Message, TokenUsage } from '../types';
+import { chatApi, dashboardApi, settingsApi } from '../api/client';
+import type { BudgetWindowStatus, ConversationSummary, Message, ProjectInfo, TokenUsage } from '../types';
 
 const CONVERSATION_STORAGE_KEY = 'devsynapse_conversation_id';
 
@@ -27,6 +27,8 @@ export function Chat() {
   const [conversationId, setConversationId] = useState<string>(
     () => localStorage.getItem(CONVERSATION_STORAGE_KEY) || `session_${Date.now()}`
   );
+  const [projects, setProjects] = useState<ProjectInfo[]>([]);
+  const [selectedProject, setSelectedProject] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -95,6 +97,28 @@ export function Chat() {
     return () => {
       cancelled = true;
       clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadProjects = async () => {
+      try {
+        const list = await settingsApi.listProjects();
+        if (!cancelled) {
+          setProjects(list);
+        }
+      } catch {
+        if (!cancelled) {
+          setProjects([]);
+        }
+      }
+    };
+
+    void loadProjects();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -210,32 +234,65 @@ export function Chat() {
       timestamp: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const assistantMessageId = `msg_${Date.now() + 1}`;
+    const assistantMessage: Message = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString(),
+      projectName: selectedProject || null,
+    };
+
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setIsLoading(true);
 
     try {
-      const response = await chatApi.sendMessage({
-        message: content,
-        conversation_id: conversationId,
-      });
-
-      if (response.conversation_id && response.conversation_id !== conversationId) {
-        setConversationId(response.conversation_id);
-      }
-
-      const assistantMessage: Message = {
-        id: `msg_${Date.now() + 1}`,
-        role: 'assistant',
-        content: response.response,
-        timestamp: new Date().toISOString(),
-        command: response.command || response.opencode_command,
-        commandStatus: response.command || response.opencode_command ? 'proposed' : undefined,
-        tokenUsage: response.llm_usage,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-      void loadConversationList();
-    } catch (err) {
+      chatApi.sendMessageStreaming(
+        {
+          message: content,
+          conversation_id: conversationId,
+          project_name: selectedProject || undefined,
+        },
+        (token) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: msg.content + token }
+                : msg
+            )
+          );
+        },
+        (command) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, command, commandStatus: 'proposed' }
+                : msg
+            )
+          );
+        },
+        (usage) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, tokenUsage: usage }
+                : msg
+            )
+          );
+          void loadConversationList();
+        },
+        (error) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: msg.content || error, commandStatus: undefined }
+                : msg
+            )
+          );
+          void loadConversationList();
+        }
+      );
+    } catch {
       const errorMessage: Message = {
         id: `msg_${Date.now() + 2}`,
         role: 'system',
@@ -262,6 +319,7 @@ export function Chat() {
         conversation_id: conversationId,
         command: targetMessage.command,
         confirm: true,
+        project_name: targetMessage.projectName || selectedProject || undefined,
       });
 
       updateMessage(messageId, {
@@ -478,6 +536,22 @@ export function Chat() {
           <p className="chat-subtitle">
             {currentConversation?.title || 'Sessão atual'}
           </p>
+          {projects.length > 0 && (
+            <div className="chat-project-selector">
+              <select
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                aria-label="Selecionar projeto"
+              >
+                <option value="">Todos os projetos</option>
+                {projects.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {budgetSummary && (
             <div className={`chat-budget-banner banner-${budgetSummary.severity}`}>
               {budgetSummary.text}

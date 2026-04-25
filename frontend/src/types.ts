@@ -5,6 +5,14 @@ export type CommandExecutionStatus =
   | 'blocked'
   | 'failed';
 
+export interface ProjectInfo {
+  name: string;
+  type: string;
+  priority: string;
+  last_accessed: string;
+  access_count: number;
+}
+
 export interface TokenUsage {
   provider?: string | null;
   model?: string | null;
@@ -47,11 +55,13 @@ export interface ConversationSummary {
   updated_at: string;
   total_tokens: number;
   estimated_cost_usd: number;
+  project_name?: string | null;
 }
 
 export interface ChatRequest {
   message: string;
   conversation_id?: string;
+  project_name?: string;
 }
 
 export interface ChatResponse {
@@ -62,6 +72,7 @@ export interface ChatResponse {
   opencode_command?: string;
   requires_confirmation?: boolean;
   llm_usage?: TokenUsage | null;
+  project_name?: string | null;
 }
 
 export interface CommandResult {
@@ -159,7 +170,6 @@ export interface AuthState {
 export interface SettingsData {
   deepseek_api_key: boolean | string;
   deepseek_model: string;
-  openai_model: string;
   temperature: number;
   max_tokens: number;
   conversation_history_limit: number;

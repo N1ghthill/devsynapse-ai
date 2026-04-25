@@ -9,7 +9,9 @@ import type {
   DashboardStats,
   ExecuteCommandRequest,
   Message,
+  ProjectInfo,
   SettingsData,
+  TokenUsage,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
@@ -53,10 +55,14 @@ export const chatApi = {
     return response.data;
   },
 
-  getConversation: async (conversationId: string): Promise<{ conversation_id: string; history: Message[] }> => {
-    const response = await api.get<{ conversation_id: string; history: Message[] }>(
-      `/conversations/${conversationId}`
-    );
+  getConversation: async (
+    conversationId: string
+  ): Promise<{ conversation_id: string; history: Message[]; project_name?: string | null }> => {
+    const response = await api.get<{
+      conversation_id: string;
+      history: Message[];
+      project_name?: string | null;
+    }>(`/conversations/${conversationId}`);
     return response.data;
   },
 
@@ -85,6 +91,77 @@ export const chatApi = {
   executeCommand: async (data: ExecuteCommandRequest): Promise<CommandResult> => {
     const response = await api.post<CommandResult>('/execute', data);
     return response.data;
+  },
+
+  sendMessageStreaming: (
+    data: ChatRequest,
+    onToken: (token: string) => void,
+    onCommand: (command: string) => void,
+    onDone: (usage: TokenUsage | null) => void,
+    onError: (error: string) => void,
+  ): AbortController => {
+    const controller = new AbortController();
+    const token = localStorage.getItem('auth_token');
+    const url = `${API_BASE_URL}/chat/stream`;
+
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(data),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const text = await response.text();
+          onError(`HTTP ${response.status}: ${text}`);
+          return;
+        }
+        const reader = response.body?.getReader();
+        if (!reader) {
+          onError('Stream reader not available');
+          return;
+        }
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const dataStr = line.slice(6);
+            try {
+              const event = JSON.parse(dataStr);
+              if (event.type === 'text') {
+                onToken(event.content);
+              } else if (event.type === 'command') {
+                onCommand(event.command);
+              } else if (event.type === 'done') {
+                onDone(event.usage || null);
+              } else if (event.type === 'error') {
+                onError(event.message || 'Stream error');
+              }
+            } catch {
+              // Skip unparseable lines
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          onError(err.message || 'Stream failed');
+        }
+      });
+
+    return controller;
   },
 };
 
@@ -116,6 +193,11 @@ export const settingsApi = {
   update: async (data: Partial<SettingsData>): Promise<SettingsData> => {
     const response = await api.put<SettingsData>('/settings', data);
     return response.data;
+  },
+
+  listProjects: async (): Promise<ProjectInfo[]> => {
+    const response = await api.get<{ projects: ProjectInfo[] }>('/projects');
+    return response.data.projects || [];
   },
 };
 

@@ -24,6 +24,12 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
     }
   }, [isLoading]);
 
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, []);
+
   const handleSubmit = () => {
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
@@ -32,7 +38,7 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || !e.shiftKey)) {
       e.preventDefault();
       handleSubmit();
     }
