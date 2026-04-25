@@ -8,9 +8,9 @@ from fastapi import APIRouter, Depends
 
 from api.dependencies import (
     get_brain,
-    get_current_user,
     get_memory_system,
     get_monitoring_system,
+    require_user,
 )
 from api.models import DashboardStats, HealthResponse
 from config.settings import get_settings
@@ -54,10 +54,11 @@ async def monitoring_health(
 @router.get("/monitoring/stats", response_model=DashboardStats)
 async def get_monitoring_stats(
     hours: int = 24,
-    user=Depends(get_current_user),
+    user=Depends(require_user),
     monitoring_system=Depends(get_monitoring_system),
     memory_system: MemorySystem = Depends(get_memory_system),
 ):
+    del user
     budget_status = memory_system.get_llm_budget_status()
     monitoring_system.sync_llm_budget_alerts(budget_status)
 
@@ -77,9 +78,10 @@ async def get_monitoring_stats(
 @router.get("/monitoring/alerts")
 async def get_alerts(
     resolved: bool = False,
-    user=Depends(get_current_user),
+    user=Depends(require_user),
     monitoring_system=Depends(get_monitoring_system),
 ):
+    del user
     if resolved:
         return {"alerts": [], "resolved": True}
     return {
@@ -91,8 +93,9 @@ async def get_alerts(
 @router.post("/monitoring/alerts/{alert_id}/resolve")
 async def resolve_alert(
     alert_id: int,
-    user=Depends(get_current_user),
+    user=Depends(require_user),
     monitoring_system=Depends(get_monitoring_system),
 ):
+    del user
     monitoring_system.resolve_alert(alert_id)
     return {"success": True, "message": f"Alerta {alert_id} resolvido"}

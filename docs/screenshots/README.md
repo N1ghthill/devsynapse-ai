@@ -38,7 +38,7 @@ Requirements:
 - frontend available on `http://127.0.0.1:5173`
 - backend available on `http://127.0.0.1:8000`
 - default local user seeded: `admin`
-- credentials are read from `DEFAULT_USER_*` and `DEFAULT_ADMIN_*` in `.env` when present
+- credentials are read from `DEFAULT_USER_*` and `DEFAULT_ADMIN_*` in the runtime config when present
 
 The automation script is stored in [../../frontend/scripts/capture-doc-screenshots.mjs](../../frontend/scripts/capture-doc-screenshots.mjs).
 

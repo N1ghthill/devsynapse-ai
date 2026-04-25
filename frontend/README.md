@@ -6,7 +6,7 @@ This frontend is the operator-facing UI for DevSynapse AI. It is built with Reac
 - chat interface for interacting with the assistant;
 - dashboard for monitoring command/API activity;
 - settings page for runtime-adjustable backend options;
-- admin page for user project-permission management and audit visibility.
+- admin page for user project-permission management, project registration and audit visibility.
 
 ## Stack
 
@@ -25,7 +25,8 @@ npm install
 npm run dev
 ```
 
-By default the app expects the backend at `http://127.0.0.1:8000`.
+In local development the app expects the backend at `http://127.0.0.1:8000`.
+In production builds, an unset API URL uses the same origin that serves the UI.
 
 You can override that with:
 

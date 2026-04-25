@@ -3,7 +3,7 @@
 ## Current Verification Baseline
 
 At the latest documentation refresh on `2026-04-25`, local verification produced:
-- `120` passing backend tests
+- `143` passing backend tests
 - successful script checks
 - successful frontend lint and production build
 - passing installer/uninstaller and development-server smoke tests
@@ -77,7 +77,13 @@ Browser UI smoke:
 make ui-smoke
 ```
 
-`make ui-smoke` starts a temporary API with disposable SQLite databases, builds the frontend with a matching API URL and runs Playwright against the production bundle served by FastAPI. Install the Chromium browser once with:
+`make ui-smoke` starts a temporary API with disposable SQLite databases, builds the
+frontend with a matching API URL and runs Playwright against the production
+bundle served by FastAPI. The smoke runtime seeds an admin account plus a
+temporary non-admin user so the Admin permission workflow is exercised without
+touching local developer data.
+
+Install the Chromium browser once with:
 
 ```bash
 cd frontend

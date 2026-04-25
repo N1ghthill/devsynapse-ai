@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.3.2-blue)
+![Version](https://img.shields.io/badge/version-0.3.3-blue)
 
 DevSynapse AI is an open source development assistant that combines:
 - DeepSeek-first LLM access through a user-provided API key;
@@ -10,8 +10,8 @@ DevSynapse AI is an open source development assistant that combines:
 - project-aware technical chat with a project selector in the UI;
 - persistent memory for conversations, preferences and projects;
 - controlled command execution with explicit authorization boundaries and per-project working directories;
-- operational visibility through monitoring, usage tracking, budget thresholds (enabled by default) and alerts.
-- portable configuration via environment variables with sensible auto-detection.
+- operational visibility through monitoring, usage tracking, budget thresholds (enabled by default) and alerts;
+- per-user runtime configuration via environment variables with sensible auto-detection.
 
 The repository is organized for contributors, not only for local use. Backend contracts, frontend behavior, persistence and runtime workflows are documented and versioned in-repo.
 
@@ -43,11 +43,13 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Verified Baseline
 
-Release validation completed on `2026-04-25` (v0.3.2):
+Release validation completed on `2026-04-25` (v0.3.3):
 - full repository verification: `make verify`
-- backend test suite: `120 passed`
+- backend test suite: `143 passed`
 - Python/Ruff checks, shell syntax checks, Python script compilation and frontend ESLint: passed
 - frontend production build: passed
+- UI smoke against disposable runtime: passed
+- Docker build and container smoke: passed
 - GitHub Actions CI: passed on `main`
 - local API + frontend integration validated manually during development
 - public onboarding flow revalidated from a clean clone with fresh dependency installs, migrations, seeded users, route-level test pass and frontend build
@@ -77,8 +79,6 @@ devsynapse-ai/
 ├── plugins/                # Plugin implementations
 ├── scripts/                # Local operational utilities
 ├── tests/                  # Unit and integration tests
-├── data/                   # SQLite databases (generated locally)
-├── logs/                   # Runtime logs (generated locally)
 ├── .env.example            # Runtime configuration template
 ├── Makefile                # Common dev commands
 └── README_PROFESSIONAL.md  # Engineering-oriented companion doc
@@ -98,6 +98,16 @@ devsynapse              # start the app
 uninstall-devsynapse    # remove local artifacts
 ```
 
+Runtime state is intentionally outside the source checkout by default:
+
+- config: `~/.config/devsynapse-ai/.env`
+- SQLite data: `~/.local/share/devsynapse-ai/data`
+- logs: `~/.local/state/devsynapse-ai/logs`
+
+Set `DEVSYNAPSE_HOME=/path/to/runtime` to keep all three under one custom directory,
+or set `DEVSYNAPSE_CONFIG_FILE`, `DEVSYNAPSE_DATA_DIR` and `DEVSYNAPSE_LOGS_DIR`
+individually.
+
 ### Manual Path
 
 ```bash
@@ -106,7 +116,7 @@ source venv/bin/activate
 make setup
 ```
 
-Add your DeepSeek key to `.env`, then:
+Add your DeepSeek key to the runtime config printed by `make setup`, then:
 
 ```bash
 make dev
@@ -171,7 +181,7 @@ Technical guides:
 - testing guide: [docs/development/testing.md](docs/development/testing.md)
 - development roadmap: [docs/development/roadmap.md](docs/development/roadmap.md)
 - runtime and delivery notes: [docs/deployment/runtime.md](docs/deployment/runtime.md)
-- latest release notes: [docs/releases/v0.3.2.md](docs/releases/v0.3.2.md)
+- latest release notes: [docs/releases/v0.3.3.md](docs/releases/v0.3.3.md)
 
 Supplementary references:
 - engineering guide: [README_PROFESSIONAL.md](README_PROFESSIONAL.md)

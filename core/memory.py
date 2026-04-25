@@ -43,7 +43,7 @@ class MemorySystem:
         # Inserir projetos conhecidos
         for name, info in KNOWN_PROJECTS.items():
             cursor.execute('''
-                INSERT OR REPLACE INTO projects 
+                INSERT OR IGNORE INTO projects
                 (name, path, type, priority, last_accessed, access_count)
                 VALUES (?, ?, ?, ?, ?, ?)
             ''', (name, info['path'], info['type'], info['priority'], 
@@ -54,13 +54,20 @@ class MemorySystem:
         
         logger.info(f"Banco de dados inicializado: {self.db_path}")
 
-    def add_project(self, name: str, path: str, project_type: str = "project",
-                    priority: str = "medium"):
+    def add_project(
+        self,
+        name: str,
+        path: str,
+        project_type: str = "project",
+        priority: str = "medium",
+        replace: bool = True,
+    ):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
+        insert_clause = "INSERT OR REPLACE" if replace else "INSERT"
         cursor.execute(
-            """
-            INSERT OR REPLACE INTO projects
+            f"""
+            {insert_clause} INTO projects
             (name, path, type, priority, last_accessed, access_count)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
@@ -68,6 +75,49 @@ class MemorySystem:
         )
         conn.commit()
         conn.close()
+
+    def get_project(self, name: str) -> Optional[Dict[str, Any]]:
+        """Return a registered project by exact name."""
+
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT name, path, type, priority, last_accessed, access_count
+            FROM projects
+            WHERE name = ?
+            """,
+            (name,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def list_projects(self) -> list[Dict[str, Any]]:
+        """Return all registered projects."""
+
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT name, path, type, priority, last_accessed, access_count
+            FROM projects
+            ORDER BY priority DESC, access_count DESC, name
+            """
+        )
+        projects = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return projects
+
+    def list_project_names(self) -> list[str]:
+        """Return registered project names in stable order."""
+
+        return [project["name"] for project in self.list_projects()]
+
+    def get_project_lookup(self) -> Dict[str, Dict[str, str]]:
+        """Return configured and persisted projects keyed by project name."""
+
+        return self._get_project_lookup()
 
     def get_db_connection(self) -> sqlite3.Connection:
         """Return a SQLite connection for internal/service use."""

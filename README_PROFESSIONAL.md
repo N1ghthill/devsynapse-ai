@@ -97,11 +97,21 @@ Configuration is centralized in [config/settings.py](config/settings.py).
 Principles:
 - environment variables define runtime behavior;
 - code should not contain deploy-specific secrets;
+- operational installs store config, SQLite databases and logs outside the source checkout by default;
 - stable policy constants may stay in code when they are part of the trusted baseline;
 - mutable operational settings are persisted through the app settings table when appropriate.
 
 Bootstrap reference:
 - [`.env.example`](.env.example)
+
+Default runtime locations:
+- config: `~/.config/devsynapse-ai/.env`
+- SQLite data: `~/.local/share/devsynapse-ai/data`
+- logs: `~/.local/state/devsynapse-ai/logs`
+
+Set `DEVSYNAPSE_HOME` to keep those paths under one custom runtime directory, or
+set `DEVSYNAPSE_CONFIG_FILE`, `DEVSYNAPSE_DATA_DIR` and `DEVSYNAPSE_LOGS_DIR`
+individually.
 
 ## Security Posture
 
@@ -170,7 +180,7 @@ Related files:
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env
+python scripts/ensure_runtime_config.py
 ./venv/bin/pytest -q
 ./venv/bin/uvicorn api.app:app --host 127.0.0.1 --port 8000 --reload
 ```

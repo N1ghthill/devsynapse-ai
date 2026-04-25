@@ -9,11 +9,16 @@ Project context can come from:
 - explicit request fields such as `project_name`;
 - command paths resolved against known projects;
 - persisted `conversation_project_name`;
+- administrator-registered project paths;
 - legacy text inference from messages and commands.
 
 ## Contract Rules
 
 - Mutating execution for non-admin users must require an explicit or resolvable project.
+- Admin users have global mutation scope across registered projects and do not use per-user allowlists.
+- Mutating file and path-based bash commands must only target paths inside the resolved registered project.
+- Admin-registered project paths must be available to command attribution and working-directory resolution.
+- Regular `/projects` responses must not expose local project paths; `/admin/projects` is the path-bearing management surface.
 - `/execute` responses must include `project_name` when the bridge resolves one.
 - `POST /chat` may receive `project_name` and must persist it with the conversation row.
 - Later chat turns should reuse the persisted conversation project when no new project is provided.

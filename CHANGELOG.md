@@ -6,6 +6,31 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+## [v0.3.3] - 2026-04-25
+
+### Added
+- Docker build now produces a FastAPI runtime image with the frontend production bundle included.
+- `.dockerignore` keeps local runtime artifacts and dependency directories out of container build context.
+- Per-user runtime config/data/log separation via XDG paths or `DEVSYNAPSE_HOME`.
+- `scripts/ensure_runtime_config.py` for non-interactive runtime config bootstrap.
+- Admin project listing and registration through `/admin/projects` and the Admin UI.
+
+### Changed
+- Installer, launcher and uninstaller now use the runtime config path instead of a repo-local `.env`.
+- Installer now generates a strong JWT secret when the template/default value is unsafe and updates the configured admin user password.
+- Chat, conversation, feedback and project routes now require authenticated users.
+- Admin users now show global registered-project mutation scope instead of editable per-user allowlists.
+- Public `/projects` responses hide local project paths; `/admin/projects` remains the path-bearing management surface.
+- Production frontend builds default to same-origin API calls when `VITE_API_URL` is unset.
+- `nginx.conf` is now an optional reverse-proxy baseline for the current FastAPI routes and SSE streaming endpoint.
+- CORS origins are configurable through `CORS_ALLOWED_ORIGINS`; wildcard origins no longer enable credentialed CORS.
+
+### Fixed
+- Project-relative `read`, `edit` and `write` paths are normalized against the selected project before path validation.
+- Mutating file and path-based bash commands must stay inside the resolved registered project.
+- API request telemetry middleware now attaches background logging tasks to the actual response.
+- Expected `/execute` command blocks or command failures no longer record false API 500 telemetry.
+
 ## [v0.3.2] - 2026-04-25
 
 ### Added

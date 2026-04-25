@@ -18,8 +18,8 @@ bash scripts/install.sh
 ```
 
 The installer checks system dependencies, creates the Python venv, installs frontend
-and backend packages, configures `.env` (asks for your DeepSeek API key and
-repositories directory interactively), runs database migrations, seeds the admin
+and backend packages, configures the per-user runtime config (asks for your
+DeepSeek API key and repositories directory interactively), runs database migrations, seeds the admin
 user, builds the frontend, and registers the `devsynapse` and `uninstall-devsynapse`
 shell aliases.
 
@@ -41,7 +41,8 @@ source venv/bin/activate
 make setup
 ```
 
-Then edit `.env` and set `DEEPSEEK_API_KEY`.
+Then edit the runtime config printed by `make setup` and set `DEEPSEEK_API_KEY`.
+The default path is `~/.config/devsynapse-ai/.env`.
 
 ## First Verification Pass
 
@@ -79,9 +80,10 @@ Default local URLs:
 
 The local setup seeds one admin user by default. The installer prompts for this password during setup; change it immediately for any non-local environment.
 
-- `admin` / value from `DEFAULT_ADMIN_PASSWORD` in `.env`
+- `admin` / value from `DEFAULT_ADMIN_PASSWORD` in the runtime config
 
-To add a non-admin user, set `DEFAULT_USER_USERNAME` and `DEFAULT_USER_PASSWORD` in `.env`.
+To add a non-admin user, set `DEFAULT_USER_USERNAME` and `DEFAULT_USER_PASSWORD`
+in the runtime config.
 
 ## Manual Server Commands
 

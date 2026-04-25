@@ -56,6 +56,21 @@ class TestMemorySystem:
         assert isinstance(context, str)
         assert len(context) > 0
 
+    def test_list_projects_and_lookup_include_persisted_projects(self, tmp_path):
+        db_path = tmp_path / "test_project_registry.db"
+        memory = _create_memory(db_path)
+        project_path = PROJECT_ROOT / "docs"
+
+        memory.add_project("docs-project", str(project_path), "docs", "low")
+
+        projects = memory.list_projects()
+        lookup = memory.get_project_lookup()
+
+        assert any(project["name"] == "docs-project" for project in projects)
+        assert "docs-project" in memory.list_project_names()
+        assert lookup["docs-project"]["path"] == str(project_path)
+        assert lookup["docs-project"]["type"] == "docs"
+
     @pytest.mark.asyncio
     async def test_save_and_get_conversation_context(self, tmp_path):
         db_path = tmp_path / "test_conv.db"

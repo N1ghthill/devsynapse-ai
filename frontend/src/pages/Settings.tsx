@@ -263,7 +263,7 @@ export function Settings() {
             />
             <small>
               {auth.user?.role === 'admin'
-                ? 'Admin permissions are managed from the Admin area.'
+                ? 'Admins can mutate all registered projects.'
                 : 'Your project mutation permissions are managed by an admin.'}
             </small>
           </div>

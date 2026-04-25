@@ -14,6 +14,11 @@ import time
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from config.settings import CONFIG_FILE, MEMORY_DB_PATH
+
 FRONTEND_DIR = ROOT_DIR / "frontend"
 API_HOST = "127.0.0.1"
 API_PORT = 8000
@@ -21,7 +26,7 @@ FRONTEND_PORT = 5173
 
 
 def _read_env(key: str, default: str = "") -> str:
-    env_file = ROOT_DIR / ".env"
+    env_file = CONFIG_FILE
     if not env_file.is_file():
         return default
     for line in env_file.read_text().splitlines():
@@ -37,7 +42,7 @@ def _read_env(key: str, default: str = "") -> str:
 def format_admin_password_for_display(password: str) -> str:
     if password == "admin":
         return "admin"
-    return "value from DEFAULT_ADMIN_PASSWORD in .env"
+    return "value from DEFAULT_ADMIN_PASSWORD in runtime config"
 
 
 def is_port_in_use(port: int) -> bool:
@@ -48,14 +53,16 @@ def is_port_in_use(port: int) -> bool:
 
 def check_ready() -> bool:
     missing = []
-    if not (ROOT_DIR / ".env").exists():
-        missing.append(".env")
+    if not CONFIG_FILE.exists():
+        missing.append(str(CONFIG_FILE))
     if not (FRONTEND_DIR / "node_modules").exists():
         missing.append("frontend/node_modules")
+    if not MEMORY_DB_PATH.exists():
+        missing.append(str(MEMORY_DB_PATH))
 
     if missing:
         print("Missing setup artifacts: " + ", ".join(missing))
-        print("Run `make setup`, then add your DEEPSEEK_API_KEY to `.env`.")
+        print(f"Run `make setup`, then add your DEEPSEEK_API_KEY to `{CONFIG_FILE}`.")
         return False
 
     blocked_ports = [
@@ -74,6 +81,7 @@ def check_ready() -> bool:
 def start_process(name: str, command: list[str], cwd: Path) -> subprocess.Popen:
     env = os.environ.copy()
     env.setdefault("VITE_API_URL", f"http://{API_HOST}:{API_PORT}")
+    env.setdefault("DEVSYNAPSE_CONFIG_FILE", str(CONFIG_FILE))
     print(f"Starting {name}: {' '.join(command)}")
     return subprocess.Popen(command, cwd=cwd, env=env, start_new_session=True)
 

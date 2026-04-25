@@ -6,7 +6,7 @@ Do not present planned items as shipped behavior in user-facing documentation.
 
 ## Current Baseline
 
-The current documented baseline is `v0.3.2`, validated on `2026-04-25`.
+The current documented baseline is `v0.3.3`, validated on `2026-04-25`.
 It includes:
 
 - local-first FastAPI, React/Vite and SQLite architecture;
@@ -24,8 +24,10 @@ It includes:
 - SSE streaming chat with real-time token delivery;
 - project selector in chat UI;
 - working directory resolution per project for bash/grep commands;
-- keyboard shortcuts for chat input (Enter, Ctrl+Enter, Shift+Enter).
-- portable CI and setup validation for shell scripts, frontend linting and installer/uninstaller smoke tests.
+- keyboard shortcuts for chat input (Enter, Ctrl+Enter, Shift+Enter);
+- portable CI and setup validation for shell scripts, frontend linting and installer/uninstaller smoke tests;
+- Docker delivery with a FastAPI runtime image that serves the production frontend bundle;
+- admin project registration for existing local project directories.
 
 ## Current Priorities
 

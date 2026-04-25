@@ -13,6 +13,18 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
+APP_ID="devsynapse-ai"
+
+if [ -n "${DEVSYNAPSE_HOME:-}" ]; then
+    RUNTIME_HOME="${DEVSYNAPSE_HOME/#\~/$HOME}"
+    CONFIG_DIR="${DEVSYNAPSE_CONFIG_DIR:-$RUNTIME_HOME/config}"
+    DEFAULT_DATA_DIR="${DEVSYNAPSE_DATA_DIR:-$RUNTIME_HOME/data}"
+else
+    CONFIG_DIR="${DEVSYNAPSE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/$APP_ID}"
+    DEFAULT_DATA_DIR="${DEVSYNAPSE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/$APP_ID/data}"
+fi
+CONFIG_FILE="${DEVSYNAPSE_CONFIG_FILE:-$CONFIG_DIR/.env}"
+export DEVSYNAPSE_CONFIG_FILE="$CONFIG_FILE"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -47,20 +59,45 @@ check_cli_tools() {
     return 0
 }
 
+get_env_value() {
+    local key="$1"
+    local default_value="${2:-}"
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "$default_value"
+        return
+    fi
+
+    awk -F= -v key="$key" -v default_value="$default_value" '
+        $1 == key {
+            sub("^[^=]*=", "")
+            print
+            found = 1
+            exit
+        }
+        END {
+            if (found != 1) {
+                print default_value
+            }
+        }
+    ' "$CONFIG_FILE"
+}
+
 check_requirements() {
     if ! check_cli_tools; then
         return 1
     fi
 
-    if [ ! -f ".env" ]; then
-        echo -e "${YELLOW}⚠  .env não encontrado. Execute 'bash scripts/install.sh' primeiro.${NC}"
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo -e "${YELLOW}⚠  Configuração runtime não encontrada. Execute 'bash scripts/install.sh' primeiro.${NC}"
+        echo -e "   Esperado: ${CYAN}$CONFIG_FILE${NC}"
         return 1
     fi
 
     local has_key=0
     local key_value=""
-    if grep -qE '^DEEPSEEK_API_KEY=' .env 2>/dev/null; then
-        key_value=$(grep -E '^DEEPSEEK_API_KEY=' .env 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
+    if grep -qE '^DEEPSEEK_API_KEY=' "$CONFIG_FILE" 2>/dev/null; then
+        key_value=$(grep -E '^DEEPSEEK_API_KEY=' "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
         if [ -n "$key_value" ] \
            && [ "$key_value" != "your-key-here" ] \
            && [ "$key_value" != "sk-your-key-here" ] \
@@ -70,12 +107,14 @@ check_requirements() {
     fi
 
     if [ "$has_key" -eq 0 ]; then
-        echo -e "${YELLOW}⚠  DEEPSEEK_API_KEY inválida ou não configurada no .env${NC}"
-        echo "   Edite .env:  DEEPSEEK_API_KEY=sk-sua-chave-aqui"
+        echo -e "${YELLOW}⚠  DEEPSEEK_API_KEY inválida ou não configurada no runtime${NC}"
+        echo "   Edite $CONFIG_FILE:  DEEPSEEK_API_KEY=sk-sua-chave-aqui"
         return 1
     fi
 
-    if [ ! -d "venv" ] || [ ! -d "frontend/node_modules" ] || [ ! -f "data/devsynapse_memory.db" ]; then
+    local memory_db_path
+    memory_db_path=$(get_env_value "MEMORY_DB_PATH" "$DEFAULT_DATA_DIR/devsynapse_memory.db")
+    if [ ! -d "venv" ] || [ ! -d "frontend/node_modules" ] || [ ! -f "$memory_db_path" ]; then
         echo -e "${YELLOW}⚠  Setup incompleto. Execute 'bash scripts/install.sh'.${NC}"
         return 1
     fi
@@ -92,16 +131,16 @@ source_venv() {
 
 get_admin_password() {
     local password=""
-    if [ -f ".env" ]; then
-        password=$(grep -E '^DEFAULT_ADMIN_PASSWORD=' .env 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
+    if [ -f "$CONFIG_FILE" ]; then
+        password=$(grep -E '^DEFAULT_ADMIN_PASSWORD=' "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
     fi
     echo "${password:-admin}"
 }
 
 get_api_key_status() {
-    if [ -f ".env" ]; then
+    if [ -f "$CONFIG_FILE" ]; then
         local key=""
-        key=$(grep -E '^DEEPSEEK_API_KEY=' .env 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
+        key=$(grep -E '^DEEPSEEK_API_KEY=' "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
         if [ -n "$key" ] && [ "${key:0:3}" = "sk-" ]; then
             echo -e "${GREEN}configurada${NC}"
             return
@@ -125,10 +164,11 @@ print_info() {
     if [ "$admin_password" = "admin" ]; then
         echo -e "   Senha     → ${GREEN}admin${NC}"
     else
-        echo -e "   Senha     → ${GREEN}valor atual de DEFAULT_ADMIN_PASSWORD no .env${NC}"
+        echo -e "   Senha     → ${GREEN}valor atual de DEFAULT_ADMIN_PASSWORD no runtime${NC}"
     fi
     echo ""
     echo -e "${BOLD}🔌 API Key DeepSeek:${NC} $(get_api_key_status)"
+    echo -e "${BOLD}⚙️  Config:${NC} ${CYAN}$CONFIG_FILE${NC}"
     echo ""
     echo -e "${BOLD}Pressione Ctrl+C para parar.${NC}"
     echo ""

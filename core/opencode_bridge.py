@@ -29,7 +29,7 @@ from config.settings import (
     USER_BASH_COMMANDS,
     get_settings,
 )
-from core.monitoring import monitoring_system
+from core.monitoring import monitoring_system as default_monitoring_system
 from core.plugin_system import plugin_manager
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,7 @@ class OpenCodeBridge:
         self,
         known_projects: Optional[Dict[str, Dict[str, str]]] = None,
         allowed_directories: Optional[List[str]] = None,
+        monitoring_system=None,
     ):
         self.allowed_commands = ALLOWED_COMMANDS
         self.allowed_bash_commands = ALLOWED_BASH_COMMANDS
@@ -59,6 +60,22 @@ class OpenCodeBridge:
         self.allowed_file_extensions = ALLOWED_FILE_EXTENSIONS
         self.backup_enabled = OPENCODE_BACKUP_ENABLED
         self.backup_suffix = OPENCODE_BACKUP_SUFFIX
+        self.monitoring_system = monitoring_system or default_monitoring_system
+
+    def register_project(
+        self,
+        name: str,
+        path: str,
+        project_type: str = "project",
+        priority: str = "medium",
+    ) -> None:
+        """Register or refresh a project for command attribution and cwd resolution."""
+
+        self.known_projects[name] = {
+            "path": path,
+            "type": project_type,
+            "priority": priority,
+        }
         
     async def execute_command(
         self,
@@ -97,7 +114,7 @@ class OpenCodeBridge:
             execution_time = time.time() - start_time
             
             # Log de falha de validação
-            monitoring_system.log_command_execution(
+            self.monitoring_system.log_command_execution(
                 command_type="validation_failed",
                 command_text=command[:200],
                 success=False,
@@ -112,6 +129,20 @@ class OpenCodeBridge:
         command_type, args = validation_result[2], validation_result[3]
         resolved_project_name = self._infer_project_name(command_type, args, project_name)
         effective_project_name = project_name or resolved_project_name
+        args = self._normalize_file_command_args(command_type, args, effective_project_name)
+        if command_type in {"read", "edit", "write"} and not self._validate_file_path(args[0]):
+            error_msg = f"Caminho de arquivo não permitido: {args[0]}"
+            execution_time = time.time() - start_time
+            self.monitoring_system.log_command_execution(
+                command_type="validation_failed",
+                command_text=command[:200],
+                success=False,
+                execution_time=execution_time,
+                user_id=user_id,
+                project_name=effective_project_name,
+                error_message=error_msg,
+            )
+            return False, error_msg, None, "blocked", "validation_failed", effective_project_name
 
         authorized, auth_message = self._authorize_command(
             command_type,
@@ -122,7 +153,7 @@ class OpenCodeBridge:
         )
         if not authorized:
             execution_time = time.time() - start_time
-            monitoring_system.log_command_execution(
+            self.monitoring_system.log_command_execution(
                 command_type="authorization_failed",
                 command_text=command[:200],
                 success=False,
@@ -163,7 +194,7 @@ class OpenCodeBridge:
         reason_code = None if success else "execution_failed"
         
         # Log da execução
-        monitoring_system.log_command_execution(
+        self.monitoring_system.log_command_execution(
             command_type=command_type,
             command_text=command[:200],
             success=success,
@@ -174,7 +205,7 @@ class OpenCodeBridge:
         )
         
         # Log métrica de tempo
-        monitoring_system.log_system_metric(
+        self.monitoring_system.log_system_metric(
             metric_name=f"command_{command_type}_execution_time",
             metric_value=execution_time,
             tags={"success": success, "user_id": user_id}
@@ -224,11 +255,6 @@ class OpenCodeBridge:
             if not self._validate_bash_command(main_arg):
                 return False, f"Comando bash não permitido: {main_arg}", None, None
         
-        elif command_type in ["read", "edit", "write"]:
-            # Validar caminho de arquivo
-            if not self._validate_file_path(main_arg):
-                return False, f"Caminho de arquivo não permitido: {main_arg}", None, None
-        
         return True, "Comando válido", command_type, [main_arg, extra_args]
 
     def _authorize_command(
@@ -244,15 +270,14 @@ class OpenCodeBridge:
         if command_type is None:
             return False, "Tipo de comando inválido para autorização"
 
-        if user_role == "admin":
-            return True, "Autorizado"
-
         if command_type in self.read_only_commands:
             return True, "Autorizado"
 
         if command_type in self.admin_only_commands:
             return self._authorize_project_mutation(
                 command_type,
+                args,
+                user_role,
                 project_name,
                 project_mutation_allowlist,
             )
@@ -266,9 +291,15 @@ class OpenCodeBridge:
             first_cmd = parts[0].lower()
             if first_cmd in self.user_bash_commands:
                 return True, "Autorizado"
+            if first_cmd == "kill":
+                if user_role == "admin":
+                    return True, "Autorizado"
+                return False, "Comando bash 'kill' exige papel de administrador"
             if first_cmd in self.admin_only_bash_commands:
                 return self._authorize_project_mutation(
                     f"bash:{first_cmd}",
+                    args,
+                    user_role,
                     project_name,
                     project_mutation_allowlist,
                 )
@@ -279,6 +310,8 @@ class OpenCodeBridge:
     def _authorize_project_mutation(
         self,
         action_name: str,
+        args: Optional[List],
+        user_role: str,
         project_name: Optional[str],
         project_mutation_allowlist: List[str],
     ) -> Tuple[bool, str]:
@@ -293,13 +326,158 @@ class OpenCodeBridge:
                 ),
             )
 
-        if project_name in project_mutation_allowlist:
+        if project_name not in self.known_projects:
+            return False, f"Projeto '{project_name}' não está registrado"
+
+        if user_role != "admin" and project_name not in project_mutation_allowlist:
+            return (
+                False,
+                f"Ação '{action_name}' não autorizada para o projeto '{project_name}'",
+            )
+
+        paths_authorized, path_message = self._authorize_mutation_paths(
+            action_name,
+            args,
+            project_name,
+        )
+        if not paths_authorized:
+            return False, path_message
+
+        if user_role == "admin" or project_name in project_mutation_allowlist:
             return True, f"Autorizado para o projeto '{project_name}'"
 
         return (
             False,
             f"Ação '{action_name}' não autorizada para o projeto '{project_name}'",
         )
+
+    def _authorize_mutation_paths(
+        self,
+        action_name: str,
+        args: Optional[List],
+        project_name: str,
+    ) -> Tuple[bool, str]:
+        """Ensure mutating commands only target paths inside the resolved project."""
+
+        project_root = Path(self.known_projects[project_name]["path"]).expanduser().resolve()
+        raw_paths = self._mutation_path_operands(action_name, args)
+        if not raw_paths:
+            return (
+                False,
+                (
+                    f"Ação '{action_name}' exige caminho de arquivo ou diretório "
+                    f"dentro do projeto '{project_name}'"
+                ),
+            )
+
+        for raw_path in raw_paths:
+            resolved_path = self._resolve_command_path(raw_path, project_root)
+            try:
+                if not resolved_path.is_relative_to(project_root):
+                    return (
+                        False,
+                        (
+                            f"Ação '{action_name}' não pode alterar caminho fora do "
+                            f"projeto '{project_name}': {resolved_path}"
+                        ),
+                    )
+            except ValueError:
+                return (
+                    False,
+                    (
+                        f"Ação '{action_name}' não pode alterar caminho fora do "
+                        f"projeto '{project_name}': {resolved_path}"
+                    ),
+                )
+
+        return True, "Autorizado"
+
+    def _mutation_path_operands(self, action_name: str, args: Optional[List]) -> List[str]:
+        """Extract path operands from mutating commands."""
+
+        if not args:
+            return []
+
+        if action_name in {"edit", "write"}:
+            return [args[0]] if args[0] else []
+
+        if not action_name.startswith("bash:"):
+            return []
+
+        bash_command = args[0] if args else ""
+        try:
+            parts = shlex.split(bash_command)
+        except ValueError:
+            return []
+
+        if len(parts) < 2:
+            return []
+
+        command_name = action_name.split(":", 1)[1]
+        operands = self._non_option_operands(parts[1:])
+
+        if command_name == "chmod":
+            return operands[1:] if len(operands) > 1 else []
+
+        if command_name in {"touch", "mkdir", "cp", "mv", "rm"}:
+            return operands
+
+        return []
+
+    def _non_option_operands(self, parts: List[str]) -> List[str]:
+        """Return simple non-option operands from a shell argument list."""
+
+        operands: List[str] = []
+        option_takes_value = {"-t", "--target-directory", "--reference"}
+        skip_next = False
+        after_option_marker = False
+        for index, part in enumerate(parts):
+            if skip_next:
+                skip_next = False
+                continue
+            if after_option_marker:
+                operands.append(part)
+                continue
+            if part == "--":
+                after_option_marker = True
+                continue
+            if part in option_takes_value:
+                next_index = index + 1
+                if next_index < len(parts):
+                    operands.append(parts[next_index])
+                skip_next = True
+                continue
+            if part.startswith("--target-directory=") or part.startswith("--reference="):
+                operands.append(part.split("=", 1)[1])
+                continue
+            if part.startswith("-"):
+                continue
+            operands.append(part)
+        return operands
+
+    def _resolve_command_path(self, raw_path: str, project_root: Path) -> Path:
+        path = Path(raw_path).expanduser()
+        if not path.is_absolute():
+            path = project_root / path
+        return path.resolve()
+
+    def _normalize_file_command_args(
+        self,
+        command_type: Optional[str],
+        args: Optional[List],
+        project_name: Optional[str],
+    ) -> Optional[List]:
+        """Resolve relative file-command paths against the selected project."""
+
+        if command_type not in {"read", "edit", "write"} or not args:
+            return args
+        if not project_name or project_name not in self.known_projects:
+            return args
+
+        project_root = Path(self.known_projects[project_name]["path"]).expanduser().resolve()
+        normalized_args = list(args)
+        normalized_args[0] = str(self._resolve_command_path(str(args[0]), project_root))
+        return normalized_args
 
     def _infer_project_name(
         self,
@@ -398,17 +576,6 @@ class OpenCodeBridge:
         if first_cmd not in self.allowed_bash_commands:
             return False
         
-        # Extrair primeiro comando
-        parts = shlex.split(command)
-        if not parts:
-            return False
-        
-        first_cmd = parts[0].lower()
-        
-        # Verificar se está na lista permitida
-        if first_cmd not in self.allowed_bash_commands:
-            return False
-        
         # Verificações adicionais de segurança
         dangerous_patterns = [
             "|", ">", ">>", "<", "&", ";", "`", "$(", ".."
@@ -429,7 +596,7 @@ class OpenCodeBridge:
             # Verificar se está dentro de diretórios permitidos
             for allowed_dir in self.allowed_directories:
                 try:
-                    if path_obj.is_relative_to(allowed_dir):
+                    if path_obj.is_relative_to(allowed_dir.resolve()):
                         # Verificar extensão se necessário
                         if check_extension and path_obj.suffix:
                             if path_obj.suffix not in self.allowed_file_extensions:
@@ -630,10 +797,12 @@ class OpenCodeBridge:
             
             # Criar backup antes de editar (se habilitado)
             backup_path = None
+            backup_label = "desabilitado"
             if self.backup_enabled:
                 backup_path = path.with_suffix(path.suffix + self.backup_suffix)
                 import shutil
                 shutil.copy2(path, backup_path)
+                backup_label = backup_path.name
                 logger.info(f"Backup criado: {backup_path}")
             
             # Ler conteúdo atual
@@ -651,7 +820,8 @@ class OpenCodeBridge:
                         current_content = path.read_text(errors='ignore')
                 
                 if old_text not in current_content:
-                    backup_path.unlink(missing_ok=True)  # Remover backup
+                    if backup_path:
+                        backup_path.unlink(missing_ok=True)  # Remover backup
                     return False, f"Texto não encontrado no arquivo: '{old_text[:50]}...'", None
             
             # Fazer substituição
@@ -659,7 +829,8 @@ class OpenCodeBridge:
             
             # Verificar se houve mudança
             if new_content == current_content:
-                backup_path.unlink(missing_ok=True)
+                if backup_path:
+                    backup_path.unlink(missing_ok=True)
                 return False, "Nenhuma alteração realizada (texto idêntico)", None
             
             # Escrever novo conteúdo
@@ -669,9 +840,10 @@ class OpenCodeBridge:
             occurrences = current_content.count(old_text)
             
             # Remover backup após sucesso
-            backup_path.unlink(missing_ok=True)
+            if backup_path:
+                backup_path.unlink(missing_ok=True)
             
-            return True, f"Editado: {occurrences} ocorrência(s) substituída(s) em {filepath}", f"Backup: {backup_path.name}\nSubstituído: '{old_text[:100]}...'\nPor: '{new_text[:100]}...'"
+            return True, f"Editado: {occurrences} ocorrência(s) substituída(s) em {filepath}", f"Backup: {backup_label}\nSubstituído: '{old_text[:100]}...'\nPor: '{new_text[:100]}...'"
             
         except Exception as e:
             # Manter backup em caso de erro

@@ -6,9 +6,10 @@ import json
 import logging
 import sqlite3
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Dict, List, Optional
 
-from config.settings import DATA_DIR
+from config.settings import MONITORING_DB_PATH
 from core.migrations import build_monitoring_migration_manager
 
 logger = logging.getLogger(__name__)
@@ -17,8 +18,8 @@ logger = logging.getLogger(__name__)
 class MonitoringSystem:
     """Sistema de monitoramento e métricas"""
     
-    def __init__(self):
-        self.db_path = DATA_DIR / "devsynapse_monitoring.db"
+    def __init__(self, db_path: Optional[Path] = None):
+        self.db_path = db_path or MONITORING_DB_PATH
         self._init_database()
         
     def _init_database(self):

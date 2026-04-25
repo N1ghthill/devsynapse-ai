@@ -5,7 +5,12 @@ Settings and project routes.
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.dependencies import get_brain, get_memory_system, require_user
-from api.models import SettingsResponse, SettingsUpdateRequest
+from api.models import (
+    ProjectListResponse,
+    ProjectSummaryResponse,
+    SettingsResponse,
+    SettingsUpdateRequest,
+)
 from config.settings import get_settings
 from core.brain import DevSynapseBrain
 from core.memory import MemorySystem
@@ -20,7 +25,10 @@ async def get_settings_route(
     memory_system: MemorySystem = Depends(get_memory_system),
 ):
     persisted = memory_system.get_app_settings()
-    user_allowlist = memory_system.get_project_permissions(user["username"])
+    if user.get("role") == "admin":
+        user_allowlist = memory_system.list_project_names()
+    else:
+        user_allowlist = memory_system.get_project_permissions(user["username"])
     return SettingsResponse(
         deepseek_api_key=bool(settings.deepseek_api_key),
         deepseek_model=persisted.get("deepseek_model", settings.deepseek_model),
@@ -87,19 +95,20 @@ async def update_settings(
     return await get_settings_route(user, memory_system)
 
 
-@router.get("/projects")
+@router.get("/projects", response_model=ProjectListResponse)
 async def list_projects(
+    user=Depends(require_user),
     memory_system: MemorySystem = Depends(get_memory_system),
 ):
-    conn = memory_system.get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        '''
-        SELECT name, type, priority, last_accessed, access_count
-        FROM projects
-        ORDER BY priority DESC, access_count DESC
-        '''
-    )
-    projects = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return {"projects": projects, "count": len(projects)}
+    del user
+    projects = [
+        ProjectSummaryResponse(
+            name=project["name"],
+            type=project["type"],
+            priority=project["priority"],
+            last_accessed=project["last_accessed"],
+            access_count=int(project["access_count"] or 0),
+        )
+        for project in memory_system.list_projects()
+    ]
+    return ProjectListResponse(projects=projects, count=len(projects))

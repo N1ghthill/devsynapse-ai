@@ -9,12 +9,15 @@ import type {
   DashboardStats,
   ExecuteCommandRequest,
   Message,
+  ProjectCreateRequest,
   ProjectInfo,
   SettingsData,
   TokenUsage,
 } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const API_BASE_URL = (
+  import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? '' : 'http://127.0.0.1:8000')
+).replace(/\/$/, '');
 
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -114,6 +117,11 @@ export const chatApi = {
       signal: controller.signal,
     })
       .then(async (response) => {
+        if (response.status === 401) {
+          localStorage.removeItem('auth_token');
+          window.location.href = '/login';
+          return;
+        }
         if (!response.ok) {
           const text = await response.text();
           onError(`HTTP ${response.status}: ${text}`);
@@ -219,6 +227,11 @@ export const adminApi = {
     return response.data;
   },
 
+  listProjects: async (): Promise<ProjectInfo[]> => {
+    const response = await api.get<{ projects: ProjectInfo[] }>('/admin/projects');
+    return response.data.projects || [];
+  },
+
   updateUserPermissions: async (
     username: string,
     projectMutationAllowlist: string[]
@@ -226,6 +239,11 @@ export const adminApi = {
     const response = await api.put<AdminUser>(`/admin/users/${username}/permissions`, {
       project_mutation_allowlist: projectMutationAllowlist,
     });
+    return response.data;
+  },
+
+  createProject: async (data: ProjectCreateRequest): Promise<ProjectInfo> => {
+    const response = await api.post<ProjectInfo>('/admin/projects', data);
     return response.data;
   },
 };

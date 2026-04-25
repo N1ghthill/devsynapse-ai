@@ -39,7 +39,7 @@ jobs:
           bash -n scripts/ui_smoke.sh
           bash -n scripts/update_locks.sh
           bash -n devsynapse.sh
-          python -m py_compile scripts/dev.py scripts/migrate.py scripts/manage_users.py
+          python -m py_compile scripts/dev.py scripts/ensure_runtime_config.py scripts/migrate.py scripts/manage_users.py
           shellcheck scripts/install.sh scripts/uninstall.sh scripts/ui_smoke.sh scripts/update_locks.sh devsynapse.sh
 
       - name: Run backend tests

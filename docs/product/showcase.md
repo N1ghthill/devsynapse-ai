@@ -15,7 +15,7 @@ Baseline validated on `2026-04-25`:
 Screenshot sources:
 - [screenshot evidence index](../screenshots/README.md)
 - [testing guide](../development/testing.md)
-- [release notes](../releases/v0.3.2.md)
+- [release notes](../releases/v0.3.3.md)
 
 ## Use Cases
 
@@ -42,8 +42,8 @@ Current support:
 - project-scoped mutation authorization for non-admin users
 - working directory resolution per project for bash/grep commands
 - command execution telemetry by project
-- admin project permission management
-- audit records for administrative permission changes
+- admin project registration and project permission management
+- audit records for administrative permission and project registration changes
 
 ### Local coding operator
 

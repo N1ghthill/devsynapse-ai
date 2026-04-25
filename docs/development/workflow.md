@@ -24,7 +24,7 @@ npm run dev
 
 ## Standard Commands
 
-- `make setup`: install backend/frontend dependencies, create `.env` if missing, apply migrations and seed local users
+- `make setup`: install backend/frontend dependencies, create the per-user runtime config if missing, apply migrations and seed local users
 - `make dev`: run backend and frontend dev servers together
 - `make test`: run backend tests
 - `make lint`: run Python lint checks with Ruff
@@ -32,7 +32,7 @@ npm run dev
 - `make frontend-lint`: run frontend ESLint
 - `make frontend-build`: build the frontend bundle
 - `make verify`: run Python lint, backend tests, script checks, frontend lint and frontend build in one pass
-- `make ui-smoke`: build and smoke-test the served UI with Playwright against temporary local databases
+- `make ui-smoke`: build and smoke-test the served UI with Playwright against temporary local databases and seeded smoke users
 - `make update-locks`: regenerate Python dependency lock constraints from the manifests
 - `make seed-users`: ensure default users exist
 - `make migrate`: apply all SQLite migrations

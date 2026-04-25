@@ -1351,7 +1351,9 @@ body {
 }
 
 .setting-field input[type="text"],
-.setting-field input[type="number"] {
+.setting-field input[type="number"],
+.setting-field select,
+.setting-field textarea {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border);
@@ -1363,8 +1365,56 @@ body {
   transition: border-color 0.15s;
 }
 
-.setting-field input:focus {
+.setting-field textarea {
+  min-height: 104px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.setting-field input:focus,
+.setting-field select:focus,
+.setting-field textarea:focus {
   border-color: var(--accent);
+}
+
+.setting-field textarea[readonly] {
+  color: var(--text-secondary);
+}
+
+.save-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.admin-project-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.admin-project-item {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-tertiary);
+  padding: 10px 12px;
+}
+
+.admin-project-item span {
+  color: var(--text-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.admin-project-form {
+  margin-top: 16px;
+}
+
+.admin-project-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
 .range-input {

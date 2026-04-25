@@ -4,6 +4,11 @@
 
 DevSynapse AI currently uses SQLite for local persistence. Schema evolution is managed in-repo through explicit migrations.
 
+Runtime database files are user state, not source files. By default they live under
+`~/.local/share/devsynapse-ai/data`, with paths resolved from `MEMORY_DB_PATH` and
+`MONITORING_DB_PATH` in the runtime config. `DEVSYNAPSE_HOME` or
+`DEVSYNAPSE_DATA_DIR` can relocate them for a specific install.
+
 Primary implementation files:
 - [core/db.py](../../core/db.py)
 - [core/migrations.py](../../core/migrations.py)
@@ -58,6 +63,8 @@ Stores:
 - historical decisions and lessons
 
 This context supports assistant prompt construction and project-aware reporting.
+Administrators can register additional existing local project directories at runtime; these rows are persisted and are loaded into command attribution and project working-directory resolution.
+User-facing project lists expose project identity and usage metadata only; local paths are reserved for administrative project management.
 
 ### Project permissions
 
@@ -67,6 +74,8 @@ Stores:
 - permission type
 
 This is the basis for project-scoped mutation authorization for non-admin users.
+Admin users have global project mutation scope and do not depend on rows in this table.
+For both admins and non-admins, path-based mutating commands must stay inside the resolved registered project.
 
 ### Admin audit logs
 

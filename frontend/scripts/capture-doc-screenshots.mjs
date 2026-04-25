@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
@@ -10,9 +11,27 @@ const screenshotDir = path.join(repoRoot, 'docs', 'screenshots');
 const baseUrl = process.env.DEVSYNAPSE_UI_URL || 'http://127.0.0.1:5173';
 const apiUrl = process.env.DEVSYNAPSE_API_URL || 'http://127.0.0.1:8000';
 
+function expandHome(value) {
+  if (!value.startsWith('~')) {
+    return value;
+  }
+  return path.join(os.homedir(), value.slice(1));
+}
+
+function resolveRuntimeConfigPath() {
+  if (process.env.DEVSYNAPSE_CONFIG_FILE) {
+    return expandHome(process.env.DEVSYNAPSE_CONFIG_FILE);
+  }
+  if (process.env.DEVSYNAPSE_HOME) {
+    return path.join(expandHome(process.env.DEVSYNAPSE_HOME), 'config', '.env');
+  }
+  const configHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+  return path.join(configHome, 'devsynapse-ai', '.env');
+}
+
 async function loadLocalEnv() {
   try {
-    const content = await fs.readFile(path.join(repoRoot, '.env'), 'utf8');
+    const content = await fs.readFile(resolveRuntimeConfigPath(), 'utf8');
     return Object.fromEntries(
       content
         .split(/\r?\n/)
@@ -29,7 +48,11 @@ async function loadLocalEnv() {
 }
 
 function readConfig(localEnv, key, fallback) {
-  return process.env[key] || localEnv[key] || fallback;
+  const value = process.env[key] || localEnv[key] || fallback;
+  if (!value) {
+    throw new Error(`${key} must be set in the environment or runtime config`);
+  }
+  return value;
 }
 
 async function apiPost(route, payload, token) {
@@ -206,12 +229,12 @@ async function main() {
   try {
     const localEnv = await loadLocalEnv();
     const userToken = await login(
-      readConfig(localEnv, 'DEFAULT_USER_USERNAME', 'irving'),
-      readConfig(localEnv, 'DEFAULT_USER_PASSWORD', 'n1ghthill2026')
+      readConfig(localEnv, 'DEFAULT_USER_USERNAME'),
+      readConfig(localEnv, 'DEFAULT_USER_PASSWORD')
     );
     const adminToken = await login(
       readConfig(localEnv, 'DEFAULT_ADMIN_USERNAME', 'admin'),
-      readConfig(localEnv, 'DEFAULT_ADMIN_PASSWORD', 'devsynapse2026')
+      readConfig(localEnv, 'DEFAULT_ADMIN_PASSWORD')
     );
     const conversationId = `docs-shot-${Date.now()}`;
 

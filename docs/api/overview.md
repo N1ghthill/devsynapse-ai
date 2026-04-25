@@ -66,17 +66,20 @@ Purpose:
 Purpose:
 - inspect and update runtime-adjustable settings
 - configure the DeepSeek API key, DeepSeek model and generation limits
-- list known project metadata used for project context
+- list project metadata for user-facing project selection without exposing local paths
 
 ### Admin
 
 - `GET /admin/users`
 - `PUT /admin/users/{username}/permissions`
+- `GET /admin/projects`
+- `POST /admin/projects`
 - `GET /admin/audit-logs`
 
 Purpose:
 - inspect users
 - manage project-scoped mutation permissions
+- register known projects for project context and command working-directory resolution
 - review administrative changes
 
 ## Contract Notes
@@ -89,11 +92,18 @@ Purpose:
 - `/execute` returns structured execution status, reason code and project context
 - `/chat/history` and `/conversations/{conversation_id}` include persisted `project_name` when available
 - `/monitoring/stats` includes `llm_usage` aggregates, project-level breakdown and budget status snapshots
+- `/projects` returns registered project `name`, `type`, `priority`, `last_accessed` and `access_count`
+- `/admin/projects` returns registered projects with local `path` for administrative management
+- `POST /admin/projects` registers an existing local project directory; it does not scaffold files
+- `POST /admin/projects` rejects duplicate project names; updates should be explicit future behavior
 
 ## Authentication Behavior
 
 - routes using `require_user` or `require_admin` require a valid bearer token
+- chat, conversation, feedback, settings, project, monitoring stats/alerts, execution and usage export routes require an authenticated user
+- `/health` and `/monitoring/health` remain public readiness endpoints
 - admin routes require an admin role
+- admin users have global mutation scope across registered projects and do not use per-user project allowlists
 - frontend currently redirects to `/login` on `401`
 
 ## Contributor Rule

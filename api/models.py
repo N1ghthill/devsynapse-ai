@@ -146,6 +146,35 @@ class SettingsUpdateRequest(BaseModel):
     llm_budget_critical_threshold_pct: Optional[float] = Field(default=None, ge=0, le=200)
 
 
+class ProjectSummaryResponse(BaseModel):
+    name: str
+    type: str
+    priority: str
+    last_accessed: str
+    access_count: int
+
+
+class ProjectResponse(ProjectSummaryResponse):
+    path: str
+
+
+class ProjectListResponse(BaseModel):
+    projects: List[ProjectSummaryResponse]
+    count: int
+
+
+class AdminProjectListResponse(BaseModel):
+    projects: List[ProjectResponse]
+    count: int
+
+
+class ProjectCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    path: str = Field(..., min_length=1, max_length=500)
+    type: Optional[str] = Field(default=None, max_length=80)
+    priority: Optional[str] = Field(default=None, max_length=40)
+
+
 class AdminUserSummary(BaseModel):
     username: str
     role: str

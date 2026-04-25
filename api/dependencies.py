@@ -19,7 +19,10 @@ from core.plugin_system import plugin_manager
 
 settings = get_settings()
 memory_system = MemorySystem()
-opencode_bridge = OpenCodeBridge()
+opencode_bridge = OpenCodeBridge(
+    known_projects=memory_system.get_project_lookup(),
+    monitoring_system=monitoring_system,
+)
 devsynapse_brain = DevSynapseBrain(memory_system, opencode_bridge)
 auth_service = AuthService(memory_system)
 security = HTTPBearer(auto_error=False)

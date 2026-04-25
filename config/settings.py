@@ -15,11 +15,66 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
-LOGS_DIR = BASE_DIR / "logs"
 
-DATA_DIR.mkdir(exist_ok=True)
-LOGS_DIR.mkdir(exist_ok=True)
+
+def _expand_env_path(value: str | Path) -> Path:
+    return Path(value).expanduser().resolve()
+
+
+def _xdg_dir(env_name: str, default_relative: str) -> Path:
+    base = os.getenv(env_name)
+    if base:
+        return _expand_env_path(base)
+    return Path.home() / default_relative
+
+
+def _runtime_home() -> Optional[Path]:
+    value = os.getenv("DEVSYNAPSE_HOME")
+    return _expand_env_path(value) if value else None
+
+
+def parse_csv_or_json_list(value: str) -> List[str]:
+    value = value.strip()
+    if not value:
+        return ["*"]
+    if value.startswith("["):
+        parsed = json.loads(value)
+        if isinstance(parsed, list):
+            return [str(item).strip() for item in parsed if str(item).strip()] or ["*"]
+        return ["*"]
+    return [item.strip() for item in value.split(",") if item.strip()] or ["*"]
+
+
+def _default_config_dir() -> Path:
+    runtime_home = _runtime_home()
+    if runtime_home is not None:
+        return runtime_home / "config"
+    return _xdg_dir("XDG_CONFIG_HOME", ".config") / "devsynapse-ai"
+
+
+def _default_data_dir() -> Path:
+    runtime_home = _runtime_home()
+    if runtime_home is not None:
+        return runtime_home / "data"
+    return _xdg_dir("XDG_DATA_HOME", ".local/share") / "devsynapse-ai" / "data"
+
+
+def _default_logs_dir() -> Path:
+    runtime_home = _runtime_home()
+    if runtime_home is not None:
+        return runtime_home / "logs"
+    return _xdg_dir("XDG_STATE_HOME", ".local/state") / "devsynapse-ai" / "logs"
+
+
+CONFIG_DIR = _expand_env_path(os.getenv("DEVSYNAPSE_CONFIG_DIR", _default_config_dir()))
+CONFIG_FILE = _expand_env_path(os.getenv("DEVSYNAPSE_CONFIG_FILE", CONFIG_DIR / ".env"))
+DATA_DIR = _expand_env_path(os.getenv("DEVSYNAPSE_DATA_DIR", _default_data_dir()))
+LOGS_DIR = _expand_env_path(os.getenv("DEVSYNAPSE_LOGS_DIR", _default_logs_dir()))
+
+CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _default_workspace_root() -> Path:
@@ -40,20 +95,21 @@ def _default_repos_root() -> Path:
 
 
 class AppSettings(BaseSettings):
-    """Application settings loaded from environment or `.env`."""
+    """Application settings loaded from environment or the per-user runtime config."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=CONFIG_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
     app_name: str = "DevSynapse AI"
-    app_version: str = "0.3.2"
+    app_version: str = "0.3.3"
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     api_debug: bool = True
     api_base_url: Optional[str] = None
+    cors_allowed_origins: str = "*"
 
     deepseek_api_key: Optional[str] = None
     deepseek_model: str = "deepseek-chat"
@@ -82,8 +138,10 @@ class AppSettings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24
 
-    memory_db_path: Path = DATA_DIR / "devsynapse_memory.db"
-    monitoring_db_path: Path = DATA_DIR / "devsynapse_monitoring.db"
+    memory_db_path: Path = Field(default_factory=lambda: DATA_DIR / "devsynapse_memory.db")
+    monitoring_db_path: Path = Field(
+        default_factory=lambda: DATA_DIR / "devsynapse_monitoring.db"
+    )
     conversation_history_limit: int = 20
 
     opencode_timeout: int = 30
@@ -97,12 +155,15 @@ class AppSettings(BaseSettings):
     max_write_size: int = 5 * 1024 * 1024
 
     log_level: str = "INFO"
-    log_file: Path = LOGS_DIR / "devsynapse.log"
+    log_file: Path = Field(default_factory=lambda: LOGS_DIR / "devsynapse.log")
 
     default_admin_username: str = "admin"
     default_admin_password: str = "admin"
     default_user_username: str = ""
     default_user_password: str = ""
+
+    def get_cors_allowed_origins(self) -> List[str]:
+        return parse_csv_or_json_list(self.cors_allowed_origins)
 
     def build_allowed_directories(self) -> List[str]:
         roots = {str(self.dev_repos_root.resolve()), str(self.dev_workspace_root.resolve())}
@@ -168,6 +229,7 @@ DEEPSEEK_PRO_OUTPUT_PRICE_USD_PER_MILLION = (
     _settings.deepseek_pro_output_price_usd_per_million
 )
 MEMORY_DB_PATH = _settings.memory_db_path
+MONITORING_DB_PATH = _settings.monitoring_db_path
 VECTOR_DB_PATH = DATA_DIR / "chroma_db"
 CONVERSATION_HISTORY_LIMIT = _settings.conversation_history_limit
 OPENCODE_TIMEOUT = _settings.opencode_timeout

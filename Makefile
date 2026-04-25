@@ -12,7 +12,7 @@ setup:
 	else \
 		$(PIP) install -r requirements-dev.txt; \
 	fi
-	test -f .env || cp .env.example .env
+	$(PYTHON) scripts/ensure_runtime_config.py
 	$(PYTHON) scripts/migrate.py apply
 	$(PYTHON) scripts/manage_users.py seed-defaults
 	cd frontend && npm install
@@ -55,7 +55,7 @@ script-check:
 	bash -n scripts/ui_smoke.sh
 	bash -n scripts/update_locks.sh
 	bash -n devsynapse.sh
-	$(PYTHON) -m py_compile scripts/dev.py scripts/migrate.py scripts/manage_users.py
+	$(PYTHON) -m py_compile scripts/dev.py scripts/ensure_runtime_config.py scripts/migrate.py scripts/manage_users.py
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck scripts/install.sh scripts/uninstall.sh scripts/ui_smoke.sh scripts/update_locks.sh devsynapse.sh; \
 	else \

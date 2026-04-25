@@ -1,16 +1,14 @@
 """
 Unit tests for OpenCode bridge
 """
-import pytest
-import os
-import json
 import subprocess
-from unittest.mock import Mock, patch, AsyncMock
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
+
+from config.settings import ALLOWED_BASH_COMMANDS, ALLOWED_COMMANDS, BLACKLISTED_PATTERNS
 from core.opencode_bridge import OpenCodeBridge
-from config.settings import ALLOWED_COMMANDS, ALLOWED_BASH_COMMANDS, BLACKLISTED_PATTERNS
-
 
 PROJECT_NAME = "devsynapse-ai"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -22,6 +20,19 @@ PROJECTS = {
     }
 }
 ALLOWED_TEST_DIRECTORIES = [str(PROJECT_ROOT.parent), "/tmp", "/var/tmp"]
+
+
+class _MonitoringStub:
+    def log_command_execution(self, *args, **kwargs):
+        return None
+
+    def log_system_metric(self, *args, **kwargs):
+        return None
+
+
+@pytest.fixture(autouse=True)
+def isolate_bridge_monitoring(monkeypatch):
+    monkeypatch.setattr("core.opencode_bridge.default_monitoring_system", _MonitoringStub())
 
 
 def _bridge():
@@ -301,6 +312,85 @@ class TestOpenCodeBridge:
         assert authorized is False
         assert "não autorizada" in message
 
+    def test_authorize_admin_has_global_mutation_access_for_registered_project(self):
+        bridge = _bridge()
+
+        authorized, message = bridge._authorize_command(
+            "write",
+            [str(PROJECT_ROOT / "test.txt"), '--content="hello"'],
+            "admin",
+            "devsynapse-ai",
+            [],
+        )
+
+        assert authorized is True
+        assert "Autorizado" in message
+
+    def test_authorize_project_mutation_denies_paths_outside_project(self):
+        bridge = _bridge()
+
+        authorized, message = bridge._authorize_command(
+            "write",
+            [str(PROJECT_ROOT.parent / "outside.txt"), '--content="hello"'],
+            "user",
+            "devsynapse-ai",
+            ["devsynapse-ai"],
+        )
+
+        assert authorized is False
+        assert "fora do projeto" in message
+
+    def test_authorize_admin_mutation_denies_paths_outside_registered_project(self):
+        bridge = _bridge()
+
+        authorized, message = bridge._authorize_command(
+            "write",
+            [str(PROJECT_ROOT.parent / "outside.txt"), '--content="hello"'],
+            "admin",
+            "devsynapse-ai",
+            [],
+        )
+
+        assert authorized is False
+        assert "fora do projeto" in message
+
+    def test_authorize_mutating_bash_denies_paths_outside_project(self):
+        bridge = _bridge()
+
+        authorized, message = bridge._authorize_command(
+            "bash",
+            [f"touch {PROJECT_ROOT.parent / 'outside.txt'}", ""],
+            "user",
+            "devsynapse-ai",
+            ["devsynapse-ai"],
+        )
+
+        assert authorized is False
+        assert "fora do projeto" in message
+
+    def test_authorize_mutating_bash_checks_target_directory_option(self):
+        bridge = _bridge()
+
+        authorized, message = bridge._authorize_command(
+            "bash",
+            [f"cp -t {PROJECT_ROOT.parent} {PROJECT_ROOT / 'README.md'}", ""],
+            "user",
+            "devsynapse-ai",
+            ["devsynapse-ai"],
+        )
+
+        assert authorized is False
+        assert "fora do projeto" in message
+
+    def test_register_project_updates_bridge_lookup(self):
+        bridge = _bridge()
+        docs_path = PROJECT_ROOT / "docs"
+
+        bridge.register_project("docs-project", str(docs_path), "docs", "low")
+
+        assert bridge.get_project_context("docs-project")["path"] == str(docs_path)
+        assert bridge._resolve_project_cwd("docs-project") == str(docs_path)
+
     def test_infer_project_name_from_file_path(self):
         bridge = _bridge()
 
@@ -361,6 +451,51 @@ class TestOpenCodeBridge:
         assert project_name == "devsynapse-ai"
 
     @pytest.mark.asyncio
+    async def test_execute_command_normalizes_relative_read_path_against_project(self):
+        bridge = _bridge()
+
+        with patch.object(bridge, "_execute_read", new_callable=AsyncMock) as mock_read:
+            mock_read.return_value = (True, "read", "content")
+
+            success, message, output, status, reason_code, project_name = await bridge.execute_command(
+                'read "README.md"',
+                project_name="devsynapse-ai",
+                user_role="user",
+            )
+
+        mock_read.assert_awaited_once_with([str(PROJECT_ROOT / "README.md"), ""])
+        assert success is True
+        assert message == "read"
+        assert output == "content"
+        assert status == "success"
+        assert reason_code is None
+        assert project_name == "devsynapse-ai"
+
+    @pytest.mark.asyncio
+    async def test_execute_command_normalizes_relative_mutation_path_against_project(self):
+        bridge = _bridge()
+
+        with patch.object(bridge, "_execute_write", new_callable=AsyncMock) as mock_write:
+            mock_write.return_value = (True, "created", "ok")
+
+            success, message, output, status, reason_code, project_name = await bridge.execute_command(
+                'write "notes/devsynapse.txt" --content="hello"',
+                project_name="devsynapse-ai",
+                user_role="user",
+                project_mutation_allowlist=["devsynapse-ai"],
+            )
+
+        mock_write.assert_awaited_once_with(
+            [str(PROJECT_ROOT / "notes" / "devsynapse.txt"), '--content="hello"']
+        )
+        assert success is True
+        assert message == "created"
+        assert output == "ok"
+        assert status == "success"
+        assert reason_code is None
+        assert project_name == "devsynapse-ai"
+
+    @pytest.mark.asyncio
     async def test_execute_command_validation_failure(self):
         bridge = _bridge()
 
@@ -413,3 +548,19 @@ class TestOpenCodeBridge:
         success, message, output = await bridge._execute_read(["/tmp/nonexistent_file_xyz.txt"])
         assert success is False
         assert "não encontrado" in message
+
+    @pytest.mark.asyncio
+    async def test_execute_edit_without_backup_enabled(self, tmp_path):
+        bridge = _bridge()
+        bridge.backup_enabled = False
+        target = tmp_path / "edit.txt"
+        target.write_text("alpha beta", encoding="utf-8")
+
+        success, message, output = await bridge._execute_edit(
+            [str(target), '--old="alpha" --new="omega"']
+        )
+
+        assert success is True
+        assert "Editado" in message
+        assert "Backup: desabilitado" in output
+        assert target.read_text(encoding="utf-8") == "omega beta"

@@ -3,7 +3,7 @@
 # DevSynapse AI — Uninstaller
 #
 # Remove os artefatos locais do DevSynapse, os aliases do shell,
-# e opcionalmente os dados e o diretório do projeto.
+# e opcionalmente os dados runtime e o diretório do projeto.
 #
 # Uso:
 #   uninstall-devsynapse     # via alias (configurado pelo install.sh)
@@ -13,6 +13,48 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+APP_ID="devsynapse-ai"
+
+if [ -n "${DEVSYNAPSE_HOME:-}" ]; then
+    RUNTIME_HOME="${DEVSYNAPSE_HOME/#\~/$HOME}"
+    CONFIG_DIR="${DEVSYNAPSE_CONFIG_DIR:-$RUNTIME_HOME/config}"
+    DATA_DIR="${DEVSYNAPSE_DATA_DIR:-$RUNTIME_HOME/data}"
+    LOGS_DIR="${DEVSYNAPSE_LOGS_DIR:-$RUNTIME_HOME/logs}"
+else
+    CONFIG_DIR="${DEVSYNAPSE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/$APP_ID}"
+    DATA_DIR="${DEVSYNAPSE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/$APP_ID/data}"
+    LOGS_DIR="${DEVSYNAPSE_LOGS_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/$APP_ID/logs}"
+fi
+CONFIG_FILE="${DEVSYNAPSE_CONFIG_FILE:-$CONFIG_DIR/.env}"
+
+get_config_value() {
+    local key="$1"
+    local default_value="${2:-}"
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "$default_value"
+        return
+    fi
+
+    awk -F= -v key="$key" -v default_value="$default_value" '
+        $1 == key {
+            sub("^[^=]*=", "")
+            print
+            found = 1
+            exit
+        }
+        END {
+            if (found != 1) {
+                print default_value
+            }
+        }
+    ' "$CONFIG_FILE"
+}
+
+MEMORY_DB_FILE="$(get_config_value "MEMORY_DB_PATH" "$DATA_DIR/devsynapse_memory.db")"
+LOG_FILE="$(get_config_value "LOG_FILE" "$LOGS_DIR/devsynapse.log")"
+DATA_DIR="$(dirname "$MEMORY_DB_FILE")"
+LOGS_DIR="$(dirname "$LOG_FILE")"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -98,31 +140,33 @@ main() {
 
     local delete_data="n"
     echo ""
-    echo -e "  ${YELLOW}⚠  Isso inclui histórico de conversas e telemetria.${NC}"
+    echo -e "  ${YELLOW}⚠  Isso inclui histórico de conversas e telemetria em:${NC}"
+    echo -e "     ${CYAN}$DATA_DIR${NC}"
+    echo -e "     ${CYAN}$LOGS_DIR${NC}"
     echo ""
-    read -r -p "  Remover diretório data/ e logs/? [s/N]: " delete_data
+    read -r -p "  Remover dados e logs runtime? [s/N]: " delete_data
 
     if [ "${delete_data,,}" = "s" ] || [ "${delete_data,,}" = "sim" ]; then
-        remove_if_exists "$ROOT_DIR/data" "data/"
-        remove_if_exists "$ROOT_DIR/logs" "logs/"
+        remove_if_exists "$DATA_DIR" "runtime data/"
+        remove_if_exists "$LOGS_DIR" "runtime logs/"
     else
-        info "data/ e logs/ mantidos"
+        info "dados e logs runtime mantidos"
     fi
 
-    # 5. .env file
+    # 5. Runtime config file
     echo ""
-    echo -e "${BOLD}5. Arquivo .env...${NC}"
+    echo -e "${BOLD}5. Arquivo de configuração runtime...${NC}"
 
     local delete_env="n"
     echo ""
-    echo -e "  O arquivo ${CYAN}.env${NC} contém sua API key do DeepSeek."
+    echo -e "  O arquivo ${CYAN}$CONFIG_FILE${NC} contém sua API key do DeepSeek."
     echo ""
-    read -r -p "  Remover .env? [s/N]: " delete_env
+    read -r -p "  Remover configuração runtime? [s/N]: " delete_env
 
     if [ "${delete_env,,}" = "s" ] || [ "${delete_env,,}" = "sim" ]; then
-        remove_if_exists "$ROOT_DIR/.env" ".env"
+        remove_if_exists "$CONFIG_FILE" "configuração runtime"
     else
-        info ".env mantido (contém sua API key)"
+        info "configuração runtime mantida (contém sua API key)"
     fi
 
     # 6. Project directory

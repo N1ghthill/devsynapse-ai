@@ -2,7 +2,7 @@
 
 ## Versioning
 
-The current documented baseline aligns with application version `0.2.0` from [config/settings.py](config/settings.py).
+The current documented baseline aligns with application version `0.3.3` from [config/settings.py](config/settings.py).
 
 ## Release Checklist
 
@@ -10,8 +10,10 @@ The current documented baseline aligns with application version `0.2.0` from [co
 2. Run:
 
 ```bash
-./venv/bin/pytest -q
-cd frontend && npm run build
+make verify
+make ui-smoke
+./venv/bin/pip check
+cd frontend && npm audit --audit-level=high
 ```
 
 3. Review `CHANGELOG.md`.
@@ -19,14 +21,14 @@ cd frontend && npm run build
 5. Tag the release in git.
 6. Publish the GitHub release.
 
-## Initial Release
+## Current Release
 
-The first public baseline should use:
+The current public-readiness baseline should use:
 
 ```text
-v0.2.0
+v0.3.3
 ```
 
 With notes based on:
 - [CHANGELOG.md](CHANGELOG.md)
-- [docs/releases/v0.2.0.md](docs/releases/v0.2.0.md)
+- [docs/releases/v0.3.3.md](docs/releases/v0.3.3.md)

@@ -46,5 +46,5 @@ def test_format_admin_password_for_display_hides_custom_password() -> None:
     assert dev.format_admin_password_for_display("admin") == "admin"
     assert (
         dev.format_admin_password_for_display("custom-secret")
-        == "value from DEFAULT_ADMIN_PASSWORD in .env"
+        == "value from DEFAULT_ADMIN_PASSWORD in runtime config"
     )

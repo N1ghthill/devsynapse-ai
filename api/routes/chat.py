@@ -38,10 +38,12 @@ router = APIRouter(tags=["chat"])
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(
     request: ChatRequest,
+    user=Depends(require_user),
     brain: DevSynapseBrain = Depends(get_brain),
     memory_system: MemorySystem = Depends(get_memory_system),
     monitoring_system=Depends(get_monitoring_system),
 ):
+    del user
     conversation_id = request.conversation_id or str(uuid.uuid4())
 
     try:
@@ -78,8 +80,11 @@ async def chat_endpoint(
 @router.post("/chat/stream")
 async def chat_stream_endpoint(
     request: ChatRequest,
+    user=Depends(require_user),
     brain: DevSynapseBrain = Depends(get_brain),
 ):
+    del user
+
     async def event_generator():
         conversation_id = request.conversation_id or str(uuid.uuid4())
         try:
@@ -107,8 +112,10 @@ async def chat_stream_endpoint(
 @router.get("/chat/history")
 async def get_history(
     conversation_id: str | None = None,
+    user=Depends(require_user),
     memory_system: MemorySystem = Depends(get_memory_system),
 ):
+    del user
     context = await memory_system.get_conversation_context(conversation_id)
     return {
         "conversation_id": conversation_id,
@@ -120,8 +127,10 @@ async def get_history(
 @router.get("/conversations/{conversation_id}")
 async def get_conversation(
     conversation_id: str,
+    user=Depends(require_user),
     memory_system: MemorySystem = Depends(get_memory_system),
 ):
+    del user
     context = await memory_system.get_conversation_context(conversation_id)
     return {
         "conversation_id": conversation_id,
@@ -134,8 +143,10 @@ async def get_conversation(
 @router.get("/conversations", response_model=ConversationListResponse)
 async def list_conversations(
     limit: int = 20,
+    user=Depends(require_user),
     memory_system: MemorySystem = Depends(get_memory_system),
 ):
+    del user
     return {"conversations": memory_system.list_conversations(limit=limit)}
 
 
@@ -157,8 +168,10 @@ async def export_conversation_usage_csv(
 async def rename_conversation(
     conversation_id: str,
     payload: ConversationRenameRequest,
+    user=Depends(require_user),
     memory_system: MemorySystem = Depends(get_memory_system),
 ):
+    del user
     updated = memory_system.rename_conversation(conversation_id, payload.title)
     if not updated:
         raise HTTPException(status_code=404, detail="Conversa não encontrada")
@@ -168,8 +181,10 @@ async def rename_conversation(
 @router.delete("/conversations/{conversation_id}", response_model=ConversationMutationResponse)
 async def delete_conversation(
     conversation_id: str,
+    user=Depends(require_user),
     memory_system: MemorySystem = Depends(get_memory_system),
 ):
+    del user
     deleted = memory_system.delete_conversation(conversation_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversa não encontrada")
@@ -220,7 +235,7 @@ async def execute_command(
             monitoring_system.log_api_request,
             endpoint="/execute",
             method="POST",
-            status_code=200 if success else 500,
+            status_code=200,
             response_time=response_time,
             user_id=user["username"],
             ip_address=None,
@@ -254,8 +269,10 @@ async def execute_command(
 @router.post("/feedback", response_model=FeedbackResponse)
 async def submit_feedback(
     request: FeedbackRequest,
+    user=Depends(require_user),
     memory_system: MemorySystem = Depends(get_memory_system),
 ):
+    del user
     try:
         await memory_system.save_feedback(
             conversation_id=request.conversation_id,

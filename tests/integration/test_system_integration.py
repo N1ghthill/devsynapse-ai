@@ -1,17 +1,14 @@
 """
 Integration tests for DevSynapse system
 """
-import pytest
 import sqlite3
-from unittest.mock import Mock, patch, AsyncMock
-import os
 from pathlib import Path
 
-from core.brain import DevSynapseBrain
-from core.memory import MemorySystem
-from core.opencode_bridge import OpenCodeBridge
-from core.monitoring import MonitoringSystem
+import pytest
 
+from core.memory import MemorySystem
+from core.monitoring import MonitoringSystem
+from core.opencode_bridge import OpenCodeBridge
 
 PROJECT_NAME = "devsynapse-ai"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -63,43 +60,42 @@ class TestSystemIntegration:
         assert row[1] == 5
 
     def test_monitoring_lifecycle(self, tmp_path):
-        with patch('core.monitoring.DATA_DIR', tmp_path):
-            monitor = MonitoringSystem()
+        monitor = MonitoringSystem(tmp_path / "monitoring.db")
 
-            monitor.log_command_execution(
-                command_type="bash",
-                command_text="ls -la",
-                success=True,
-                execution_time=0.05,
-                user_id="test_user",
-                project_name="DevSynapse"
-            )
+        monitor.log_command_execution(
+            command_type="bash",
+            command_text="ls -la",
+            success=True,
+            execution_time=0.05,
+            user_id="test_user",
+            project_name="DevSynapse"
+        )
 
-            monitor.log_api_request(
-                endpoint="/chat",
-                method="POST",
-                status_code=200,
-                response_time=1.5,
-                user_id="test_user"
-            )
+        monitor.log_api_request(
+            endpoint="/chat",
+            method="POST",
+            status_code=200,
+            response_time=1.5,
+            user_id="test_user"
+        )
 
-            monitor.log_system_metric(
-                metric_name="cpu_usage",
-                metric_value=45.2,
-                tags={"host": "localhost"}
-            )
+        monitor.log_system_metric(
+            metric_name="cpu_usage",
+            metric_value=45.2,
+            tags={"host": "localhost"}
+        )
 
-            cmd_stats = monitor.get_command_stats(hours=24)
-            assert cmd_stats["totals"]["total"] >= 1
+        cmd_stats = monitor.get_command_stats(hours=24)
+        assert cmd_stats["totals"]["total"] >= 1
 
-            api_stats = monitor.get_api_stats(hours=24)
-            assert api_stats["totals"]["total_requests"] >= 1
+        api_stats = monitor.get_api_stats(hours=24)
+        assert api_stats["totals"]["total_requests"] >= 1
 
-            health = monitor.get_system_health()
-            assert "overall_status" in health
+        health = monitor.get_system_health()
+        assert "overall_status" in health
 
-            alerts = monitor.get_active_alerts()
-            assert isinstance(alerts, list)
+        alerts = monitor.get_active_alerts()
+        assert isinstance(alerts, list)
 
     def test_security_integration(self):
         bridge = OpenCodeBridge()
@@ -189,23 +185,22 @@ class TestSystemIntegration:
         assert final > initial
 
     def test_monitoring_alert_lifecycle(self, tmp_path):
-        with patch('core.monitoring.DATA_DIR', tmp_path):
-            monitor = MonitoringSystem()
+        monitor = MonitoringSystem(tmp_path / "monitoring.db")
 
-            monitor.log_command_execution(
-                command_type="bash",
-                command_text="rm -rf /",
-                success=False,
-                execution_time=0.01,
-                error_message="Permission denied: cannot delete system files"
-            )
+        monitor.log_command_execution(
+            command_type="bash",
+            command_text="rm -rf /",
+            success=False,
+            execution_time=0.01,
+            error_message="Permission denied: cannot delete system files"
+        )
 
-            alerts = monitor.get_active_alerts()
-            assert len(alerts) >= 1
-            assert alerts[0]["alert_type"] == "command_failure"
+        alerts = monitor.get_active_alerts()
+        assert len(alerts) >= 1
+        assert alerts[0]["alert_type"] == "command_failure"
 
-            monitor.resolve_alert(alerts[0]["id"])
+        monitor.resolve_alert(alerts[0]["id"])
 
-            active = monitor.get_active_alerts()
-            resolved_ids = [a["id"] for a in active]
-            assert alerts[0]["id"] not in resolved_ids
+        active = monitor.get_active_alerts()
+        resolved_ids = [a["id"] for a in active]
+        assert alerts[0]["id"] not in resolved_ids

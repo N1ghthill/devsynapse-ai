@@ -7,6 +7,7 @@ export type CommandExecutionStatus =
 
 export interface ProjectInfo {
   name: string;
+  path?: string;
   type: string;
   priority: string;
   last_accessed: string;
@@ -196,4 +197,11 @@ export interface AdminAuditLog {
   action: string;
   details: Record<string, unknown>;
   created_at: string;
+}
+
+export interface ProjectCreateRequest {
+  name: string;
+  path: string;
+  type?: string;
+  priority?: string;
 }
