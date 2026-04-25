@@ -27,6 +27,7 @@ from config.settings import (
     OPENCODE_TIMEOUT,
     READ_ONLY_COMMANDS,
     USER_BASH_COMMANDS,
+    get_settings,
 )
 from core.monitoring import monitoring_system
 from core.plugin_system import plugin_manager
@@ -129,13 +130,15 @@ class OpenCodeBridge:
         try:
             # Executar comando baseado no tipo
             if command_type == "bash":
-                result = await self._execute_bash(args)
+                resolved_cwd = self._resolve_project_cwd(effective_project_name)
+                result = await self._execute_bash(args, resolved_cwd)
             elif command_type == "read":
                 result = await self._execute_read(args)
             elif command_type == "glob":
                 result = await self._execute_glob(args)
             elif command_type == "grep":
-                result = await self._execute_grep(args)
+                resolved_cwd = self._resolve_project_cwd(effective_project_name)
+                result = await self._execute_grep(args, resolved_cwd)
             elif command_type == "edit":
                 result = await self._execute_edit(args)
             elif command_type == "write":
@@ -333,10 +336,19 @@ class OpenCodeBridge:
         if not text:
             return None
 
+        best_match: Optional[str] = None
+        best_score: int = -1
+
         for project_name, project_info in KNOWN_PROJECTS.items():
             project_path = str(Path(project_info["path"]).resolve())
             if project_name in text or project_path in text:
-                return project_name
+                score = len(project_name)
+                if score > best_score:
+                    best_score = score
+                    best_match = project_name
+
+        if best_match:
+            return best_match
 
         try:
             path = Path(text).resolve()
@@ -347,12 +359,23 @@ class OpenCodeBridge:
             project_path = Path(project_info["path"]).resolve()
             try:
                 if path.is_relative_to(project_path):
-                    return project_name
+                    score = len(project_name)
+                    if score > best_score:
+                        best_score = score
+                        best_match = project_name
             except ValueError:
                 continue
 
-        return None
+        return best_match
     
+    def _resolve_project_cwd(self, project_name: Optional[str]) -> str:
+        """Resolve the working directory for a project, falling back to default."""
+        if project_name and project_name in KNOWN_PROJECTS:
+            project_path = Path(KNOWN_PROJECTS[project_name]["path"])
+            if project_path.is_dir():
+                return str(project_path)
+        return str(get_settings().default_execution_cwd)
+
     def _validate_bash_command(self, command: str) -> bool:
         """Valida um comando bash"""
         
@@ -424,7 +447,7 @@ class OpenCodeBridge:
         except Exception:
             return False
     
-    async def _execute_bash(self, args: List) -> Tuple[bool, str, Optional[str]]:
+    async def _execute_bash(self, args: List, cwd: Optional[str] = None) -> Tuple[bool, str, Optional[str]]:
         """Executa comando bash"""
         
         command = args[0]
@@ -437,13 +460,14 @@ class OpenCodeBridge:
             if parts[0] == "cd":
                 return False, "Comando bash não permitido para execução direta: cd", None
 
+            exec_cwd = cwd or str(get_settings().default_execution_cwd)
             # Executar com timeout
             result = subprocess.run(
                 parts,
                 capture_output=True,
                 text=True,
                 timeout=OPENCODE_TIMEOUT,
-                cwd="/home/irving"  # Diretório seguro
+                cwd=exec_cwd,
             )
             
             output = result.stdout
@@ -518,7 +542,7 @@ class OpenCodeBridge:
         except Exception as e:
             return False, f"Erro buscando arquivos: {str(e)}", None
     
-    async def _execute_grep(self, args: List) -> Tuple[bool, str, Optional[str]]:
+    async def _execute_grep(self, args: List, cwd: Optional[str] = None) -> Tuple[bool, str, Optional[str]]:
         """Simula comando grep do OpenCode"""
         
         pattern = args[0]
@@ -538,8 +562,7 @@ class OpenCodeBridge:
             if include_pattern:
                 cmd.extend(["--include", include_pattern])
             
-            # Diretório base seguro
-            base_dir = "/home/irving/ruas/repos"
+            base_dir = cwd or str(get_settings().dev_repos_root.resolve())
             cmd.append(base_dir)
             
             result = subprocess.run(
