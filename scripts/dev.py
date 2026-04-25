@@ -133,7 +133,7 @@ def main() -> int:
 
     print("")
     print("╔══════════════════════════════════════════════════╗")
-    print("║              DevSynapse AI v0.3.0               ║")
+    print("║              DevSynapse AI v0.3.1               ║")
     print("╚══════════════════════════════════════════════════╝")
     print("")
     print(f"Frontend:  http://{API_HOST}:{FRONTEND_PORT}")

@@ -12,9 +12,9 @@
 #   2. Cria venv
 #   3. Instala dependências Python
 #   4. Instala dependências do frontend (npm)
-#   5. Pergunta e configura API key DeepSeek e diretório de repositórios
+#   5. Pergunta e configura API key DeepSeek, diretórios e senha admin
 #   6. Executa migrações do banco
-#   7. Cria usuário admin padrão (admin / admin)
+#   7. Cria usuário admin com a senha configurada
 #   8. Build do frontend para produção
 #   9. Adiciona aliases `devsynapse` e `uninstall-devsynapse` ao shell
 
@@ -74,6 +74,39 @@ ensure_env_value() {
     fi
 }
 
+get_env_value() {
+    local key="$1"
+    local default_value="${2:-}"
+    local env_file="$ROOT_DIR/.env"
+
+    if [ ! -f "$env_file" ]; then
+        echo "$default_value"
+        return
+    fi
+
+    awk -F= -v key="$key" -v default_value="$default_value" '
+        $1 == key {
+            sub("^[^=]*=", "")
+            print
+            found = 1
+            exit
+        }
+        END {
+            if (found != 1) {
+                print default_value
+            }
+        }
+    ' "$env_file"
+}
+
+install_python_requirements() {
+    if [ -f "$ROOT_DIR/requirements.lock" ]; then
+        pip install -r "$ROOT_DIR/requirements.txt" -c "$ROOT_DIR/requirements.lock"
+    else
+        pip install -r "$ROOT_DIR/requirements.txt"
+    fi
+}
+
 # ---- System dependency check ----
 
 check_system_deps() {
@@ -113,7 +146,7 @@ check_system_deps() {
 install() {
     echo ""
     echo -e "${BOLD}${CYAN}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}${CYAN}║        DevSynapse AI Installer v0.3.0           ║${NC}"
+    echo -e "${BOLD}${CYAN}║        DevSynapse AI Installer v0.3.1           ║${NC}"
     echo -e "${BOLD}${CYAN}╚══════════════════════════════════════════════════╝${NC}"
 
     step "1/9" "Verificando dependências de sistema..."
@@ -136,7 +169,7 @@ install() {
     source "$ROOT_DIR/venv/bin/activate"
 
     step "3/9" "Instalando dependências Python..."
-    pip install -r "$ROOT_DIR/requirements.txt" 2>&1 | tail -3
+    install_python_requirements 2>&1 | tail -3
     ok "Dependências Python instaladas"
 
     step "4/9" "Instalando dependências do frontend..."
@@ -206,6 +239,41 @@ install() {
     ensure_env_value "DEV_WORKSPACE_ROOT" "$HOME"
     ok "Diretório de repositórios: $repos_root"
 
+    echo ""
+    echo -e "  ${BOLD}Senha do usuário admin${NC}"
+    echo -e "  Use uma senha local forte. Enter mantém a senha atual do .env."
+    echo ""
+
+    local current_admin_password
+    local admin_password=""
+    local admin_password_confirm=""
+    current_admin_password="$(get_env_value "DEFAULT_ADMIN_PASSWORD" "admin")"
+
+    while true; do
+        read -r -s -p "  Nova senha admin (Enter para manter atual): " admin_password
+        echo ""
+
+        if [ -z "$admin_password" ]; then
+            if [ "$current_admin_password" = "admin" ]; then
+                warn "Senha admin mantida. Troque o padrão 'admin' antes de usar fora do ambiente local."
+            else
+                ok "Senha admin mantida a partir do .env"
+            fi
+            break
+        fi
+
+        read -r -s -p "  Confirme a senha admin: " admin_password_confirm
+        echo ""
+
+        if [ "$admin_password" = "$admin_password_confirm" ]; then
+            set_env_value "DEFAULT_ADMIN_PASSWORD" "$admin_password"
+            ok "Senha admin configurada"
+            break
+        fi
+
+        warn "As senhas não coincidem. Tente novamente."
+    done
+
     step "6/9" "Executando migrações do banco..."
     python3 "$ROOT_DIR/scripts/migrate.py" apply || {
         fail "Falha nas migrações"
@@ -218,7 +286,7 @@ install() {
         fail "Falha ao criar usuário"
         exit 1
     }
-    ok "Usuário admin padrão criado (admin / admin)"
+    ok "Usuário admin padrão criado/confirmado"
 
     step "8/9" "Build do frontend para produção..."
     cd "$ROOT_DIR/frontend"
@@ -298,7 +366,13 @@ install() {
     echo ""
     echo -e "${BOLD}Credenciais padrão:${NC}"
     echo -e "   Login: ${GREEN}admin${NC}"
-    echo -e "   Senha: ${GREEN}admin${NC}"
+    if [ -n "$admin_password" ]; then
+        echo -e "   Senha: ${GREEN}configurada durante a instalação${NC}"
+    elif [ "$current_admin_password" = "admin" ]; then
+        echo -e "   Senha: ${GREEN}admin${NC}"
+    else
+        echo -e "   Senha: ${GREEN}valor atual de DEFAULT_ADMIN_PASSWORD no .env${NC}"
+    fi
     echo ""
     echo -e "${BOLD}Links (após iniciar):${NC}"
     echo -e "   Frontend: ${CYAN}http://127.0.0.1:5173${NC}"

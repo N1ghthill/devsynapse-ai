@@ -191,7 +191,14 @@ export const settingsApi = {
   },
 
   update: async (data: Partial<SettingsData>): Promise<SettingsData> => {
-    const response = await api.put<SettingsData>('/settings', data);
+    const payload = { ...data };
+    if (
+      typeof payload.deepseek_api_key !== 'string' ||
+      payload.deepseek_api_key.trim() === ''
+    ) {
+      delete payload.deepseek_api_key;
+    }
+    const response = await api.put<SettingsData>('/settings', payload);
     return response.data;
   },
 

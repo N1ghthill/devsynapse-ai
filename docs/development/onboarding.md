@@ -77,9 +77,9 @@ Default local URLs:
 
 ## Seeded Local Users
 
-The local setup seeds one admin user by default. Change these credentials immediately for any non-local environment.
+The local setup seeds one admin user by default. The installer prompts for this password during setup; change it immediately for any non-local environment.
 
-- `admin` / value from `DEFAULT_ADMIN_PASSWORD` in `.env` (default: `admin`)
+- `admin` / value from `DEFAULT_ADMIN_PASSWORD` in `.env`
 
 To add a non-admin user, set `DEFAULT_USER_USERNAME` and `DEFAULT_USER_PASSWORD` in `.env`.
 
@@ -106,13 +106,14 @@ cd frontend && npm run dev
 
 ## Clean Clone Validation
 
-This guide was revalidated from a clean clone on `2026-04-24` with:
+This guide was revalidated from a clean clone on `2026-04-25` with:
 
 - backend dependency install in a new `venv`
 - frontend dependency install with `npm install`
 - `make migrate`
 - `make seed-users`
 - `./venv/bin/pytest -q tests/integration/test_api_routes.py`
-- `cd frontend && npm run build`
+- `make script-check`
+- `cd frontend && npm run lint && npm run build`
 
 That validation passed without requiring repo-local manual fixes.

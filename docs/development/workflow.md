@@ -36,15 +36,21 @@ npm run dev
 - `make migrate`: apply all SQLite migrations
 - `make migration-status`: inspect current schema versions
 
+Python dependency manifests are split by purpose:
+- `requirements.txt`: runtime dependencies
+- `requirements-dev.txt`: development and test dependencies
+- `requirements.lock` / `requirements-dev.lock`: resolved constraints used by Makefile and CI when installing
+
 ## Revalidated Public Onboarding
 
-The contributor path was revalidated from a clean public clone on `2026-04-24` with:
+The contributor path was revalidated from a clean public clone on `2026-04-25` with:
 
 - `python3 -m venv venv`
 - `source venv/bin/activate`
 - `make setup`
 - `./venv/bin/pytest -q tests/integration/test_api_routes.py`
-- `cd frontend && npm install && npm run build`
+- `make script-check`
+- `cd frontend && npm install && npm run lint && npm run build`
 
 ## User Administration
 

@@ -6,6 +6,29 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+## [v0.3.1] - 2026-04-25
+
+### Added
+- Scheduled and manually dispatchable CI runs
+- CI checks for ShellCheck, shell syntax, Python utility script compilation and frontend ESLint
+- Automated smoke tests for installer, uninstaller and development-server shutdown behavior
+- Release notes for `v0.3.1`
+
+### Changed
+- `make verify` now runs backend lint, backend tests, script checks, frontend lint and frontend build
+- GitHub Actions workflow now uses current `actions/checkout`, `actions/setup-python` and `actions/setup-node` major versions
+- Runtime dependencies are kept in `requirements.txt`; development and test tooling stays in `requirements-dev.txt`
+- Installer now prompts for the admin password during setup
+
+### Fixed
+- CI portability failures caused by tests depending on machine-specific absolute paths
+- Project attribution now considers persisted project records in addition to configured projects
+- `scripts/install.sh` now updates `.env` without corrupting values containing shell-sensitive characters
+- `scripts/dev.py` now terminates backend/frontend process groups cleanly
+- ShellCheck warnings in uninstall script
+
+## [v0.3.0] - 2026-04-24
+
 ### Added
 - MIT license and open source contribution policy
 - structured documentation set for contributors and maintainers

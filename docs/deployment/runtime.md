@@ -14,6 +14,8 @@ Current checks:
 - frontend lint pass
 - frontend production build
 
+Python dependencies are installed with checked-in lock constraints in CI to reduce drift from upstream package releases.
+
 ## Authorization Boundary
 
 `/execute` now requires authentication and applies role-aware authorization inside the command bridge:

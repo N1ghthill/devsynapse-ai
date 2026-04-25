@@ -49,7 +49,7 @@ class AppSettings(BaseSettings):
     )
 
     app_name: str = "DevSynapse AI"
-    app_version: str = "0.3.0"
+    app_version: str = "0.3.1"
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     api_debug: bool = True

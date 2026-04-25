@@ -2,10 +2,11 @@
 
 ## Current Verification Baseline
 
-At the latest documentation refresh on `2026-04-24`, local verification produced:
-- `116` passing backend tests
-- successful frontend production build
-- curated UI screenshots captured from the local runtime for documentation evidence
+At the latest documentation refresh on `2026-04-25`, local verification produced:
+- `119` passing backend tests
+- successful script checks
+- successful frontend lint and production build
+- passing installer/uninstaller and development-server smoke tests
 
 ## Test Layout
 

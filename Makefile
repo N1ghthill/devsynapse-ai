@@ -7,7 +7,11 @@ RUFF ?= ./venv/bin/ruff
 
 setup:
 	python3 -m venv venv
-	$(PIP) install -r requirements-dev.txt
+	@if [ -f requirements-dev.lock ]; then \
+		$(PIP) install -r requirements-dev.txt -c requirements-dev.lock; \
+	else \
+		$(PIP) install -r requirements-dev.txt; \
+	fi
 	test -f .env || cp .env.example .env
 	$(PYTHON) scripts/migrate.py apply
 	$(PYTHON) scripts/manage_users.py seed-defaults
@@ -17,10 +21,18 @@ dev:
 	$(PYTHON) scripts/dev.py
 
 install:
-	$(PIP) install -r requirements.txt
+	@if [ -f requirements.lock ]; then \
+		$(PIP) install -r requirements.txt -c requirements.lock; \
+	else \
+		$(PIP) install -r requirements.txt; \
+	fi
 
 install-dev:
-	$(PIP) install -r requirements-dev.txt
+	@if [ -f requirements-dev.lock ]; then \
+		$(PIP) install -r requirements-dev.txt -c requirements-dev.lock; \
+	else \
+		$(PIP) install -r requirements-dev.txt; \
+	fi
 
 run:
 	$(PYTHON) -m uvicorn api.app:app --host 127.0.0.1 --port 8000 --reload

@@ -24,7 +24,7 @@ NC='\033[0m'
 banner() {
     echo ""
     echo -e "${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}${BOLD}║              DevSynapse AI v0.3.0               ║${NC}"
+    echo -e "${CYAN}${BOLD}║              DevSynapse AI v0.3.1               ║${NC}"
     echo -e "${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
 }

@@ -128,7 +128,7 @@ def test_install_script_writes_env_and_aliases_portably(tmp_path: Path) -> None:
         fake_bin,
         home,
         "scripts/install.sh",
-        f"sk-test&ci\n{repos_root}\n",
+        f"sk-test&ci\n{repos_root}\nfirst-pass\nfirst-pass\n",
     )
     assert first.returncode == 0, first.stdout + first.stderr
 
@@ -137,7 +137,7 @@ def test_install_script_writes_env_and_aliases_portably(tmp_path: Path) -> None:
         fake_bin,
         home,
         "scripts/install.sh",
-        f"sk-test&ci-updated\n{repos_root}\n",
+        f"sk-test&ci-updated\n{repos_root}\nsecond-pass\nsecond-pass\n",
     )
     assert second.returncode == 0, second.stdout + second.stderr
 
@@ -145,6 +145,7 @@ def test_install_script_writes_env_and_aliases_portably(tmp_path: Path) -> None:
     assert "DEEPSEEK_API_KEY=sk-test&ci-updated" in env_text
     assert f"DEV_REPOS_ROOT={repos_root}" in env_text
     assert f"DEV_WORKSPACE_ROOT={home}" in env_text
+    assert "DEFAULT_ADMIN_PASSWORD=second-pass" in env_text
 
     assert (repo / "venv").is_dir()
     assert (repo / "frontend" / "node_modules").is_dir()
@@ -168,7 +169,7 @@ def test_uninstall_script_removes_artifacts_and_respects_data_choices(tmp_path: 
         fake_bin,
         home,
         "scripts/install.sh",
-        f"sk-test\n{repos_root}\n",
+        f"sk-test\n{repos_root}\nadmin-pass\nadmin-pass\n",
     )
     assert installed.returncode == 0, installed.stdout + installed.stderr
 

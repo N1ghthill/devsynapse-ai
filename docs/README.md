@@ -37,6 +37,10 @@ This directory is the technical documentation entrypoint for contributors and ma
 
 - runtime and delivery notes: [deployment/runtime.md](deployment/runtime.md)
 
+## Releases
+
+- latest release notes: [releases/v0.3.1.md](releases/v0.3.1.md)
+
 ## Documentation Rule
 
 If a change affects behavior, contracts, setup or operational expectations, update the nearest relevant document in this tree as part of the same change.
