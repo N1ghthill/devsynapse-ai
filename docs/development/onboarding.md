@@ -17,16 +17,24 @@ cd devsynapse-ai
 
 python3 -m venv venv
 source venv/bin/activate
-./venv/bin/pip install -r requirements-dev.txt
-
-cp .env.example .env
-make migrate
-make seed-users
-
-cd frontend
-npm install
-cd ..
+make setup
 ```
+
+Then edit `.env` and set:
+
+```env
+DEEPSEEK_API_KEY=your-key-here
+```
+
+The app auto-detects your workspace and repos directory from `$HOME`. If your layout is non-standard, set the optional variables:
+
+```env
+DEV_WORKSPACE_ROOT=/home/your-user
+DEV_REPOS_ROOT=/home/your-user/path/to/repos
+DEV_PROJECTS_JSON={"my-project":{"path":"/path/to/project","type":"python","priority":"high"}}
+```
+
+See `.env.example` for the full list of tunables.
 
 ## First Verification Pass
 
@@ -47,17 +55,10 @@ make verify
 
 ## Running The App
 
-Backend:
+Recommended:
 
 ```bash
-make run
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm run dev
+make dev
 ```
 
 Default local URLs:
@@ -72,6 +73,18 @@ The local setup seeds two users by default. Change these immediately for any non
 
 - `admin` / value from `DEFAULT_ADMIN_PASSWORD` in `.env`
 - `irving` / value from `DEFAULT_USER_PASSWORD` in `.env`
+
+## Manual Server Commands
+
+If you prefer separate terminals:
+
+```bash
+make run
+```
+
+```bash
+cd frontend && npm run dev
+```
 
 ## First Contribution Checklist
 

@@ -4,7 +4,7 @@
 
 DevSynapse AI is structured as a local-first assistant platform with three major concerns:
 - user and project context
-- LLM orchestration and response handling
+- DeepSeek API orchestration and response handling
 - constrained command execution with observability
 
 ## High-Level Flow
@@ -47,6 +47,7 @@ Responsibilities:
 - validate request/response payloads
 - compose services from shared dependencies
 - keep transport concerns separate from core logic
+- `/chat/stream` provides SSE streaming for real-time token delivery
 
 ### Core services
 
@@ -59,7 +60,7 @@ Main files:
 - [core/plugin_system.py](../../core/plugin_system.py)
 
 Responsibilities:
-- `brain.py`: prompt construction, provider calls, command extraction, repair and telemetry
+- `brain.py`: prompt construction, DeepSeek API calls, command extraction, repair and telemetry
 - `auth.py`: password hashing and JWT validation
 - `memory.py`: persistence for conversations, users, permissions, telemetry and settings
 - `opencode_bridge.py`: validation, authorization and execution of constrained commands
@@ -87,13 +88,15 @@ Responsibilities:
 
 - route contracts are authoritative in the backend
 - schema evolution is explicit through migrations
-- mutating command execution is project-aware
+- mutating command execution is project-aware with working-directory resolution
 - telemetry is persisted, not just derived on the fly
+- LLM behavior is DeepSeek-first and API-key based, not a local-model runtime
+- configuration is environment-driven with sensible auto-detection, not hardcoded
 - documentation is part of the runtime contract surface
 
 ## Current Maturity
 
-The architecture is coherent and contributor-friendly, but still early-stage in production maturity. The correct description is:
-- strong local engineering baseline
+The architecture is coherent and portable. The correct description is:
+- strong local engineering baseline with portable configuration
 - open source contributor-ready
 - not yet a full enterprise-hardened deployment platform

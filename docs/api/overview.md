@@ -9,6 +9,13 @@ Static schema definitions live in [api/models.py](../../api/models.py).
 
 ## Route Groups
 
+### API info
+
+- `GET /api`
+
+Purpose:
+- expose service name, version, status and core endpoint links
+
 ### Auth
 
 - `POST /auth/login`
@@ -20,6 +27,7 @@ Purpose:
 ### Chat
 
 - `POST /chat`
+- `POST /chat/stream`
 - `GET /chat/history`
 - `GET /conversations`
 - `GET /conversations/{conversation_id}`
@@ -30,7 +38,7 @@ Purpose:
 - `POST /feedback`
 
 Purpose:
-- assistant interaction
+- assistant interaction (blocking and streaming)
 - conversation persistence
 - command execution
 - usage export
@@ -53,9 +61,12 @@ Purpose:
 
 - `GET /settings`
 - `PUT /settings`
+- `GET /projects`
 
 Purpose:
 - inspect and update runtime-adjustable settings
+- configure the DeepSeek API key, DeepSeek model and generation limits
+- list known project metadata used for project context
 
 ### Admin
 
@@ -71,13 +82,18 @@ Purpose:
 ## Contract Notes
 
 - the frontend should not invent payload shapes
-- `ChatResponse` carries `llm_usage` when provider usage metadata is available
+- `ChatRequest.project_name` can carry explicit project context for a conversation turn
+- `ChatResponse.project_name` returns explicit or persisted conversation project context when available
+- `ChatResponse` carries `llm_usage` when DeepSeek usage metadata is available
+- `/chat/stream` returns SSE events: `text` chunks, `command` when extracted, `done` with usage metadata
 - `/execute` returns structured execution status, reason code and project context
+- `/chat/history` and `/conversations/{conversation_id}` include persisted `project_name` when available
 - `/monitoring/stats` includes `llm_usage` aggregates, project-level breakdown and budget status snapshots
 
 ## Authentication Behavior
 
-- protected routes require a valid bearer token
+- routes using `require_user` or `require_admin` require a valid bearer token
+- admin routes require an admin role
 - frontend currently redirects to `/login` on `401`
 
 ## Contributor Rule
