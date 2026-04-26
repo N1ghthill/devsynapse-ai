@@ -2,7 +2,7 @@
 
 ## Versioning
 
-The current documented baseline aligns with application version `0.3.3` from [config/settings.py](config/settings.py).
+The current documented baseline aligns with application version `0.3.4` from [config/settings.py](config/settings.py).
 
 ## Release Checklist
 
@@ -26,9 +26,9 @@ cd frontend && npm audit --audit-level=high
 The current public-readiness baseline should use:
 
 ```text
-v0.3.3
+v0.3.4
 ```
 
 With notes based on:
 - [CHANGELOG.md](CHANGELOG.md)
-- [docs/releases/v0.3.3.md](docs/releases/v0.3.3.md)
+- [docs/releases/v0.3.4.md](docs/releases/v0.3.4.md)

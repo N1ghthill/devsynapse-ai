@@ -6,6 +6,18 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+## [v0.3.4] - 2026-04-25
+
+### Added
+- Non-interactive update flow through `scripts/update.sh`, `devsynapse update`, `update-devsynapse` and `make update`.
+- Runtime backup before updates for existing config, SQLite databases and log file when present.
+
+### Changed
+- Installer now creates an `update-devsynapse` alias alongside `devsynapse` and `uninstall-devsynapse`.
+- Launcher now supports `start`, `update`, `uninstall` and `help` subcommands.
+- Shell and development launcher banners read the application version from `config/settings.py` instead of hardcoding it.
+- CI and script checks now validate `scripts/update.sh`.
+
 ## [v0.3.3] - 2026-04-25
 
 ### Added

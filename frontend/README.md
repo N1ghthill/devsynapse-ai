@@ -34,6 +34,14 @@ You can override that with:
 VITE_API_URL=http://127.0.0.1:8000
 ```
 
+Installed users should update through the repository-level updater:
+
+```bash
+devsynapse update
+```
+
+That flow refreshes frontend dependencies and rebuilds the production bundle.
+
 ## Build
 
 ```bash

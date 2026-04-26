@@ -9,13 +9,13 @@ This page maps the current product surface to concrete use cases and evidence ca
 Baseline validated on `2026-04-25`:
 - `make verify` passed with backend tests, script checks, frontend lint and frontend build
 - GitHub Actions CI passed on `main`
-- installer/uninstaller smoke tests passed
+- installer/updater/uninstaller smoke tests passed
 - portable configuration via environment variables verified
 
 Screenshot sources:
 - [screenshot evidence index](../screenshots/README.md)
 - [testing guide](../development/testing.md)
-- [release notes](../releases/v0.3.3.md)
+- [release notes](../releases/v0.3.4.md)
 
 ## Use Cases
 
@@ -31,6 +31,7 @@ Current support:
 - daily and monthly budget thresholds (enabled by default)
 - dashboard visibility for usage and alerts
 - portable workspace configuration via environment variables
+- non-interactive installed update flow with runtime backup
 
 ### Freelancer with multiple projects
 

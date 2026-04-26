@@ -209,6 +209,23 @@ npm run lint
 npm run build
 ```
 
+### Installed updates
+
+Existing local installs should update through:
+
+```bash
+devsynapse update
+```
+
+or the direct alias created by the installer:
+
+```bash
+update-devsynapse
+```
+
+That flow preserves runtime configuration, backs up existing runtime state when
+present, applies migrations and rebuilds the frontend bundle.
+
 ## Engineering Debt Register
 
 The canonical planning source is [docs/development/roadmap.md](docs/development/roadmap.md).

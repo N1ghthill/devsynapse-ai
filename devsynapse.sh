@@ -5,6 +5,7 @@
 # Usage:
 #   bash devsynapse.sh          # from the project directory
 #   devsynapse                  # via the bash alias (set up by scripts/install.sh)
+#   devsynapse update           # update code, dependencies, migrations and frontend build
 #
 # Compatibility: Debian / Ubuntu / any Linux with bash, python3, npm.
 # Starts the backend and frontend, then prints connection info and credentials.
@@ -25,6 +26,8 @@ else
 fi
 CONFIG_FILE="${DEVSYNAPSE_CONFIG_FILE:-$CONFIG_DIR/.env}"
 export DEVSYNAPSE_CONFIG_FILE="$CONFIG_FILE"
+APP_VERSION="$(awk -F\" '/app_version: str =/ {print $2; exit}' "$SCRIPT_DIR/config/settings.py" 2>/dev/null || true)"
+APP_VERSION="${APP_VERSION:-unknown}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -34,11 +37,31 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 banner() {
+    local text="DevSynapse AI v$APP_VERSION"
+    local width=50
+    local left
+    local right
+    left=$(( (width - ${#text}) / 2 ))
+    right=$(( width - ${#text} - left ))
+
     echo ""
     echo -e "${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}${BOLD}║              DevSynapse AI v0.3.2               ║${NC}"
+    printf "%b║%*s%s%*s║%b\n" "$CYAN$BOLD" "$left" "" "$text" "$right" "" "$NC"
     echo -e "${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
+}
+
+usage() {
+    cat <<'EOF'
+DevSynapse AI
+
+Usage:
+  devsynapse
+  devsynapse start
+  devsynapse update [--version vX.Y.Z]
+  devsynapse uninstall
+  devsynapse help
+EOF
 }
 
 check_cli_tools() {
@@ -237,4 +260,31 @@ start() {
     wait 2>/dev/null || true
 }
 
-start
+main() {
+    local command="${1:-start}"
+    if [ "$#" -gt 0 ]; then
+        shift
+    fi
+
+    case "$command" in
+        start|run)
+            start "$@"
+            ;;
+        update)
+            exec bash "$SCRIPT_DIR/scripts/update.sh" "$@"
+            ;;
+        uninstall)
+            exec bash "$SCRIPT_DIR/scripts/uninstall.sh" "$@"
+            ;;
+        help|-h|--help)
+            usage
+            ;;
+        *)
+            echo -e "${RED}Comando desconhecido: $command${NC}"
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

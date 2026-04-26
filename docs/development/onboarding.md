@@ -20,8 +20,8 @@ bash scripts/install.sh
 The installer checks system dependencies, creates the Python venv, installs frontend
 and backend packages, configures the per-user runtime config (asks for your
 DeepSeek API key and repositories directory interactively), runs database migrations, seeds the admin
-user, builds the frontend, and registers the `devsynapse` and `uninstall-devsynapse`
-shell aliases.
+user, builds the frontend, and registers the `devsynapse`, `update-devsynapse`
+and `uninstall-devsynapse` shell aliases.
 
 After install, reload your shell and launch:
 
@@ -29,6 +29,23 @@ After install, reload your shell and launch:
 source ~/.bashrc
 devsynapse
 ```
+
+## Updating Later
+
+After the first install, update without repeating the interactive setup prompts:
+
+```bash
+devsynapse update
+```
+
+or:
+
+```bash
+update-devsynapse
+```
+
+The updater preserves runtime config, creates a backup of existing runtime files
+when present, applies migrations and rebuilds the frontend.
 
 ### Manual alternative
 

@@ -33,6 +33,7 @@ npm run dev
 - `make frontend-build`: build the frontend bundle
 - `make verify`: run Python lint, backend tests, script checks, frontend lint and frontend build in one pass
 - `make ui-smoke`: build and smoke-test the served UI with Playwright against temporary local databases and seeded smoke users
+- `make update`: update code, refresh dependencies, apply migrations and rebuild the frontend for an existing install
 - `make update-locks`: regenerate Python dependency lock constraints from the manifests
 - `make seed-users`: ensure default users exist
 - `make migrate`: apply all SQLite migrations
@@ -46,6 +47,30 @@ Python dependency manifests are split by purpose:
 Dependabot watches GitHub Actions, Python and frontend manifests weekly. The `Dependency Locks` workflow also runs weekly and can be dispatched manually to regenerate Python lock constraints and open a pull request when they change.
 
 GitHub Releases are published from pushed `v*.*.*` tags by reading `docs/releases/<tag>.md`. Create the release notes before pushing the tag; manual dispatch is available for an existing tag.
+
+## Updating An Existing Install
+
+Installed users should prefer the updater instead of rerunning the interactive installer:
+
+```bash
+devsynapse update
+```
+
+The installer also creates a direct alias:
+
+```bash
+update-devsynapse
+```
+
+For a specific published release:
+
+```bash
+devsynapse update --version v0.3.4
+```
+
+The updater backs up existing runtime files when present, preserves runtime
+configuration, refreshes Python/frontend dependencies, applies migrations,
+updates seeded users and rebuilds the production frontend bundle.
 
 ## Revalidated Public Onboarding
 

@@ -17,7 +17,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from config.settings import CONFIG_FILE, MEMORY_DB_PATH
+from config.settings import CONFIG_FILE, MEMORY_DB_PATH, get_settings
 
 FRONTEND_DIR = ROOT_DIR / "frontend"
 API_HOST = "127.0.0.1"
@@ -146,8 +146,9 @@ def main() -> int:
     signal.signal(signal.SIGINT, handle_shutdown)
 
     print("")
+    title = f"DevSynapse AI v{get_settings().app_version}"
     print("╔══════════════════════════════════════════════════╗")
-    print("║              DevSynapse AI v0.3.2               ║")
+    print(f"║{title.center(50)}║")
     print("╚══════════════════════════════════════════════════╝")
     print("")
     print(f"Frontend:  http://{API_HOST}:{FRONTEND_PORT}")

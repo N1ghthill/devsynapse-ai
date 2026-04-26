@@ -3,7 +3,7 @@ PIP ?= ./venv/bin/pip
 PYTEST ?= ./venv/bin/pytest
 RUFF ?= ./venv/bin/ruff
 
-.PHONY: setup dev install install-dev run test lint frontend-lint frontend-build script-check ui-smoke update-locks verify seed-users migrate migration-status
+.PHONY: setup dev install install-dev update run test lint frontend-lint frontend-build script-check ui-smoke update-locks verify seed-users migrate migration-status
 
 setup:
 	python3 -m venv venv
@@ -34,6 +34,9 @@ install-dev:
 		$(PIP) install -r requirements-dev.txt; \
 	fi
 
+update:
+	bash scripts/update.sh
+
 run:
 	$(PYTHON) -m uvicorn api.app:app --host 127.0.0.1 --port 8000 --reload
 
@@ -52,12 +55,13 @@ frontend-build:
 script-check:
 	bash -n scripts/install.sh
 	bash -n scripts/uninstall.sh
+	bash -n scripts/update.sh
 	bash -n scripts/ui_smoke.sh
 	bash -n scripts/update_locks.sh
 	bash -n devsynapse.sh
 	$(PYTHON) -m py_compile scripts/dev.py scripts/ensure_runtime_config.py scripts/migrate.py scripts/manage_users.py
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck scripts/install.sh scripts/uninstall.sh scripts/ui_smoke.sh scripts/update_locks.sh devsynapse.sh; \
+		shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh scripts/ui_smoke.sh scripts/update_locks.sh devsynapse.sh; \
 	else \
 		echo "shellcheck not installed; skipping shell script lint"; \
 	fi

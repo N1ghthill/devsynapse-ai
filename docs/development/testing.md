@@ -6,7 +6,7 @@ At the latest documentation refresh on `2026-04-25`, local verification produced
 - `143` passing backend tests
 - successful script checks
 - successful frontend lint and production build
-- passing installer/uninstaller and development-server smoke tests
+- passing installer/updater/uninstaller and development-server smoke tests
 - browser UI smoke coverage for login, dashboard, settings save and admin navigation
 
 ## Test Layout
@@ -61,7 +61,8 @@ make script-check
 ```
 
 `make script-check` always runs shell syntax checks and Python script compilation.
-If `shellcheck` is installed locally, it also runs ShellCheck against the shell entrypoints.
+If `shellcheck` is installed locally, it also runs ShellCheck against the shell entrypoints,
+including `scripts/update.sh`.
 
 Frontend validation:
 

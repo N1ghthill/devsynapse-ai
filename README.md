@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.3.3-blue)
+![Version](https://img.shields.io/badge/version-0.3.4-blue)
 
 DevSynapse AI is an open source development assistant that combines:
 - DeepSeek-first LLM access through a user-provided API key;
@@ -43,7 +43,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Verified Baseline
 
-Release validation completed on `2026-04-25` (v0.3.3):
+Release validation completed on `2026-04-25` (v0.3.4):
 - full repository verification: `make verify`
 - backend test suite: `143 passed`
 - Python/Ruff checks, shell syntax checks, Python script compilation and frontend ESLint: passed
@@ -95,6 +95,7 @@ everything automatically. Two shell aliases are registered:
 
 ```bash
 devsynapse              # start the app
+update-devsynapse       # update an existing install
 uninstall-devsynapse    # remove local artifacts
 ```
 
@@ -120,6 +121,28 @@ Add your DeepSeek key to the runtime config printed by `make setup`, then:
 
 ```bash
 make dev
+```
+
+### Updating
+
+Existing installs can update without rerunning the interactive installer:
+
+```bash
+devsynapse update
+```
+
+The updater preserves the runtime config, creates a backup of existing config
+and SQLite state when present, refreshes dependencies, applies migrations and
+rebuilds the frontend. A direct alias is also installed:
+
+```bash
+update-devsynapse
+```
+
+To pin a specific published release:
+
+```bash
+devsynapse update --version v0.3.4
 ```
 
 ### Manual Backend
@@ -181,7 +204,7 @@ Technical guides:
 - testing guide: [docs/development/testing.md](docs/development/testing.md)
 - development roadmap: [docs/development/roadmap.md](docs/development/roadmap.md)
 - runtime and delivery notes: [docs/deployment/runtime.md](docs/deployment/runtime.md)
-- latest release notes: [docs/releases/v0.3.3.md](docs/releases/v0.3.3.md)
+- latest release notes: [docs/releases/v0.3.4.md](docs/releases/v0.3.4.md)
 
 Supplementary references:
 - engineering guide: [README_PROFESSIONAL.md](README_PROFESSIONAL.md)

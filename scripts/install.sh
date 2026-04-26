@@ -16,7 +16,7 @@
 #   6. Executa migrações do banco
 #   7. Cria usuário admin com a senha configurada
 #   8. Build do frontend para produção
-#   9. Adiciona aliases `devsynapse` e `uninstall-devsynapse` ao shell
+#   9. Adiciona aliases `devsynapse`, `update-devsynapse` e `uninstall-devsynapse` ao shell
 
 set -euo pipefail
 
@@ -40,6 +40,8 @@ MEMORY_DB_FILE="$DATA_DIR/devsynapse_memory.db"
 MONITORING_DB_FILE="$DATA_DIR/devsynapse_monitoring.db"
 LOG_FILE="$LOGS_DIR/devsynapse.log"
 export DEVSYNAPSE_CONFIG_FILE="$CONFIG_FILE"
+APP_VERSION="$(awk -F\" '/app_version: str =/ {print $2; exit}' "$ROOT_DIR/config/settings.py" 2>/dev/null || true)"
+APP_VERSION="${APP_VERSION:-unknown}"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -52,6 +54,16 @@ step()  { echo -e "\n${BOLD}${CYAN}[$1]${NC} ${BOLD}$2${NC}"; }
 ok()    { echo -e "  ${GREEN}✓${NC} $1"; }
 warn()  { echo -e "  ${YELLOW}⚠${NC} $1"; }
 fail()  { echo -e "  ${RED}✗${NC} $1"; }
+
+print_box_line() {
+    local text="$1"
+    local width=50
+    local left
+    local right
+    left=$(( (width - ${#text}) / 2 ))
+    right=$(( width - ${#text} - left ))
+    printf "%b║%*s%s%*s║%b\n" "$BOLD$CYAN" "$left" "" "$text" "$right" "" "$NC"
+}
 
 set_env_value() {
     local key="$1"
@@ -184,7 +196,7 @@ check_system_deps() {
 install() {
     echo ""
     echo -e "${BOLD}${CYAN}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}${CYAN}║        DevSynapse AI Installer v0.3.2           ║${NC}"
+    print_box_line "DevSynapse AI Installer v$APP_VERSION"
     echo -e "${BOLD}${CYAN}╚══════════════════════════════════════════════════╝${NC}"
 
     step "1/9" "Verificando dependências de sistema..."
@@ -373,6 +385,7 @@ install() {
     ALIAS_END="# <<< devsynapse alias <<<"
 
     ALIAS_LINE="alias devsynapse='cd \"$ROOT_DIR\" && DEVSYNAPSE_CONFIG_FILE=\"$CONFIG_FILE\" bash devsynapse.sh'"
+    UPDATE_LINE="alias update-devsynapse='cd \"$ROOT_DIR\" && DEVSYNAPSE_CONFIG_FILE=\"$CONFIG_FILE\" bash scripts/update.sh'"
     UNINSTALL_LINE="alias uninstall-devsynapse='cd \"$ROOT_DIR\" && DEVSYNAPSE_CONFIG_FILE=\"$CONFIG_FILE\" bash scripts/uninstall.sh'"
 
     setup_alias() {
@@ -399,11 +412,12 @@ install() {
             echo ""
             echo "$ALIAS_MARKER"
             echo "$ALIAS_LINE"
+            echo "$UPDATE_LINE"
             echo "$UNINSTALL_LINE"
             echo "$ALIAS_END"
         } >> "$rc_file"
 
-        ok "devsynapse e uninstall-devsynapse → $rc_name"
+        ok "devsynapse, update-devsynapse e uninstall-devsynapse → $rc_name"
     }
 
     for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
@@ -437,6 +451,10 @@ install() {
     echo ""
     echo -e "  2. Inicie o DevSynapse:"
     echo -e "     ${CYAN}devsynapse${NC}"
+    echo ""
+    echo -e "  Para atualizar:"
+    echo -e "     ${CYAN}devsynapse update${NC}"
+    echo -e "     ${CYAN}update-devsynapse${NC}"
     echo ""
     echo -e "  Para desinstalar:"
     echo -e "     ${CYAN}uninstall-devsynapse${NC}"

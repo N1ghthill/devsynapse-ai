@@ -30,7 +30,13 @@ def _create_script_repo(tmp_path: Path) -> tuple[Path, Path, Path]:
 
     shutil.copy2(REPO_ROOT / "scripts" / "install.sh", repo / "scripts" / "install.sh")
     shutil.copy2(REPO_ROOT / "scripts" / "uninstall.sh", repo / "scripts" / "uninstall.sh")
+    shutil.copy2(REPO_ROOT / "scripts" / "update.sh", repo / "scripts" / "update.sh")
     shutil.copy2(REPO_ROOT / ".env.example", repo / ".env.example")
+    (repo / "config").mkdir()
+    (repo / "config" / "settings.py").write_text(
+        'class AppSettings:\n    app_version: str = "0.3.4"\n',
+        encoding="utf-8",
+    )
     (repo / "requirements.txt").write_text("fastapi>=0\n", encoding="utf-8")
 
     _write_executable(
@@ -105,7 +111,14 @@ echo "ci-generated-jwt-secret-abcdefghijklmnopqrstuvwxyz1234567890"
     return repo, fake_bin, home
 
 
-def _run_script(repo: Path, fake_bin: Path, home: Path, script: str, stdin: str) -> subprocess.CompletedProcess[str]:
+def _run_script(
+    repo: Path,
+    fake_bin: Path,
+    home: Path,
+    script: str,
+    stdin: str,
+    script_args: list[str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["PATH"] = f"{fake_bin}:{env['PATH']}"
     env["HOME"] = str(home)
@@ -116,7 +129,7 @@ def _run_script(repo: Path, fake_bin: Path, home: Path, script: str, stdin: str)
         if key.startswith("DEVSYNAPSE_"):
             env.pop(key)
     return subprocess.run(
-        ["bash", script],
+        ["bash", script, *(script_args or [])],
         cwd=repo,
         input=stdin,
         text=True,
@@ -172,6 +185,7 @@ def test_install_script_writes_env_and_aliases_portably(tmp_path: Path) -> None:
     for rc_file in (home / ".bashrc", home / ".zshrc"):
         rc_text = rc_file.read_text(encoding="utf-8")
         assert rc_text.count("alias devsynapse=") == 1
+        assert rc_text.count("alias update-devsynapse=") == 1
         assert rc_text.count("alias uninstall-devsynapse=") == 1
         assert str(config_file) in rc_text
 
@@ -229,6 +243,7 @@ def test_uninstall_script_removes_artifacts_and_respects_data_choices(tmp_path: 
     for rc_file in (home / ".bashrc", home / ".zshrc"):
         rc_text = rc_file.read_text(encoding="utf-8")
         assert "alias devsynapse=" not in rc_text
+        assert "alias update-devsynapse=" not in rc_text
         assert "alias uninstall-devsynapse=" not in rc_text
 
     delete_data = _run_script(repo, fake_bin, home, "scripts/uninstall.sh", "s\ns\n")
@@ -236,3 +251,37 @@ def test_uninstall_script_removes_artifacts_and_respects_data_choices(tmp_path: 
     assert not data_dir.exists()
     assert not logs_dir.exists()
     assert not config_file.exists()
+
+
+def test_update_script_refreshes_existing_install_without_prompts(tmp_path: Path) -> None:
+    repo, fake_bin, home = _create_script_repo(tmp_path)
+    repos_root = tmp_path / "repos"
+    repos_root.mkdir()
+    config_file = home / ".config" / "devsynapse-ai" / ".env"
+    data_dir = home / ".local" / "share" / "devsynapse-ai" / "data"
+
+    installed = _run_script(
+        repo,
+        fake_bin,
+        home,
+        "scripts/install.sh",
+        f"sk-update-test\n{repos_root}\nadmin-pass\nadmin-pass\n",
+    )
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+
+    updated = _run_script(
+        repo,
+        fake_bin,
+        home,
+        "scripts/update.sh",
+        "",
+        script_args=["--skip-git"],
+    )
+    assert updated.returncode == 0, updated.stdout + updated.stderr
+
+    env_text = config_file.read_text(encoding="utf-8")
+    assert "DEEPSEEK_API_KEY=sk-update-test" in env_text
+    assert "DEFAULT_ADMIN_PASSWORD=admin-pass" in env_text
+    assert "Atualização concluída" in updated.stdout
+    assert (repo / "frontend" / "dist").is_dir()
+    assert any((data_dir / "backups").glob("update-*"))
