@@ -6,6 +6,10 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [v0.4.0] - 2026-04-26
+
 ### Added
 - Native tool calling via DeepSeek's OpenAI-compatible tools API with strict function definitions, replacing regex-based command extraction as the primary mechanism.
 - Thinking mode support with configurable reasoning_effort (high/max) and thinking toggle.
