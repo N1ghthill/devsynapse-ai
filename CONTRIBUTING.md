@@ -43,6 +43,12 @@ npm install
 
 This setup path was revalidated from a clean public clone on `2026-04-24`.
 
+### Platform Contributions
+
+Validated setup support currently targets Linux, especially Debian/Ubuntu.
+Native Windows has not been tested because maintainers do not currently have access to that environment.
+Windows contributors are warmly encouraged to add `.bat` or PowerShell installers and validate the app end to end.
+
 ## Development Workflow
 
 Recommended backend loop:

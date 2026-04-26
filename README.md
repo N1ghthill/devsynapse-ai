@@ -99,6 +99,10 @@ principle because the backend is Python and the UI runs in a browser, but it is
 experimental: shell aliases, path handling and command execution behavior have
 not been tested there.
 
+For specific areas where community help is most needed, see the
+[Platform Contributions](CONTRIBUTING.md#platform-contributions) section in
+`CONTRIBUTING.md`.
+
 ## Quick Start
 
 ```bash
