@@ -59,7 +59,7 @@ Files:
 - [core/plugin_system.py](core/plugin_system.py)
 
 Responsibilities:
-- `brain.py`: prompt assembly, DeepSeek invocation, command extraction;
+- `brain.py`: prompt assembly, DeepSeek invocation with native tool calling (strict mode, thinking mode), result interpretation;
 - `auth.py`: password hashing, JWT issuance and token validation;
 - `memory.py`: SQLite persistence for conversations, preferences, users, runtime settings and admin audit events;
 - `opencode_bridge.py`: command parsing, path validation and constrained execution;

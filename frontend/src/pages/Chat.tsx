@@ -271,6 +271,15 @@ export function Chat() {
             )
           );
         },
+        (reasoning) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, reasoningContent: (msg.reasoningContent || '') + reasoning }
+                : msg
+            )
+          );
+        },
         (usage) => {
           setMessages((prev) =>
             prev.map((msg) =>
@@ -327,6 +336,7 @@ export function Chat() {
         commandResult: response.output || response.message,
         reasonCode: response.reason_code,
         projectName: response.project_name,
+        commandInterpretation: response.interpretation,
         commandNote: describeExecution(
           response.status,
           response.reason_code,

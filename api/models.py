@@ -91,6 +91,7 @@ class CommandExecutionResponse(BaseModel):
     status: str
     reason_code: Optional[str] = None
     project_name: Optional[str] = None
+    interpretation: Optional[str] = None
 
 
 class FeedbackRequest(BaseModel):

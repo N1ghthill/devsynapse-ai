@@ -36,6 +36,8 @@ export interface Message {
   commandResult?: string;
   reasonCode?: string | null;
   commandNote?: string;
+  commandInterpretation?: string | null;
+  reasoningContent?: string;
   projectName?: string | null;
   tokenUsage?: TokenUsage | null;
   metadata?: Record<string, unknown>;
@@ -83,6 +85,7 @@ export interface CommandResult {
   status: 'success' | 'blocked' | 'failed';
   reason_code?: string;
   project_name?: string | null;
+  interpretation?: string | null;
 }
 
 export interface ExecuteCommandRequest {

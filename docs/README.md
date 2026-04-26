@@ -37,6 +37,10 @@ This directory is the technical documentation entrypoint for contributors and ma
 
 - runtime and delivery notes: [deployment/runtime.md](deployment/runtime.md)
 
+## Security
+
+- local security model: [security/local-security-model.md](security/local-security-model.md)
+
 ## Releases
 
 - latest release notes: [releases/v0.3.4.md](releases/v0.3.4.md)

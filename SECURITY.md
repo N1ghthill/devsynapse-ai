@@ -46,6 +46,8 @@ When discussing security in PRs or issues:
 For local deployments:
 - replace default seeded passwords
 - keep `.env` out of version control
+- keep the API bound to localhost unless network access is intentional
+- keep CORS restricted to local or explicitly trusted browser origins
 - limit who can access the machine running the assistant
 - review mutation permissions before enabling write access for users
 
@@ -54,3 +56,4 @@ For local deployments:
 - architecture: [docs/architecture/overview.md](docs/architecture/overview.md)
 - API overview: [docs/api/overview.md](docs/api/overview.md)
 - runtime notes: [docs/deployment/runtime.md](docs/deployment/runtime.md)
+- local security model: [docs/security/local-security-model.md](docs/security/local-security-model.md)

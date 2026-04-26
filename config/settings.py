@@ -109,11 +109,13 @@ class AppSettings(BaseSettings):
     api_port: int = 8000
     api_debug: bool = True
     api_base_url: Optional[str] = None
-    cors_allowed_origins: str = "*"
+    cors_allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
 
     deepseek_api_key: Optional[str] = None
-    deepseek_model: str = "deepseek-chat"
-    deepseek_base_url: str = "https://api.deepseek.com/v1"
+    deepseek_model: str = "deepseek-v4-pro"
+    deepseek_base_url: str = "https://api.deepseek.com/beta"
+    deepseek_reasoning_effort: str = "high"
+    deepseek_thinking_enabled: bool = True
     llm_temperature: float = 0.7
     llm_max_tokens: int = 1500
     llm_request_timeout: int = 12
@@ -209,6 +211,8 @@ _settings = get_settings()
 DEEPSEEK_API_KEY: Optional[str] = _settings.deepseek_api_key
 DEEPSEEK_MODEL = _settings.deepseek_model
 DEEPSEEK_BASE_URL = _settings.deepseek_base_url
+DEEPSEEK_REASONING_EFFORT = _settings.deepseek_reasoning_effort
+DEEPSEEK_THINKING_ENABLED = _settings.deepseek_thinking_enabled
 LLM_REQUEST_TIMEOUT = _settings.llm_request_timeout
 DEEPSEEK_FLASH_INPUT_CACHE_HIT_PRICE_USD_PER_MILLION = (
     _settings.deepseek_flash_input_cache_hit_price_usd_per_million

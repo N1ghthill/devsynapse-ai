@@ -4,7 +4,7 @@
 
 ## 1. Arquitetura da Camada de Orquestração de LLM
 
-**O que foi encontrado:** O `core/` contém a lógica de orquestração que conecta o produto ao DeepSeek por API key. O ponto do DevSynapse AI não é ser uma casca genérica para qualquer modelo; é oferecer um ambiente de desenvolvimento seguro, observável e persistente para usar o DeepSeek em tarefas reais de código.
+**O que foi encontrado:** O `core/` contém a lógica de orquestração que conecta o produto ao DeepSeek por API key. O brain usa tool calling nativo (OpenAI-compatible) com definições strict de funções, thinking mode (`reasoning_effort` configurável: high/max), e loop de interpretação que alimenta o resultado do comando de volta ao LLM para gerar resposta em linguagem natural. O ponto do DevSynapse AI não é ser uma casca genérica para qualquer modelo; é oferecer um ambiente de desenvolvimento seguro, observável e persistente para usar o DeepSeek em tarefas reais de código.
 
 **Por que isso é inteligente para o desenvolvedor com orçamento limitado:**
 
@@ -22,7 +22,7 @@
 
 ## 2. Ponte de Execução de Comandos (bash, read, glob, grep, edit, write)
 
-**O que foi encontrado:** O sistema expõe comandos controlados (`bash`, `read`, `glob`, `grep`, `edit`, `write`) com autorização explícita. Não é um shell aberto, é uma interface restrita com operações bem definidas.
+**O que foi encontrado:** O sistema expõe comandos controlados (`bash`, `read`, `glob`, `grep`, `edit`, `write`) com autorização explícita e loop de interpretação — após cada execução, o LLM recebe o output e gera uma explicação em linguagem natural. Não é um shell aberto, é uma interface restrita com operações bem definidas.
 
 **Por que isso é inteligente:**
 

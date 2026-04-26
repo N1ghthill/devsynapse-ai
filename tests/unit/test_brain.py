@@ -58,7 +58,7 @@ class TestDevSynapseBrain:
         prompt = brain.generate_system_prompt({"test": "context"})
         assert "DevSynapse" in prompt
         assert "Irving" in prompt or "N1ghthill" in prompt
-        assert "OpenCode" in prompt or "OPENCODE" in prompt
+        assert "tools" in prompt.lower()
 
     def test_generate_system_prompt_includes_active_project(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
@@ -144,33 +144,107 @@ class TestDevSynapseBrain:
         with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
             mock_call.return_value = (
                 'echo "ok" > /tmp/test.txt\n\n'
-                "Feito! Criei o arquivo para você."
+                "Done! I created the file for you."
             )
 
-            response, cmd, usage = await brain.process_message("Crie um arquivo", "test_session")
+            response, cmd, usage = await brain.process_message("Create a file", "test_session")
 
             assert cmd is None
-            assert "Ainda não executei nenhuma alteração" in response
+            assert "I haven't executed any changes yet" in response
             assert usage is None
 
     @pytest.mark.asyncio
-    async def test_process_message_repairs_invalid_shell_into_opencode(
-        self, mock_memory, mock_bridge
-    ):
+    async def test_process_message_uses_tool_calls_over_regex(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
         with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+            from core.brain import LLMResult
+            mock_call.return_value = LLMResult(
+                content='Let me check: bash "unused command"',
+                tool_calls=[
+                    {
+                        "id": "call_abc",
+                        "type": "function",
+                        "function": {
+                            "name": "bash",
+                            "arguments": '{"command": "ls -la"}',
+                        },
+                    }
+                ],
+            )
+
+            response, cmd, usage = await brain.process_message("List files", "test_session")
+
+            assert cmd == 'bash "ls -la"'
+
+    @pytest.mark.asyncio
+    async def test_process_message_replays_only_executed_tool_call(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        mock_bridge.execute_command = AsyncMock(
+            return_value=(True, "ok", "tool output", "success", None, None)
+        )
+
+        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+            from core.brain import LLMResult
+
             mock_call.side_effect = [
-                'echo "ok" > /tmp/test.txt\n\nFeito! Criei o arquivo para você.',
-                'write "/tmp/test.txt" --content="ok"',
+                LLMResult(
+                    content="",
+                    reasoning_content="I should inspect the repo.",
+                    tool_calls=[
+                        {
+                            "id": "call_pwd",
+                            "type": "function",
+                            "function": {
+                                "name": "bash",
+                                "arguments": '{"command": "pwd"}',
+                            },
+                        },
+                        {
+                            "id": "call_ls",
+                            "type": "function",
+                            "function": {
+                                "name": "bash",
+                                "arguments": '{"command": "ls"}',
+                            },
+                        },
+                    ],
+                ),
+                LLMResult(content="Final answer"),
             ]
 
-            response, cmd, usage = await brain.process_message("Crie um arquivo", "test_session")
+            response, cmd, usage = await brain.process_message(
+                "Inspect project",
+                "test_session",
+                user_id="irving",
+                user_role="user",
+            )
 
-            assert cmd == 'write "/tmp/test.txt" --content="ok"'
-            assert response == 'write "/tmp/test.txt" --content="ok"'
-            assert mock_call.await_count == 2
-            assert usage is None
+        replay_messages = mock_call.await_args_list[1].args[0]
+        assistant_replay = replay_messages[-2]
+        tool_replay = replay_messages[-1]
+
+        assert response == "Final answer"
+        assert cmd is None
+        assert usage is None
+        assert assistant_replay["tool_calls"] == [
+            {
+                "id": "call_pwd",
+                "type": "function",
+                "function": {
+                    "name": "bash",
+                    "arguments": '{"command": "pwd"}',
+                },
+            }
+        ]
+        assert assistant_replay["reasoning_content"] == "I should inspect the repo."
+        assert tool_replay == {
+            "role": "tool",
+            "tool_call_id": "call_pwd",
+            "content": "tool output",
+        }
 
     @pytest.mark.asyncio
     async def test_process_message_error_handling(self, mock_memory, mock_bridge):
@@ -216,21 +290,14 @@ class TestDevSynapseBrain:
             assert result.usage["total_tokens"] == 26
             assert result.usage["prompt_cache_miss_tokens"] == 16
             assert result.usage["estimated_cost_usd"] == pytest.approx(0.00000504)
-            mock_post.assert_called_once_with(
-                f"{brain.deepseek_base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {brain.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": brain.deepseek_model,
-                    "messages": [{"role": "user", "content": "Hi"}],
-                    "temperature": brain.temperature,
-                    "max_tokens": brain.max_tokens,
-                    "stream": False,
-                },
-                timeout=(5, brain.request_timeout),
-            )
+
+            call_kwargs = mock_post.call_args[1]
+            payload = call_kwargs["json"]
+            assert "tools" in payload
+            assert len(payload["tools"]) == 6
+            assert payload["tools"][0]["function"]["name"] == "bash"
+            assert payload["tool_choice"] == "auto"
+            assert payload["stream"] is False
 
     def test_merge_usage_adds_prompt_tokens_and_cost(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
@@ -276,6 +343,43 @@ class TestDevSynapseBrain:
 
             with pytest.raises(Exception):
                 await brain._call_deepseek_api([{"role": "user", "content": "Hi"}])
+
+    @pytest.mark.asyncio
+    async def test_call_deepseek_api_with_tool_calls(self, mock_memory, mock_bridge):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        with patch('core.brain.requests.post') as mock_post:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "choices": [
+                    {
+                        "message": {
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call_xyz",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "bash",
+                                        "arguments": '{"command": "ls -la"}',
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ],
+                "model": "deepseek-chat",
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            }
+            mock_post.return_value = mock_response
+
+            result = await brain._call_deepseek_api([{"role": "user", "content": "List files"}])
+
+            assert result.content == ""
+            assert result.tool_calls is not None
+            assert len(result.tool_calls) == 1
+            assert result.tool_calls[0]["function"]["name"] == "bash"
 
     def test_extract_opencode_command_bash(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
@@ -336,6 +440,120 @@ class TestDevSynapseBrain:
 
         command = brain._extract_opencode_command("This is just a regular conversation response")
         assert command is None
+
+    def test_tool_calls_to_opencode_command_bash(self, mock_memory, mock_bridge):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        tool_calls = [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "bash", "arguments": '{"command": "git status"}'},
+            }
+        ]
+        command = brain._tool_calls_to_opencode_command(tool_calls)
+        assert command == 'bash "git status"'
+
+    def test_tool_calls_to_opencode_command_read(self, mock_memory, mock_bridge):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        tool_calls = [
+            {
+                "id": "call_2",
+                "type": "function",
+                "function": {"name": "read", "arguments": '{"path": "/tmp/test.py"}'},
+            }
+        ]
+        command = brain._tool_calls_to_opencode_command(tool_calls)
+        assert command == 'read "/tmp/test.py"'
+
+    def test_tool_calls_to_opencode_command_edit(self, mock_memory, mock_bridge):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        tool_calls = [
+            {
+                "id": "call_3",
+                "type": "function",
+                "function": {
+                    "name": "edit",
+                    "arguments": '{"path": "/tmp/f.py", "old": "foo", "new": "bar"}',
+                },
+            }
+        ]
+        command = brain._tool_calls_to_opencode_command(tool_calls)
+        assert command == 'edit "/tmp/f.py" --old="foo" --new="bar"'
+
+    def test_tool_calls_to_opencode_command_write(self, mock_memory, mock_bridge):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        tool_calls = [
+            {
+                "id": "call_4",
+                "type": "function",
+                "function": {
+                    "name": "write",
+                    "arguments": '{"path": "/tmp/out.md", "content": "# Hello"}',
+                },
+            }
+        ]
+        command = brain._tool_calls_to_opencode_command(tool_calls)
+        assert command == 'write "/tmp/out.md" --content="# Hello"'
+
+    def test_tool_calls_to_opencode_command_escapes_quoted_content(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        tool_calls = [
+            {
+                "id": "call_5",
+                "type": "function",
+                "function": {
+                    "name": "write",
+                    "arguments": json.dumps({
+                        "path": "/tmp/out.py",
+                        "content": 'print("hi")\npath = "C:\\tmp"',
+                    }),
+                },
+            }
+        ]
+
+        command = brain._tool_calls_to_opencode_command(tool_calls)
+
+        assert command == (
+            'write "/tmp/out.py" --content="print(\\"hi\\")\\n'
+            'path = \\"C:\\\\tmp\\""'
+        )
+
+    def test_tool_calls_to_opencode_command_none(self, mock_memory, mock_bridge):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        assert brain._tool_calls_to_opencode_command(None) is None
+        assert brain._tool_calls_to_opencode_command([]) is None
+
+    @pytest.mark.parametrize(
+        ("command", "expected"),
+        [
+            ('read "/tmp/test.py"', True),
+            ('grep "TODO"', True),
+            ('bash "ls -la"', True),
+            ('bash "pwd"', True),
+            ('bash "git status --short"', True),
+            ('bash "git diff -- README.md"', True),
+            ('bash "git checkout main"', False),
+            ('bash "git diff --output=patch.txt"', False),
+            ('bash "curl https://example.com"', False),
+            ('bash "npm test"', False),
+            ('bash "python script.py"', False),
+            ('bash "tar -xf archive.tar"', False),
+        ],
+    )
+    def test_is_read_only_command_is_conservative_for_autoexec(
+        self, mock_memory, mock_bridge, command, expected
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        assert brain._is_read_only_command(command) is expected
 
     def test_prepare_messages_with_history(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)

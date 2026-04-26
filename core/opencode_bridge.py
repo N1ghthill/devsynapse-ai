@@ -230,7 +230,7 @@ class OpenCodeBridge:
         
         # Padrão: comando "argumento"
         pattern = r'^(\w+)\s+"([^"]+)"(?:\s+(.+))?$'
-        match = re.match(pattern, command)
+        match = re.match(pattern, command, re.DOTALL)
         
         if not match:
             return False, f"Formato de comando inválido: {command}", None, None
@@ -774,12 +774,12 @@ class OpenCodeBridge:
         
         # Extrair old/new do extra_args (suporta múltiplas linhas)
         # Padrão: --old="texto" --new="texto" onde texto pode ter qualquer caractere exceto aspas não escapadas
-        old_new_match = re.search(r'--old="((?:[^"\\\\]|\\\\.)*)"\s+--new="((?:[^"\\\\]|\\\\.)*)"', extra_args)
+        old_new_match = re.search(r'--old="((?:[^"\\]|\\.)*)"\s+--new="((?:[^"\\]|\\.)*)"', extra_args)
         if not old_new_match:
             return False, "Formato de edit inválido. Use: edit \"file\" --old=\"text\" --new=\"text\"", None
         
-        old_text = old_new_match.group(1).replace('\\"', '"').replace('\\\\', '\\')
-        new_text = old_new_match.group(2).replace('\\"', '"').replace('\\\\', '\\')
+        old_text = self._decode_quoted_arg(old_new_match.group(1))
+        new_text = self._decode_quoted_arg(old_new_match.group(2))
         
         try:
             path = Path(filepath)
@@ -858,13 +858,11 @@ class OpenCodeBridge:
         
         # Extrair conteúdo (suporta múltiplas linhas)
         # Padrão: --content="conteúdo" onde conteúdo pode ter qualquer caractere exceto aspas não escapadas
-        content_match = re.search(r'--content="((?:[^"\\\\]|\\\\.)*)"', extra_args)
+        content_match = re.search(r'--content="((?:[^"\\]|\\.)*)"', extra_args)
         if not content_match:
             return False, "Formato de write inválido. Use: write \"file\" --content=\"text\"", None
         
-        content = content_match.group(1)
-        # Processar escapes
-        content = content.replace('\\"', '"').replace('\\\\', '\\')
+        content = self._decode_quoted_arg(content_match.group(1))
         
         try:
             path = Path(filepath)
@@ -911,6 +909,34 @@ class OpenCodeBridge:
         except Exception as e:
             logger.error(f"Erro escrevendo arquivo {filepath}: {e}")
             return False, f"Erro escrevendo arquivo: {str(e)}", None
+
+    @staticmethod
+    def _decode_quoted_arg(value: str) -> str:
+        """Decode the small escape set used inside OpenCode quoted arguments."""
+        decoded = []
+        index = 0
+        while index < len(value):
+            char = value[index]
+            if char != "\\" or index + 1 >= len(value):
+                decoded.append(char)
+                index += 1
+                continue
+
+            next_char = value[index + 1]
+            if next_char == "n":
+                decoded.append("\n")
+            elif next_char == "r":
+                decoded.append("\r")
+            elif next_char == "t":
+                decoded.append("\t")
+            elif next_char in {'"', "\\"}:
+                decoded.append(next_char)
+            else:
+                decoded.append(char)
+                decoded.append(next_char)
+            index += 2
+
+        return "".join(decoded)
     
     def get_project_context(self, project_name: str) -> Optional[Dict]:
         """Obtém contexto sobre um projeto específico"""

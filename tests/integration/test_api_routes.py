@@ -113,6 +113,9 @@ async def test_chat_route_forwards_and_returns_explicit_project_name(route_servi
         user_message="Analise o repositório",
         conversation_id="conv_chat_project",
         project_name="devsynapse-ai",
+        user_id="irving",
+        user_role="user",
+        project_mutation_allowlist=[],
     )
     assert response.project_name == "devsynapse-ai"
 

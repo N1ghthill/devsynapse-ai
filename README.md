@@ -5,11 +5,13 @@
 ![Version](https://img.shields.io/badge/version-0.3.4-blue)
 
 DevSynapse AI is an open source development assistant that combines:
-- DeepSeek-first LLM access through a user-provided API key;
+- DeepSeek-first LLM access (v4-pro with thinking mode) through a user-provided API key;
+- native tool calling via the OpenAI-compatible tools API (strict mode) with regex fallback;
 - real-time streaming chat with token-by-token delivery (SSE);
 - project-aware technical chat with a project selector in the UI;
 - persistent memory for conversations, preferences and projects;
 - controlled command execution with explicit authorization boundaries and per-project working directories;
+- execution result interpretation loop (LLM explains command output in natural language);
 - operational visibility through monitoring, usage tracking, budget thresholds (enabled by default) and alerts;
 - per-user runtime configuration via environment variables with sensible auto-detection.
 
@@ -45,7 +47,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 Release validation completed on `2026-04-25` (v0.3.4):
 - full repository verification: `make verify`
-- backend test suite: `143 passed`
+- backend test suite: `166 passed`
 - Python/Ruff checks, shell syntax checks, Python script compilation and frontend ESLint: passed
 - frontend production build: passed
 - UI smoke against disposable runtime: passed
@@ -61,7 +63,7 @@ DevSynapse AI provides:
 - a FastAPI backend for auth, chat, streaming chat (SSE), command execution, monitoring, settings and admin flows;
 - a React/Vite frontend with chat, project selector, dashboard, settings and admin interfaces;
 - SQLite-backed persistence for runtime state and migration-controlled schema evolution;
-- a DeepSeek API orchestration layer with streaming token delivery, command extraction and degraded responses;
+- a DeepSeek API orchestration layer with native tool calling (strict function definitions, thinking mode), streaming token delivery, and execution result interpretation;
 - a constrained execution bridge for `bash`, `read`, `glob`, `grep`, `edit` and `write` with per-project working directories;
 - per-user, project-scoped mutation authorization for non-admin users;
 - token and cost telemetry for LLM usage;
@@ -104,6 +106,17 @@ Runtime state is intentionally outside the source checkout by default:
 - config: `~/.config/devsynapse-ai/.env`
 - SQLite data: `~/.local/share/devsynapse-ai/data`
 - logs: `~/.local/state/devsynapse-ai/logs`
+
+Local security checklist:
+
+- keep the backend bound to `127.0.0.1` unless network access is intentional;
+- keep CORS limited to local or explicitly trusted browser origins;
+- store `DEEPSEEK_API_KEY` only in runtime config or environment;
+- review proposed commands before confirming mutations;
+- grant project mutation permissions only where writes are expected.
+
+The detailed local security model is documented in
+[docs/security/local-security-model.md](docs/security/local-security-model.md).
 
 Set `DEVSYNAPSE_HOME=/path/to/runtime` to keep all three under one custom directory,
 or set `DEVSYNAPSE_CONFIG_FILE`, `DEVSYNAPSE_DATA_DIR` and `DEVSYNAPSE_LOGS_DIR`
@@ -204,6 +217,7 @@ Technical guides:
 - testing guide: [docs/development/testing.md](docs/development/testing.md)
 - development roadmap: [docs/development/roadmap.md](docs/development/roadmap.md)
 - runtime and delivery notes: [docs/deployment/runtime.md](docs/deployment/runtime.md)
+- local security model: [docs/security/local-security-model.md](docs/security/local-security-model.md)
 - latest release notes: [docs/releases/v0.3.4.md](docs/releases/v0.3.4.md)
 
 Supplementary references:
@@ -229,4 +243,4 @@ For the shortest setup path from a new clone, read [docs/development/onboarding.
 
 ## Security Boundary
 
-This project executes constrained development-oriented commands, but it is not a full sandbox product. The repository should be described as a safer local execution framework, not as a formally hardened isolation system. See [SECURITY.md](SECURITY.md).
+This project executes constrained development-oriented commands, but it is not a full sandbox product. The repository should be described as a safer local execution framework, not as a formally hardened isolation system. See [SECURITY.md](SECURITY.md) and the [local security model](docs/security/local-security-model.md).

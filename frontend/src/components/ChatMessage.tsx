@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { User, Bot, Copy, Check, Terminal, Play, Loader2, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { User, Bot, Copy, Check, Terminal, Play, Loader2, ShieldAlert, CheckCircle2, Brain, ChevronDown, ChevronRight } from 'lucide-react';
 import type { Message } from '../types';
 
 interface ChatMessageProps {
@@ -18,6 +18,7 @@ const statusLabels = {
 
 export function ChatMessage({ message, onExecute }: ChatMessageProps) {
   const [copied, setCopied] = React.useState(false);
+  const [reasoningOpen, setReasoningOpen] = React.useState(false);
   const isUser = message.role === 'user';
   const commandStatus = message.commandStatus ?? 'proposed';
 
@@ -75,6 +76,24 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
           </div>
         )}
 
+        {message.reasoningContent && (
+          <div className="message-reasoning">
+            <button
+              className="reasoning-toggle"
+              onClick={() => setReasoningOpen((prev) => !prev)}
+            >
+              <Brain size={13} />
+              <span>Chain of thought</span>
+              {reasoningOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            </button>
+            {reasoningOpen && (
+              <div className="reasoning-body">
+                <ReactMarkdown>{message.reasoningContent}</ReactMarkdown>
+              </div>
+            )}
+          </div>
+        )}
+
         {message.command && (
           <div className={`message-command command-${commandStatus}`}>
             <div className="message-command-main">
@@ -108,6 +127,9 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
             <pre>{message.commandResult}</pre>
             {message.commandNote && (
               <div className="command-note">{message.commandNote}</div>
+            )}
+            {message.commandInterpretation && (
+              <div className="command-interpretation">{message.commandInterpretation}</div>
             )}
           </div>
         )}

@@ -60,7 +60,7 @@ Main files:
 - [core/plugin_system.py](../../core/plugin_system.py)
 
 Responsibilities:
-- `brain.py`: prompt construction, DeepSeek API calls, command extraction, repair and telemetry
+- `brain.py`: prompt construction, DeepSeek API calls with native tool calling (strict mode, thinking mode, reasoning_effort), execution result interpretation, and telemetry
 - `auth.py`: password hashing and JWT validation
 - `memory.py`: persistence for conversations, users, permissions, telemetry and settings
 - `opencode_bridge.py`: validation, authorization and execution of constrained commands
@@ -90,7 +90,7 @@ Responsibilities:
 - schema evolution is explicit through migrations
 - mutating command execution is project-aware with working-directory resolution
 - telemetry is persisted, not just derived on the fly
-- LLM behavior is DeepSeek-first and API-key based, not a local-model runtime
+- LLM behavior is DeepSeek-first (v4-pro with thinking mode and strict function calling), not a local-model runtime
 - configuration is environment-driven with sensible auto-detection, not hardcoded
 - documentation is part of the runtime contract surface
 

@@ -368,6 +368,49 @@ class TestOpenCodeBridge:
         assert authorized is False
         assert "fora do projeto" in message
 
+    def test_authorize_project_mutation_denies_relative_path_traversal(self):
+        bridge = _bridge()
+
+        authorized, message = bridge._authorize_command(
+            "write",
+            ["../outside.txt", '--content="hello"'],
+            "user",
+            "devsynapse-ai",
+            ["devsynapse-ai"],
+        )
+
+        assert authorized is False
+        assert "fora do projeto" in message
+
+    def test_authorize_project_mutation_denies_symlink_escape(self, tmp_path):
+        project_root = tmp_path / "project"
+        outside_root = tmp_path / "outside"
+        project_root.mkdir()
+        outside_root.mkdir()
+        link_path = project_root / "linked-outside"
+        link_path.symlink_to(outside_root, target_is_directory=True)
+        bridge = OpenCodeBridge(
+            known_projects={
+                "tmp-project": {
+                    "path": str(project_root),
+                    "type": "test",
+                    "priority": "medium",
+                }
+            },
+            allowed_directories=[str(tmp_path)],
+        )
+
+        authorized, message = bridge._authorize_command(
+            "write",
+            ["linked-outside/escape.txt", '--content="hello"'],
+            "user",
+            "tmp-project",
+            ["tmp-project"],
+        )
+
+        assert authorized is False
+        assert "fora do projeto" in message
+
     def test_authorize_mutating_bash_checks_target_directory_option(self):
         bridge = _bridge()
 
@@ -564,3 +607,33 @@ class TestOpenCodeBridge:
         assert "Editado" in message
         assert "Backup: desabilitado" in output
         assert target.read_text(encoding="utf-8") == "omega beta"
+
+    @pytest.mark.asyncio
+    async def test_execute_edit_decodes_escaped_quotes_and_newlines(self, tmp_path):
+        bridge = _bridge()
+        bridge.backup_enabled = False
+        target = tmp_path / "edit_escaped.txt"
+        target.write_text('print("hi")\n', encoding="utf-8")
+
+        success, message, output = await bridge._execute_edit(
+            [str(target), '--old="print(\\"hi\\")\\n" --new="print(\\"bye\\")\\n"']
+        )
+
+        assert success is True
+        assert "Editado" in message
+        assert "Substituído" in output
+        assert target.read_text(encoding="utf-8") == 'print("bye")\n'
+
+    @pytest.mark.asyncio
+    async def test_execute_write_decodes_escaped_quotes_and_newlines(self, tmp_path):
+        bridge = _bridge()
+        target = tmp_path / "write_escaped.txt"
+
+        success, message, output = await bridge._execute_write(
+            [str(target), '--content="print(\\"hi\\")\\npath = \\"C:\\\\tmp\\""']
+        )
+
+        assert success is True
+        assert "Arquivo criado" in message
+        assert "Novo arquivo criado" in output
+        assert target.read_text(encoding="utf-8") == 'print("hi")\npath = "C:\\tmp"'

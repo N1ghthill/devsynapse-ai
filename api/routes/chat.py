@@ -43,14 +43,20 @@ async def chat_endpoint(
     memory_system: MemorySystem = Depends(get_memory_system),
     monitoring_system=Depends(get_monitoring_system),
 ):
-    del user
     conversation_id = request.conversation_id or str(uuid.uuid4())
+    project_permissions = memory_system.get_project_permissions(user["username"])
+    user_id = user["username"]
+    user_role = user["role"]
+    del user
 
     try:
         response_text, opencode_command, llm_usage = await brain.process_message(
             user_message=request.message,
             conversation_id=conversation_id,
             project_name=request.project_name,
+            user_id=user_id,
+            user_role=user_role,
+            project_mutation_allowlist=project_permissions,
         )
     except Exception as exc:
         logger.error("Erro processando chat: %s", exc)
@@ -197,6 +203,7 @@ async def execute_command(
     background_tasks: BackgroundTasks,
     user=Depends(require_user),
     bridge: OpenCodeBridge = Depends(get_opencode_bridge),
+    brain: DevSynapseBrain = Depends(get_brain),
     memory_system: MemorySystem = Depends(get_memory_system),
     monitoring_system=Depends(get_monitoring_system),
 ):
@@ -240,6 +247,19 @@ async def execute_command(
             user_id=user["username"],
             ip_address=None,
         )
+
+        interpretation = None
+        if success and output:
+            try:
+                interpretation = await brain.interpret_execution_result(
+                    conversation_id=request.conversation_id,
+                    command=request.command,
+                    output=output,
+                    project_name=request.project_name,
+                )
+            except Exception:
+                logger.debug("Failed to get execution interpretation", exc_info=True)
+
         return CommandExecutionResponse(
             success=success,
             message=message,
@@ -247,6 +267,7 @@ async def execute_command(
             status=status,
             reason_code=reason_code,
             project_name=project_name,
+            interpretation=interpretation,
         )
     except Exception as exc:
         logger.error("Erro executando comando: %s", exc)

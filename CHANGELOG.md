@@ -6,6 +6,32 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+### Added
+- Native tool calling via DeepSeek's OpenAI-compatible tools API with strict function definitions, replacing regex-based command extraction as the primary mechanism.
+- Thinking mode support with configurable reasoning_effort (high/max) and thinking toggle.
+- Execution result interpretation loop: after command execution, the LLM receives the output and generates a natural-language explanation.
+- `interpretation` field in `CommandExecutionResponse` and `CommandResult` frontend type.
+- `DEEPSEEK_REASONING_EFFORT` and `DEEPSEEK_THINKING_ENABLED` environment variables.
+
+### Changed
+- Default model upgraded from `deepseek-chat` to `deepseek-v4-pro`.
+- Base URL changed to `https://api.deepseek.com/beta` to enable strict function calling mode.
+- System prompt rewritten in English with tool-aware instructions (removed legacy OpenCode DSL format).
+- `temperature` parameter automatically omitted when thinking mode is enabled (API requirement).
+- Default CORS origins are now limited to local frontend origins for local-first installs.
+
+### Removed
+- Command repair loop (`_needs_command_repair`, `_build_command_repair_messages`) — no longer needed with native tool calling.
+
+### Fixed
+- Tool-call conversion now preserves escaped quotes, backslashes, tabs and newlines in `edit`/`write` arguments before command execution.
+- Auto-executed read-only tool calls now replay only the executed tool call back to the LLM, avoiding mismatched tool-call history when a model returns multiple tool calls.
+- Read-only auto-execution now uses a conservative bash allowlist instead of treating every user-authorized bash command as safe to run without confirmation.
+- API startup now warns when the backend is bound to a non-loopback host.
+
+### Documentation
+- Added a local security model and operator checklist for the downloaded, local-first DeepSeek API-key workflow.
+
 ## [v0.3.4] - 2026-04-25
 
 ### Added

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, Request
@@ -25,10 +26,26 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+LOOPBACK_API_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 def _cors_allow_credentials(allowed_origins: list[str]) -> bool:
     return "*" not in allowed_origins
+
+
+def _api_host_is_loopback(api_host: str) -> bool:
+    return api_host.strip().lower() in LOOPBACK_API_HOSTS
+
+
+def _warn_if_api_host_is_exposed(api_host: str) -> None:
+    if _api_host_is_loopback(api_host):
+        return
+    logger.warning(
+        "DevSynapse API host '%s' is not loopback. This local-first app can execute "
+        "commands on the user's machine; expose it to a network only if you understand "
+        "and control that risk.",
+        api_host,
+    )
 
 
 def _log_api_request_safely(monitoring_system, **kwargs) -> None:
@@ -47,11 +64,33 @@ def _attach_api_request_log(response, monitoring_system, **kwargs):
     return response
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    del app
+    plugin_manager = get_plugin_manager()
+
+    auth_service.ensure_default_users()
+    _warn_if_api_host_is_exposed(settings.api_host)
+    logger.info("Inicializando DevSynapse...")
+    await plugin_manager.load_all()
+    await plugin_manager.emit_event("server:startup", {})
+    logger.info("DevSynapse iniciado com %s plugins", len(plugin_manager.loaded_plugins))
+
+    try:
+        yield
+    finally:
+        logger.info("Desligando DevSynapse...")
+        await plugin_manager.emit_event("server:shutdown", {})
+        await plugin_manager.unload_all()
+        logger.info("DevSynapse desligado")
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="DevSynapse AI API",
         description="API do assistente de desenvolvimento inteligente",
         version=settings.app_version,
+        lifespan=lifespan,
     )
     cors_allowed_origins = settings.get_cors_allowed_origins()
 
@@ -63,23 +102,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    plugin_manager = get_plugin_manager()
     monitoring_system = get_monitoring_system()
-
-    @app.on_event("startup")
-    async def startup():
-        auth_service.ensure_default_users()
-        logger.info("Inicializando DevSynapse...")
-        await plugin_manager.load_all()
-        await plugin_manager.emit_event("server:startup", {})
-        logger.info("DevSynapse iniciado com %s plugins", len(plugin_manager.loaded_plugins))
-
-    @app.on_event("shutdown")
-    async def shutdown():
-        logger.info("Desligando DevSynapse...")
-        await plugin_manager.emit_event("server:shutdown", {})
-        await plugin_manager.unload_all()
-        logger.info("DevSynapse desligado")
 
     @app.middleware("http")
     async def monitor_requests(request: Request, call_next):

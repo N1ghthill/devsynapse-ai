@@ -5,11 +5,17 @@ Unit tests for FastAPI application helpers.
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from starlette.background import BackgroundTasks
 from starlette.responses import Response
 
-from api.app import _attach_api_request_log, _cors_allow_credentials
+from api.app import (
+    _api_host_is_loopback,
+    _attach_api_request_log,
+    _cors_allow_credentials,
+    _warn_if_api_host_is_exposed,
+)
 from config.settings import AppSettings
 
 
@@ -81,6 +87,12 @@ def test_cors_disables_credentials_for_wildcard_origins() -> None:
     assert _cors_allow_credentials(["https://devsynapse.example.com"]) is True
 
 
+def test_default_cors_origins_are_localhost_only() -> None:
+    assert AppSettings.model_fields["cors_allowed_origins"].default == (
+        "http://127.0.0.1:5173,http://localhost:5173"
+    )
+
+
 def test_settings_parse_comma_separated_cors_origins() -> None:
     settings = AppSettings(
         cors_allowed_origins="https://app.example.com,http://127.0.0.1:5173"
@@ -90,3 +102,19 @@ def test_settings_parse_comma_separated_cors_origins() -> None:
         "https://app.example.com",
         "http://127.0.0.1:5173",
     ]
+
+
+def test_api_host_loopback_detection() -> None:
+    assert _api_host_is_loopback("127.0.0.1") is True
+    assert _api_host_is_loopback("localhost") is True
+    assert _api_host_is_loopback("::1") is True
+    assert _api_host_is_loopback("0.0.0.0") is False
+    assert _api_host_is_loopback("192.168.1.10") is False
+
+
+def test_non_loopback_api_host_logs_local_first_warning(caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="api.app")
+
+    _warn_if_api_host_is_exposed("0.0.0.0")
+
+    assert "local-first app can execute commands" in caplog.text

@@ -100,6 +100,7 @@ export const chatApi = {
     data: ChatRequest,
     onToken: (token: string) => void,
     onCommand: (command: string) => void,
+    onReasoning: (reasoning: string) => void,
     onDone: (usage: TokenUsage | null) => void,
     onError: (error: string) => void,
   ): AbortController => {
@@ -150,6 +151,8 @@ export const chatApi = {
               const event = JSON.parse(dataStr);
               if (event.type === 'text') {
                 onToken(event.content);
+              } else if (event.type === 'reasoning') {
+                onReasoning(event.content);
               } else if (event.type === 'command') {
                 onCommand(event.command);
               } else if (event.type === 'done') {

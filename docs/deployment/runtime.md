@@ -155,9 +155,15 @@ docker build \
   -t devsynapse-ai .
 ```
 
-Set `CORS_ALLOWED_ORIGINS` to the public browser origins that may call the API.
-The unset runtime default is permissive for local-first use; production should use
-explicit origins.
+Set `CORS_ALLOWED_ORIGINS` to the browser origins that may call the API. The
+runtime default is local-first:
+`http://127.0.0.1:5173,http://localhost:5173`. Non-local browser access must use
+explicit trusted origins.
+
+The Docker image binds Uvicorn to `0.0.0.0` so container port publishing works.
+That is intentional for container delivery, but it changes the local-first risk
+profile. DevSynapse logs a startup warning for non-loopback API hosts; keep the
+published port accessible only from trusted networks.
 
 ## Nginx
 
