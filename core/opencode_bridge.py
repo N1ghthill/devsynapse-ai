@@ -108,7 +108,8 @@ class OpenCodeBridge:
         command = before_event.data.get("command", command)
 
         # Validar e parsear comando
-        validation_result = self._validate_command(command)
+        trusted_admin = user_role == "admin"
+        validation_result = self._validate_command(command, user_role=user_role)
         if not validation_result[0]:
             error_msg = validation_result[1]
             execution_time = time.time() - start_time
@@ -130,7 +131,11 @@ class OpenCodeBridge:
         resolved_project_name = self._infer_project_name(command_type, args, project_name)
         effective_project_name = project_name or resolved_project_name
         args = self._normalize_file_command_args(command_type, args, effective_project_name)
-        if command_type in {"read", "edit", "write"} and not self._validate_file_path(args[0]):
+        if (
+            command_type in {"read", "edit", "write"}
+            and not trusted_admin
+            and not self._validate_file_path(args[0])
+        ):
             error_msg = f"Caminho de arquivo não permitido: {args[0]}"
             execution_time = time.time() - start_time
             self.monitoring_system.log_command_execution(
@@ -168,11 +173,15 @@ class OpenCodeBridge:
             # Executar comando baseado no tipo
             if command_type == "bash":
                 resolved_cwd = self._resolve_project_cwd(effective_project_name)
-                result = await self._execute_bash(args, resolved_cwd)
+                result = await self._execute_bash(
+                    args,
+                    resolved_cwd,
+                    trusted_shell=trusted_admin,
+                )
             elif command_type == "read":
                 result = await self._execute_read(args)
             elif command_type == "glob":
-                result = await self._execute_glob(args)
+                result = await self._execute_glob(args, trusted_paths=trusted_admin)
             elif command_type == "grep":
                 resolved_cwd = self._resolve_project_cwd(effective_project_name)
                 result = await self._execute_grep(args, resolved_cwd)
@@ -225,18 +234,22 @@ class OpenCodeBridge:
 
         return success, message, output, status, reason_code, effective_project_name
     
-    def _validate_command(self, command: str) -> Tuple[bool, str, Optional[str], Optional[List]]:
+    def _validate_command(
+        self,
+        command: str,
+        user_role: str = "user",
+    ) -> Tuple[bool, str, Optional[str], Optional[List]]:
         """Valida e parseia um comando OpenCode"""
         
         # Padrão: comando "argumento"
-        pattern = r'^(\w+)\s+"([^"]+)"(?:\s+(.+))?$'
+        pattern = r'^(\w+)\s+"((?:[^"\\]|\\.)*)"(?:\s+(.+))?$'
         match = re.match(pattern, command, re.DOTALL)
         
         if not match:
             return False, f"Formato de comando inválido: {command}", None, None
         
         command_type = match.group(1).lower()
-        main_arg = match.group(2)
+        main_arg = self._decode_quoted_arg(match.group(2))
         extra_args = match.group(3) if match.group(3) else ""
         
         # Verificar se comando é permitido
@@ -251,8 +264,10 @@ class OpenCodeBridge:
         
         # Validar argumentos específicos por tipo de comando
         if command_type == "bash":
-            # Validar comando bash
-            if not self._validate_bash_command(main_arg):
+            if user_role == "admin":
+                if not main_arg.strip():
+                    return False, "Comando bash vazio", None, None
+            elif not self._validate_bash_command(main_arg):
                 return False, f"Comando bash não permitido: {main_arg}", None, None
         
         return True, "Comando válido", command_type, [main_arg, extra_args]
@@ -269,6 +284,9 @@ class OpenCodeBridge:
 
         if command_type is None:
             return False, "Tipo de comando inválido para autorização"
+
+        if user_role == "admin":
+            return True, "Autorizado como administrador confiável"
 
         if command_type in self.read_only_commands:
             return True, "Autorizado"
@@ -622,27 +640,42 @@ class OpenCodeBridge:
         except Exception:
             return False
     
-    async def _execute_bash(self, args: List, cwd: Optional[str] = None) -> Tuple[bool, str, Optional[str]]:
+    async def _execute_bash(
+        self,
+        args: List,
+        cwd: Optional[str] = None,
+        trusted_shell: bool = False,
+    ) -> Tuple[bool, str, Optional[str]]:
         """Executa comando bash"""
         
         command = args[0]
 
         try:
-            parts = shlex.split(command)
-            if not parts:
-                return False, "Comando vazio", None
+            if trusted_shell:
+                if not command.strip():
+                    return False, "Comando vazio", None
+                command_to_run = command
+            else:
+                parts = shlex.split(command)
+                if not parts:
+                    return False, "Comando vazio", None
 
-            if parts[0] == "cd":
-                return False, "Comando bash não permitido para execução direta: cd", None
+                if parts[0] == "cd":
+                    return False, "Comando bash não permitido para execução direta: cd", None
+                command_to_run = parts
+
+            if not trusted_shell and not command_to_run:
+                return False, "Comando vazio", None
 
             exec_cwd = cwd or str(get_settings().default_execution_cwd)
             # Executar com timeout
             result = subprocess.run(
-                parts,
+                command_to_run,
                 capture_output=True,
                 text=True,
                 timeout=OPENCODE_TIMEOUT,
                 cwd=exec_cwd,
+                shell=trusted_shell,
             )
             
             output = result.stdout
@@ -688,7 +721,11 @@ class OpenCodeBridge:
         except Exception as e:
             return False, f"Erro lendo arquivo: {str(e)}", None
     
-    async def _execute_glob(self, args: List) -> Tuple[bool, str, Optional[str]]:
+    async def _execute_glob(
+        self,
+        args: List,
+        trusted_paths: bool = False,
+    ) -> Tuple[bool, str, Optional[str]]:
         """Simula comando glob do OpenCode"""
         
         pattern = args[0]
@@ -702,7 +739,7 @@ class OpenCodeBridge:
             # Limitar a diretórios permitidos
             allowed_files = []
             for file in files:
-                if self._validate_file_path(file):
+                if trusted_paths or self._validate_file_path(file):
                     allowed_files.append(file)
             
             if not allowed_files:

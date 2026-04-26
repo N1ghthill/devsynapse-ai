@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from config.settings import ALLOWED_BASH_COMMANDS, ALLOWED_COMMANDS, BLACKLISTED_PATTERNS
+from config.settings import (
+    ALLOWED_BASH_COMMANDS,
+    ALLOWED_COMMANDS,
+    BLACKLISTED_PATTERNS,
+)
 from core.opencode_bridge import OpenCodeBridge
 
 PROJECT_NAME = "devsynapse-ai"
@@ -123,6 +127,29 @@ class TestOpenCodeBridge:
             assert "sucesso" in message
 
     @pytest.mark.asyncio
+    async def test_execute_bash_trusted_shell_uses_shell_mode(self):
+        bridge = _bridge()
+
+        with patch('core.opencode_bridge.subprocess.run') as mock_run:
+            mock_result = Mock()
+            mock_result.returncode = 0
+            mock_result.stdout = "1\n"
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            success, message, output = await bridge._execute_bash(
+                ['printf "x" | wc -c'],
+                trusted_shell=True,
+            )
+
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["shell"] is True
+        assert mock_run.call_args.args[0] == 'printf "x" | wc -c'
+        assert success is True
+        assert "sucesso" in message
+        assert output == "1\n"
+
+    @pytest.mark.asyncio
     async def test_execute_bash_failure(self):
         bridge = _bridge()
 
@@ -155,6 +182,18 @@ class TestOpenCodeBridge:
         assert valid is True
         assert cmd_type == "bash"
         assert args[0] == "ls -la"
+
+    def test_validate_command_decodes_escaped_bash_quotes_for_admin(self):
+        bridge = _bridge()
+
+        valid, msg, cmd_type, args = bridge._validate_command(
+            'bash "python -c \\"print(1)\\" | cat"',
+            user_role="admin",
+        )
+
+        assert valid is True
+        assert cmd_type == "bash"
+        assert args[0] == 'python -c "print(1)" | cat'
 
     def test_validate_command_valid_read(self):
         bridge = _bridge()
@@ -256,6 +295,20 @@ class TestOpenCodeBridge:
         assert authorized is True
         assert "Autorizado" in message
 
+    def test_authorize_admin_allows_arbitrary_bash_after_validation(self):
+        bridge = _bridge()
+
+        authorized, message = bridge._authorize_command(
+            "bash",
+            ["uv run pytest && npm run build", ""],
+            "admin",
+            None,
+            [],
+        )
+
+        assert authorized is True
+        assert "administrador" in message
+
     def test_authorize_mutating_bash_requires_admin(self):
         bridge = _bridge()
 
@@ -340,7 +393,7 @@ class TestOpenCodeBridge:
         assert authorized is False
         assert "fora do projeto" in message
 
-    def test_authorize_admin_mutation_denies_paths_outside_registered_project(self):
+    def test_authorize_admin_mutation_allows_paths_outside_registered_project(self):
         bridge = _bridge()
 
         authorized, message = bridge._authorize_command(
@@ -351,8 +404,8 @@ class TestOpenCodeBridge:
             [],
         )
 
-        assert authorized is False
-        assert "fora do projeto" in message
+        assert authorized is True
+        assert "administrador" in message
 
     def test_authorize_mutating_bash_denies_paths_outside_project(self):
         bridge = _bridge()
@@ -492,6 +545,70 @@ class TestOpenCodeBridge:
         assert status == "success"
         assert reason_code is None
         assert project_name == "devsynapse-ai"
+
+    @pytest.mark.asyncio
+    async def test_execute_command_admin_uses_trusted_shell_for_bash(self):
+        bridge = _bridge()
+
+        with patch.object(bridge, "_execute_bash", new_callable=AsyncMock) as mock_bash:
+            mock_bash.return_value = (True, "ran", "ok")
+
+            success, message, output, status, reason_code, project_name = await bridge.execute_command(
+                'bash "python -c \\"print(1)\\" | cat"',
+                user_role="admin",
+            )
+
+        mock_bash.assert_awaited_once_with(
+            ['python -c "print(1)" | cat', ""],
+            str(PROJECT_ROOT),
+            trusted_shell=True,
+        )
+        assert success is True
+        assert message == "ran"
+        assert output == "ok"
+        assert status == "success"
+        assert reason_code is None
+        assert project_name == "devsynapse-ai"
+
+    @pytest.mark.asyncio
+    async def test_execute_command_admin_can_read_outside_allowed_directories(self):
+        bridge = _bridge()
+
+        with patch.object(bridge, "_execute_read", new_callable=AsyncMock) as mock_read:
+            mock_read.return_value = (True, "read", "content")
+
+            success, message, output, status, reason_code, project_name = await bridge.execute_command(
+                'read "/etc/hosts"',
+                user_role="admin",
+            )
+
+        mock_read.assert_awaited_once_with(["/etc/hosts", ""])
+        assert success is True
+        assert message == "read"
+        assert output == "content"
+        assert status == "success"
+        assert reason_code is None
+        assert project_name is None
+
+    @pytest.mark.asyncio
+    async def test_execute_command_admin_glob_skips_allowed_directory_filter(self):
+        bridge = _bridge()
+
+        with patch.object(bridge, "_execute_glob", new_callable=AsyncMock) as mock_glob:
+            mock_glob.return_value = (True, "globbed", "[]")
+
+            success, message, output, status, reason_code, project_name = await bridge.execute_command(
+                'glob "/etc/*"',
+                user_role="admin",
+            )
+
+        mock_glob.assert_awaited_once_with(["/etc/*", ""], trusted_paths=True)
+        assert success is True
+        assert message == "globbed"
+        assert output == "[]"
+        assert status == "success"
+        assert reason_code is None
+        assert project_name is None
 
     @pytest.mark.asyncio
     async def test_execute_command_normalizes_relative_read_path_against_project(self):

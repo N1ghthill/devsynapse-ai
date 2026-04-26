@@ -28,7 +28,7 @@ It includes:
 - streamed reasoning events surfaced in the chat UI;
 - project selector in chat UI;
 - working directory resolution per project for bash/grep commands;
-- conservative read-only auto-execution for safe inspection commands only;
+- conservative non-admin auto-execution plus trusted admin tool execution;
 - local-first security guardrails, localhost CORS defaults and exposed-host warnings;
 - documented local security model and operator checklist;
 - keyboard shortcuts for chat input (Enter, Ctrl+Enter, Shift+Enter);

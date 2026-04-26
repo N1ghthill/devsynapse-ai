@@ -74,8 +74,8 @@ Stores:
 - permission type
 
 This is the basis for project-scoped mutation authorization for non-admin users.
-Admin users have global project mutation scope and do not depend on rows in this table.
-For both admins and non-admins, path-based mutating commands must stay inside the resolved registered project.
+Admin users are trusted local operators and do not depend on rows in this table.
+Non-admin path-based mutating commands must stay inside the resolved registered project.
 
 ### Admin audit logs
 

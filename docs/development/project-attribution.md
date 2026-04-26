@@ -15,8 +15,8 @@ Project context can come from:
 ## Contract Rules
 
 - Mutating execution for non-admin users must require an explicit or resolvable project.
-- Admin users have global mutation scope across registered projects and do not use per-user allowlists.
-- Mutating file and path-based bash commands must only target paths inside the resolved registered project.
+- Admin users are trusted local operators and do not use per-user allowlists.
+- Non-admin mutating file and path-based bash commands must only target paths inside the resolved registered project.
 - Admin-registered project paths must be available to command attribution and working-directory resolution.
 - Regular `/projects` responses must not expose local project paths; `/admin/projects` is the path-bearing management surface.
 - `/execute` responses must include `project_name` when the bridge resolves one.

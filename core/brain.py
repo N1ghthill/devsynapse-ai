@@ -344,7 +344,11 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             aggregated_usage = self._merge_usage(aggregated_usage, llm_result.usage)
 
             autoexec_enabled = bool(user_id and user_role)
-            if not (autoexec_enabled and opencode_command and self._is_read_only_command(opencode_command)):
+            if not (
+                autoexec_enabled
+                and opencode_command
+                and self._can_autoexecute_command(opencode_command, user_role)
+            ):
                 break
 
             success, msg, output, status, reason, proj = await self.opencode.execute_command(
@@ -847,8 +851,8 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         )
 
     @staticmethod
-    def _is_read_only_command(command: str) -> bool:
-        """Check whether an OpenCode command is read-only and safe for auto-execution."""
+    def _can_autoexecute_command(command: str, user_role: Optional[str] = None) -> bool:
+        """Check whether a command may run without an explicit confirmation click."""
         if not command:
             return False
 
@@ -858,10 +862,10 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                 return False
 
         parts = command.split(None, 1)
-        cmd_type = parts[0] if parts else ""
+        cmd_type = parts[0].lower() if parts else ""
 
-        if cmd_type in READ_ONLY_COMMANDS:
-            return True
+        if user_role == "admin":
+            return cmd_type in {"bash", *READ_ONLY_COMMANDS, "edit", "write"}
 
         if cmd_type == "bash":
             bash_command = parts[1].strip("\"' ") if len(parts) > 1 else ""
@@ -869,6 +873,11 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                 return True
 
         return False
+
+    @staticmethod
+    def _is_read_only_command(command: str) -> bool:
+        """Compatibility wrapper for non-admin low-risk auto-execution checks."""
+        return DevSynapseBrain._can_autoexecute_command(command, user_role="user")
 
     @staticmethod
     def _is_read_only_bash_command(command: str) -> bool:

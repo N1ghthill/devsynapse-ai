@@ -22,11 +22,12 @@ Python dependencies are installed with checked-in lock constraints in CI to redu
 Authenticated chat, conversation, feedback, settings, project, monitoring stats/alerts, execution and usage export routes require a valid bearer token.
 Public health endpoints are limited to readiness status.
 `/execute` applies role-aware authorization inside the command bridge:
-- read-only inspection commands are available to regular users;
-- mutating actions such as `edit`, `write` and sensitive bash commands require explicit permission context.
+- low-risk inspection commands are available to regular users.
+- file-content tools such as `read`, `grep` and `glob` are not auto-executed for non-admin chat turns; they are proposed for explicit confirmation.
+- mutating actions such as `edit`, `write` and sensitive bash commands require explicit permission context for non-admin users.
 - regular users may receive mutation permission for explicit projects through per-user settings, but only when project context can be resolved from the request or command path.
-- administrators have global mutation scope across registered projects and are not constrained by per-user project allowlists.
-- mutating file and path-based bash actions must target paths inside the resolved registered project.
+- administrators are trusted local operators: they can run any supported OpenCode tool, use arbitrary shell syntax through `bash`, and access paths outside registered project roots.
+- non-admin mutating file and path-based bash actions must target paths inside the resolved registered project.
 - administrative changes to per-user project permissions are exposed through `/admin/users/{username}/permissions` and tracked in `/admin/audit-logs`.
 - administrators can list and register existing local project directories through `/admin/projects`; registered projects are persisted and loaded into command attribution and working-directory resolution.
 

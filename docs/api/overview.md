@@ -103,7 +103,8 @@ Purpose:
 - chat, conversation, feedback, settings, project, monitoring stats/alerts, execution and usage export routes require an authenticated user
 - `/health` and `/monitoring/health` remain public readiness endpoints
 - admin routes require an admin role
-- admin users have global mutation scope across registered projects and do not use per-user project allowlists
+- admin users are trusted local operators: they can execute supported OpenCode tools without per-user project allowlists, and admin `bash` supports shell syntax
+- non-admin users keep project-scoped mutation permissions and conservative chat auto-execution
 - frontend currently redirects to `/login` on `401`
 
 ## Contributor Rule

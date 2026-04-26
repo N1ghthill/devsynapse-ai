@@ -1,9 +1,10 @@
 """
 Unit tests for brain system
 """
-import pytest
-from unittest.mock import Mock, patch, AsyncMock
 import json
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 from core.brain import DevSynapseBrain
 
@@ -245,6 +246,53 @@ class TestDevSynapseBrain:
             "tool_call_id": "call_pwd",
             "content": "tool output",
         }
+
+    @pytest.mark.asyncio
+    async def test_process_message_autoexecutes_admin_mutation_tool(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        mock_bridge.execute_command = AsyncMock(
+            return_value=(True, "created", "write output", "success", None, None)
+        )
+
+        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+            from core.brain import LLMResult
+
+            mock_call.side_effect = [
+                LLMResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_write",
+                            "type": "function",
+                            "function": {
+                                "name": "write",
+                                "arguments": '{"path": "/tmp/admin.txt", "content": "hello"}',
+                            },
+                        }
+                    ],
+                ),
+                LLMResult(content="Created it."),
+            ]
+
+            response, cmd, usage = await brain.process_message(
+                "Create the admin file",
+                "test_session",
+                user_id="irving",
+                user_role="admin",
+            )
+
+        mock_bridge.execute_command.assert_awaited_once_with(
+            'write "/tmp/admin.txt" --content="hello"',
+            user_id="irving",
+            project_name=None,
+            user_role="admin",
+            project_mutation_allowlist=[],
+        )
+        assert response == "Created it."
+        assert cmd is None
+        assert usage is None
 
     @pytest.mark.asyncio
     async def test_process_message_error_handling(self, mock_memory, mock_bridge):
@@ -534,8 +582,9 @@ class TestDevSynapseBrain:
     @pytest.mark.parametrize(
         ("command", "expected"),
         [
-            ('read "/tmp/test.py"', True),
-            ('grep "TODO"', True),
+            ('read "/tmp/test.py"', False),
+            ('grep "TODO"', False),
+            ('glob "**/*.py"', False),
             ('bash "ls -la"', True),
             ('bash "pwd"', True),
             ('bash "git status --short"', True),
@@ -554,6 +603,31 @@ class TestDevSynapseBrain:
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
         assert brain._is_read_only_command(command) is expected
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'read "/home/irving/.ssh/id_rsa"',
+            'grep "DEEPSEEK_API_KEY"',
+            'glob "/etc/*"',
+            'write "/tmp/out.txt" --content="hello"',
+            'edit "/tmp/out.txt" --old="hello" --new="bye"',
+            'bash "npm test && npm run build"',
+        ],
+    )
+    def test_can_autoexecute_command_allows_admin_tools(
+        self, mock_memory, mock_bridge, command
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        assert brain._can_autoexecute_command(command, user_role="admin") is True
+
+    def test_can_autoexecute_command_blocks_blacklisted_admin_command(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        assert brain._can_autoexecute_command('bash "rm -rf /"', user_role="admin") is False
 
     def test_prepare_messages_with_history(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)

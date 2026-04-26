@@ -112,6 +112,7 @@ Local security checklist:
 - keep the backend bound to `127.0.0.1` unless network access is intentional;
 - keep CORS limited to local or explicitly trusted browser origins;
 - store `DEEPSEEK_API_KEY` only in runtime config or environment;
+- use the admin role only when unrestricted local agent execution is intended;
 - review proposed commands before confirming mutations;
 - grant project mutation permissions only where writes are expected.
 

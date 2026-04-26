@@ -13,7 +13,7 @@ The main goal is to reduce local development risk while keeping the app useful:
 - restrict browser origins to local frontend origins by default
 - require authentication for chat, settings, admin and command execution routes
 - validate command format before execution
-- restrict command types and bash commands through allowlists
+- restrict command types and non-admin bash commands through allowlists
 - require explicit project scope for mutating commands
 - require user/project permission for non-admin mutations
 - keep mutating commands inside the registered project root
@@ -24,14 +24,22 @@ The main goal is to reduce local development risk while keeping the app useful:
 DevSynapse exposes a constrained command bridge, not a raw shell. Supported command
 families are `bash`, `read`, `glob`, `grep`, `edit` and `write`.
 
-Read-oriented operations can inspect files and command output. Mutating operations
-such as `edit`, `write`, `touch`, `mkdir`, `cp`, `mv`, `rm` and `chmod` require
-confirmation and project-aware authorization. Non-admin users can mutate only
-projects in their allowlist.
+Read-oriented operations can inspect files and command output. Non-admin mutating
+operations such as `edit`, `write`, `touch`, `mkdir`, `cp`, `mv`, `rm` and `chmod`
+require confirmation and project-aware authorization. Non-admin users can mutate
+only projects in their allowlist.
 
-Read-only auto-execution is intentionally conservative. It is limited to safe
-inspection commands and does not auto-run general user-authorized commands such as
-`curl`, `npm`, `python`, archive extraction or package installation.
+Admin users are treated as trusted local operators. Admin chat tool calls may
+auto-execute supported OpenCode tools, including `edit` and `write`; admin `bash`
+uses shell mode so pipelines, redirects and chained commands work as expected.
+Admin file tools are not constrained to registered project roots or the normal
+allowed-directory list. The bridge still rejects configured blacklist patterns and
+records command telemetry, but this is not a sandbox boundary.
+
+Non-admin auto-execution is intentionally conservative. It is limited to low-risk
+inspection through allowlisted bash commands. File-content tools such as `read`,
+`grep` and `glob` are proposed for explicit confirmation instead of being sent to
+the LLM automatically.
 
 ## Non-Goals
 
@@ -55,6 +63,7 @@ Before normal use:
 - keep `CORS_ALLOWED_ORIGINS` limited to known browser origins
 - configure `DEEPSEEK_API_KEY` only in runtime config or environment
 - replace default local passwords
+- use the admin role only when unrestricted local agent execution is intended
 - register only project directories you trust
 - grant mutation permissions only where writes are expected
 - review proposed commands before confirming mutations

@@ -11,6 +11,7 @@ Current security-related controls include:
 - command validation and command allowlists
 - role-aware authorization
 - project-scoped write permissions for non-admin users
+- trusted local-operator execution for admin users
 - administrative audit logs
 
 ## Known Boundaries
@@ -49,6 +50,7 @@ For local deployments:
 - keep the API bound to localhost unless network access is intentional
 - keep CORS restricted to local or explicitly trusted browser origins
 - limit who can access the machine running the assistant
+- use admin accounts only when unrestricted local agent execution is intended
 - review mutation permissions before enabling write access for users
 
 ## Documentation References
