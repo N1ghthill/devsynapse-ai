@@ -47,10 +47,14 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 Release validation completed on `2026-04-26` (v0.4.1):
 - full repository verification: `make verify`
+- browser smoke validation: `make ui-smoke`
+- dependency consistency: `pip check`
+- frontend dependency audit: `npm audit --audit-level=high`
 - backend test suite: `186 passed`
 - Python/Ruff checks, shell syntax checks, Python script compilation and frontend ESLint: passed
 - frontend production build: passed
 - GitHub Actions CI: passed on `main`
+- supported installer target: Debian/Ubuntu-style Linux with `apt`; native Windows is unvalidated, with WSL2 recommended
 - LLM usage telemetry, streaming chat delivery, project selector, conversation persistence, execution workflow and dashboard metrics are active in the current codebase
 
 ## What The Project Does
@@ -81,6 +85,19 @@ devsynapse-ai/
 ├── Makefile                # Common dev commands
 └── README_PROFESSIONAL.md  # Engineering-oriented companion doc
 ```
+
+## Platform Support
+
+The supported release target is Linux, specifically Debian/Ubuntu and close
+derivatives that use `apt`. The installer, updater and launcher are shell-based
+and assume `bash`, `python3`, `python3-venv`, `npm` and standard Linux paths.
+
+Windows native usage is not currently validated and there is no PowerShell or
+`.bat` installer. Windows users should use WSL2 with an Ubuntu/Debian
+distribution for the supported path. A manual native Windows setup may work in
+principle because the backend is Python and the UI runs in a browser, but it is
+experimental: shell aliases, path handling and command execution behavior have
+not been tested there.
 
 ## Quick Start
 
@@ -120,6 +137,10 @@ or set `DEVSYNAPSE_CONFIG_FILE`, `DEVSYNAPSE_DATA_DIR` and `DEVSYNAPSE_LOGS_DIR`
 individually.
 
 ### Manual Path
+
+This path is still documented for Linux-like shells. For native Windows, treat it
+as an experimental contributor path until a tested Windows setup guide or script
+exists.
 
 ```bash
 python3 -m venv venv
@@ -202,6 +223,7 @@ Start here:
 - code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - security policy: [SECURITY.md](SECURITY.md)
 - changelog: [CHANGELOG.md](CHANGELOG.md)
+- release checklist: [RELEASING.md](RELEASING.md)
 - documentation index: [docs/README.md](docs/README.md)
 
 Technical guides:

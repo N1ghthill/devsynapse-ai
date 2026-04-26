@@ -31,6 +31,9 @@ It includes:
 - conservative non-admin auto-execution plus trusted admin tool execution;
 - local-first security guardrails, localhost CORS defaults and exposed-host warnings;
 - documented local security model and operator checklist;
+- documented release platform support: Debian/Ubuntu-style Linux is the supported
+  installer target, Windows users should use WSL2, and native Windows remains
+  unvalidated;
 - keyboard shortcuts for chat input (Enter, Ctrl+Enter, Shift+Enter);
 - portable CI and setup validation for shell scripts, frontend linting and installer/uninstaller smoke tests;
 - Docker delivery with a FastAPI runtime image that serves the production frontend bundle;
@@ -66,6 +69,8 @@ These are valuable but not immediate baseline requirements:
 - more formal user administration workflows;
 - richer integration and end-to-end frontend coverage;
 - production deployment validation for Docker, reverse proxy and persistent volumes;
+- a tested native Windows setup guide or installer, if native Windows becomes a
+  supported release target;
 - a longer-term persistence strategy if multi-user or multi-node use becomes a product goal.
 
 ## Explicitly Deferred
@@ -77,7 +82,9 @@ The current project should not claim these as complete:
 - distributed or multi-tenant database architecture;
 - production-complete security hardening;
 - local quantized model execution;
-- provider-neutral model routing as a primary product direction.
+- provider-neutral model routing as a primary product direction;
+- native Windows installer support, until a Windows environment and validation
+  checklist are available.
 
 ## Maintenance Rule
 

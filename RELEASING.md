@@ -1,13 +1,57 @@
 # Releasing
 
-## Versioning
+This document is the release compliance checklist for DevSynapse AI.
 
-The current documented baseline aligns with application version `0.3.4` from [config/settings.py](config/settings.py).
+## Current Release
 
-## Release Checklist
+The current public-readiness baseline is:
 
-1. Ensure docs are current.
-2. Run:
+```text
+v0.4.1
+```
+
+It aligns with application version `0.4.1` in [config/settings.py](config/settings.py)
+and release notes in [docs/releases/v0.4.1.md](docs/releases/v0.4.1.md).
+
+## Supported Target
+
+The supported installer and updater target is Linux on Debian/Ubuntu or close
+`apt`-based derivatives.
+
+Required system tools:
+- `bash`
+- `git`
+- `python3`
+- `python3-venv`
+- `python3-pip`
+- `nodejs`
+- `npm`
+
+Native Windows is not a validated release target. There is no supported
+PowerShell or `.bat` installer. Windows users should use WSL2 with an
+Ubuntu/Debian distribution for the supported path.
+
+## Compliance Gate
+
+Before tagging or updating a release, confirm:
+
+- version references match `config/settings.py`, `README.md`, `CHANGELOG.md`,
+  `RELEASING.md` and the target `docs/releases/<tag>.md`
+- platform support is explicit: Debian/Ubuntu-style Linux is supported; native
+  Windows is experimental/manual
+- API contract changes are reflected in `api/models.py`, `frontend/src/types.ts`,
+  `frontend/src/api/client.ts` and `docs/api/overview.md`
+- schema changes have migrations and data-model documentation
+- security boundary changes are documented in `SECURITY.md` or
+  `docs/security/local-security-model.md`
+- runtime/setup/update behavior is documented in `README.md`,
+  `docs/deployment/runtime.md` and `docs/development/onboarding.md`
+- release notes state migration impact and validation evidence
+- no secrets, local databases, logs or generated dependency directories are staged
+
+## Validation Commands
+
+Run the complete local gate:
 
 ```bash
 make verify
@@ -16,19 +60,39 @@ make ui-smoke
 cd frontend && npm audit --audit-level=high
 ```
 
-3. Review `CHANGELOG.md`.
-4. Prepare release notes under `docs/releases/`.
-5. Tag the release in git.
-6. Publish the GitHub release.
+Expected coverage:
+- Ruff and backend tests
+- shell syntax checks and utility script compilation
+- frontend ESLint and production build
+- Playwright UI smoke against a disposable runtime
+- Python dependency consistency
+- high-severity frontend dependency audit
 
-## Current Release
+## Publishing
 
-The current public-readiness baseline should use:
+1. Ensure `CHANGELOG.md` and the target release notes are current.
+2. Commit all release preparation changes.
+3. Create an annotated tag, for example:
 
-```text
-v0.3.4
+```bash
+git tag -a v0.4.1 -m "DevSynapse AI v0.4.1"
 ```
 
-With notes based on:
-- [CHANGELOG.md](CHANGELOG.md)
-- [docs/releases/v0.3.4.md](docs/releases/v0.3.4.md)
+4. Push the tag:
+
+```bash
+git push origin v0.4.1
+```
+
+5. Confirm the GitHub release workflow publishes from
+   `docs/releases/v0.4.1.md`.
+
+## Post-Release Corrections
+
+The release workflow intentionally leaves an existing GitHub release unchanged.
+If release notes are clarified after publication, update the release body
+explicitly after reviewing the diff:
+
+```bash
+gh release edit v0.4.1 --notes-file docs/releases/v0.4.1.md
+```

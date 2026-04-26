@@ -6,7 +6,13 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Documentation
+- Clarified that the supported release installer target is Debian/Ubuntu-style
+  Linux, with native Windows setup currently unvalidated and WSL2 recommended
+  for Windows users.
+- Reworked release documentation into an explicit compliance gate covering
+  version alignment, platform support, contracts, migrations, security notes and
+  validation evidence.
 
 ## [v0.4.1] - 2026-04-26
 

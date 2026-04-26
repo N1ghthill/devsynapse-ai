@@ -74,7 +74,7 @@ Usage:
   bash scripts/update.sh --branch main
 
 Options:
-  --version TAG   Update checkout to a published tag, for example v0.3.4.
+  --version TAG   Update checkout to a published tag, for example v0.4.1.
   --branch NAME   Update checkout to a branch, defaulting to the current branch.
   --skip-git      Skip git fetch/checkout/pull and refresh local runtime only.
   --no-backup     Do not copy runtime config/database files before updating.

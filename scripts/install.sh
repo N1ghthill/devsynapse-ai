@@ -2,7 +2,8 @@
 #
 # DevSynapse AI — Installer
 #
-# Compatibilidade: Debian / Ubuntu (requer bash, python3, npm).
+# Compatibilidade: Debian / Ubuntu (requer bash, python3, python3-venv,
+# python3-pip, nodejs e npm).
 #
 # Uso:
 #   bash scripts/install.sh

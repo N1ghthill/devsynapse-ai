@@ -7,7 +7,7 @@
 #   devsynapse                  # via the bash alias (set up by scripts/install.sh)
 #   devsynapse update           # update code, dependencies, migrations and frontend build
 #
-# Compatibility: Debian / Ubuntu / any Linux with bash, python3, npm.
+# Compatibility: Debian / Ubuntu and close apt-based Linux distributions.
 # Starts the backend and frontend, then prints connection info and credentials.
 
 set -euo pipefail

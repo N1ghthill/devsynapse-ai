@@ -8,6 +8,14 @@ This guide is the shortest reliable path for a first-time contributor.
 - Node.js `22`
 - `npm`
 - `git`
+- Linux with `bash`; the supported installer target is Debian/Ubuntu or a close
+  derivative with `apt`
+
+Native Windows setup is not currently validated. Windows users should prefer
+WSL2 with Ubuntu/Debian for the supported path. The Python/FastAPI backend and
+browser UI may run manually on Windows, but there is no tested PowerShell or
+`.bat` installer yet, and shell aliases, path handling and command execution
+semantics should be considered experimental there.
 
 ## Fresh Clone Setup
 

@@ -17,6 +17,21 @@ Current checks:
 
 Python dependencies are installed with checked-in lock constraints in CI to reduce drift from upstream package releases.
 
+## Platform Support
+
+The release installation path is supported on Linux, with Debian/Ubuntu and close
+`apt`-based derivatives as the primary target. The installer, updater and
+launcher are Bash scripts and expect Linux-style paths, `python3`,
+`python3-venv`, `npm` and a local browser.
+
+Native Windows is not part of the validated release target for `v0.4.1`. There
+is currently no PowerShell or `.bat` installer. Windows users should run the
+supported flow through WSL2 with an Ubuntu/Debian distribution. A manual native
+Windows setup may be possible because the backend is Python and the frontend is
+browser-based, but command execution, shell aliases, path normalization and
+installer/update behavior are untested there and should be treated as
+experimental.
+
 ## Authorization Boundary
 
 Authenticated chat, conversation, feedback, settings, project, monitoring stats/alerts, execution and usage export routes require a valid bearer token.

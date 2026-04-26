@@ -174,6 +174,18 @@ Related files:
 
 ## Development Workflow
 
+### Platform Support
+
+The supported release installation path is Linux on Debian/Ubuntu or close
+`apt`-based derivatives. The repository's installer, updater and launcher are
+Bash-oriented and assume Linux-style paths.
+
+Native Windows is not currently validated. Use WSL2 with Ubuntu/Debian for the
+supported workflow. Manual native Windows usage is possible to explore because
+the backend is Python and the frontend is browser-based, but there is no tested
+PowerShell or `.bat` installer and command execution/path behavior is
+experimental there.
+
 ### Recommended local setup
 
 ```bash
