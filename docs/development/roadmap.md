@@ -6,7 +6,7 @@ Do not present planned items as shipped behavior in user-facing documentation.
 
 ## Current Baseline
 
-The current documented baseline is `v0.4.0`, validated on `2026-04-26`.
+The current documented baseline is `v0.4.1`, validated on `2026-04-26`.
 It includes:
 
 - local-first FastAPI, React/Vite and SQLite architecture;

@@ -6,9 +6,15 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [v0.4.1] - 2026-04-26
+
 ### Changed
 - Admin command execution now uses trusted local-operator semantics: admins can run any supported OpenCode tool, arbitrary shell syntax through `bash`, and file tools outside registered project roots.
 - Non-admin chat auto-execution no longer runs file-content tools such as `read`, `grep` or `glob`; those commands are proposed for confirmation instead.
+- Frontend dependencies were refreshed (`lucide-react`, `@types/node`).
+- Python runtime and development dependency manifests were refreshed, with matching lock constraints already in the repository.
 
 ### Fixed
 - OpenCode command parsing now accepts escaped quotes in the primary command argument, improving DeepSeek tool-call conversion for quoted shell snippets.

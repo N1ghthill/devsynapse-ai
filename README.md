@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.4.0-blue)
+![Version](https://img.shields.io/badge/version-0.4.1-blue)
 
 DevSynapse AI is an open source development assistant that combines:
 - DeepSeek-first LLM access (v4-pro with thinking mode) through a user-provided API key;
@@ -45,16 +45,12 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Verified Baseline
 
-Release validation completed on `2026-04-26` (v0.4.0):
+Release validation completed on `2026-04-26` (v0.4.1):
 - full repository verification: `make verify`
-- backend test suite: `171 passed`
+- backend test suite: `186 passed`
 - Python/Ruff checks, shell syntax checks, Python script compilation and frontend ESLint: passed
 - frontend production build: passed
-- UI smoke against disposable runtime: passed
-- Docker build and container smoke: passed
 - GitHub Actions CI: passed on `main`
-- local API + frontend integration validated manually during development
-- public onboarding flow revalidated from a clean clone with fresh dependency installs, migrations, seeded users, route-level test pass and frontend build
 - LLM usage telemetry, streaming chat delivery, project selector, conversation persistence, execution workflow and dashboard metrics are active in the current codebase
 
 ## What The Project Does
@@ -156,7 +152,7 @@ update-devsynapse
 To pin a specific published release:
 
 ```bash
-devsynapse update --version v0.4.0
+devsynapse update --version v0.4.1
 ```
 
 ### Manual Backend
@@ -219,7 +215,7 @@ Technical guides:
 - development roadmap: [docs/development/roadmap.md](docs/development/roadmap.md)
 - runtime and delivery notes: [docs/deployment/runtime.md](docs/deployment/runtime.md)
 - local security model: [docs/security/local-security-model.md](docs/security/local-security-model.md)
-- latest release notes: [docs/releases/v0.4.0.md](docs/releases/v0.4.0.md)
+- latest release notes: [docs/releases/v0.4.1.md](docs/releases/v0.4.1.md)
 
 Supplementary references:
 - engineering guide: [README_PROFESSIONAL.md](README_PROFESSIONAL.md)

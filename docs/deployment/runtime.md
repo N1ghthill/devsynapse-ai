@@ -86,7 +86,7 @@ The updater:
 For a pinned release:
 
 ```bash
-devsynapse update --version v0.4.0
+devsynapse update --version v0.4.1
 ```
 
 ## LLM Budget Controls
