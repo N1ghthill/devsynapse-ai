@@ -6,7 +6,7 @@ Do not present planned items as shipped behavior in user-facing documentation.
 
 ## Current Baseline
 
-The current documented baseline is `v0.4.1`, validated on `2026-04-26`.
+The current documented baseline is `v0.5.0`, validated on `2026-04-27`.
 It includes:
 
 - local-first FastAPI, React/Vite and SQLite architecture;
@@ -17,16 +17,23 @@ It includes:
 - conversation persistence, rehydration, rename and delete flows;
 - LLM token and cost telemetry;
 - dashboard usage reporting and CSV export;
+- DeepSeek cache hit-rate telemetry and Flash/Pro routing controls;
+- persistent agent learning from feedback, command outcomes and route decisions;
 - configurable daily/monthly LLM budget thresholds with alert emission (enabled by default);
 - contributor documentation, security policy and release notes;
 - DeepSeek-first API-key based LLM integration;
 - native DeepSeek tool calling with strict function definitions and regex fallback;
 - configurable DeepSeek thinking mode and reasoning effort;
 - execution result interpretation after confirmed commands;
+- command confirmation UI with command text, risk label, directory scope and expected effect;
+- workflow templates for common local coding tasks such as test runs, failing-test
+  analysis, TODO search, repository summaries, changelog drafts and Docker inspection;
 - portable configuration via environment variables (no hardcoded user paths);
 - SSE streaming chat with real-time token delivery;
 - streamed reasoning events surfaced in the chat UI;
 - project selector in chat UI;
+- persisted conversation project scope restored in the chat UI, with project
+  chips visible in messages and conversation summaries;
 - working directory resolution per project for bash/grep commands;
 - conservative non-admin auto-execution plus trusted admin tool execution;
 - local-first security guardrails, localhost CORS defaults and exposed-host warnings;
@@ -34,6 +41,9 @@ It includes:
 - documented release platform support: Debian/Ubuntu-style Linux is the supported
   installer target, Windows users should use WSL2, and native Windows remains
   unvalidated;
+- Tauri desktop packaging with validated Linux `.deb` and `.rpm` artifacts;
+- macOS and Windows desktop packaging configured but still unvalidated on target
+  operating systems;
 - keyboard shortcuts for chat input (Enter, Ctrl+Enter, Shift+Enter);
 - portable CI and setup validation for shell scripts, frontend linting and installer/uninstaller smoke tests;
 - Docker delivery with a FastAPI runtime image that serves the production frontend bundle;
@@ -46,10 +56,13 @@ These items should be treated as the next practical development focus:
 
 - strengthen explicit project attribution across chat, execution and reporting flows; see [project-attribution.md](project-attribution.md)
 - continue sharpening the DeepSeek-first product path around cost visibility, setup clarity and reliable local workflows;
+- implement the remaining DeepSeek cost optimization plan, especially response cache, R1 Harvest and automatic quality scoring; see [deepseek-cost-optimization-plan.md](deepseek-cost-optimization-plan.md)
 - deepen end-to-end coverage around frontend command UX and long-running user sessions;
 - improve dashboard clarity for budget, usage, project cost and alert state;
 - tighten linting and formatting policy enforcement across backend and frontend;
 - improve contributor ergonomics for issues, pull requests and release preparation.
+- add target-OS CI or manual validation for macOS and Windows desktop artifacts
+  before exposing those downloads on the landing page.
 
 ## Next Design Decisions
 
@@ -71,6 +84,7 @@ These are valuable but not immediate baseline requirements:
 - production deployment validation for Docker, reverse proxy and persistent volumes;
 - a tested native Windows setup guide or installer, if native Windows becomes a
   supported release target;
+- validated macOS and Windows desktop release jobs for public downloads;
 - a longer-term persistence strategy if multi-user or multi-node use becomes a product goal.
 
 ## Explicitly Deferred
@@ -81,10 +95,15 @@ The current project should not claim these as complete:
 - enterprise RBAC;
 - distributed or multi-tenant database architecture;
 - production-complete security hardening;
+- SaaS delivery as the primary product path;
+- complex multi-user or multi-tenant product scope;
 - local quantized model execution;
 - provider-neutral model routing as a primary product direction;
+- plugin marketplace scope;
 - native Windows installer support, until a Windows environment and validation
-  checklist are available.
+  checklist are available;
+- public macOS/Windows download links, until target-OS artifacts are built and
+  smoke-tested.
 
 ## Maintenance Rule
 

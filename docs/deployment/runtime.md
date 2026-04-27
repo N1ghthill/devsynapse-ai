@@ -19,12 +19,19 @@ Python dependencies are installed with checked-in lock constraints in CI to redu
 
 ## Platform Support
 
-The release installation path is supported on Linux, with Debian/Ubuntu and close
+The shell installation path is supported on Linux, with Debian/Ubuntu and close
 `apt`-based derivatives as the primary target. The installer, updater and
 launcher are Bash scripts and expect Linux-style paths, `python3`,
 `python3-venv`, `npm` and a local browser.
 
-Native Windows is not part of the validated release target for `v0.4.1`. There
+The desktop distribution path is Tauri v2 plus a PyInstaller backend sidecar.
+As of `2026-04-27`, Linux `.deb` and `.rpm` packages have been generated through
+`make desktop-build`. AppImage is opt-in/experimental because `linuxdeploy` is
+environment-sensitive. macOS and Windows bundles are configured but not validated
+in this repository yet; generate them on target OS runners before linking them
+from a public landing page.
+
+Native Windows is not part of the validated release target for `v0.5.0`. There
 is currently no PowerShell or `.bat` installer. Windows users should run the
 supported flow through WSL2 with an Ubuntu/Debian distribution. A manual native
 Windows setup may be possible because the backend is Python and the frontend is
@@ -101,7 +108,7 @@ The updater:
 For a pinned release:
 
 ```bash
-devsynapse update --version v0.4.1
+devsynapse update --version v0.5.0
 ```
 
 ## LLM Budget Controls
@@ -114,6 +121,11 @@ Current controls:
 - `LLM_MONTHLY_BUDGET_USD`
 - `LLM_BUDGET_WARNING_THRESHOLD_PCT`
 - `LLM_BUDGET_CRITICAL_THRESHOLD_PCT`
+- `LLM_MODEL_ROUTING_ENABLED`
+- `LLM_AUTO_ECONOMY_ENABLED`
+- `LLM_CACHE_HIT_WARNING_THRESHOLD_PCT`
+- `DEEPSEEK_FLASH_MODEL`
+- `DEEPSEEK_PRO_MODEL`
 
 Operational behavior:
 - `0` disables the corresponding budget window
@@ -121,6 +133,12 @@ Operational behavior:
 - monthly budget uses the current calendar month
 - `/monitoring/stats` exposes the current budget snapshot for UI/reporting
 - active alerts are created when warning or critical thresholds are crossed
+- routing sends simple and medium tasks to Flash, complex tasks to Pro, and falls
+  back from Flash to Pro when the Flash request fails
+- auto economy mode routes all LLM calls to Flash while budget status is critical
+- cache hit/miss token counts are persisted and summarized as `cache_hit_rate_pct`
+- feedback and command outcomes create local agent-learning records that can
+  influence future Flash/Pro routing for similar tasks
 
 ## Database Schema Management
 
@@ -199,4 +217,6 @@ A change should be considered integration-ready only when:
 - script checks pass;
 - frontend lint passes;
 - frontend build passes;
+- desktop packaging passes when the change affects Tauri, sidecar startup,
+  release artifacts or landing-page downloads;
 - documentation is updated when contracts or operational flows change.

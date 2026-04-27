@@ -1,146 +1,47 @@
 """
-Persistent storage for DevSynapse.
+Conversation storage and LLM usage tracking for DevSynapse.
 """
 
 import csv
 import io
-import json
 import logging
 import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-from config.settings import DEFAULT_PREFERENCES, KNOWN_PROJECTS, MEMORY_DB_PATH, get_settings
-from core.migrations import build_memory_migration_manager
+from core.llm_optimization import cache_hit_rate_pct
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
-class MemorySystem:
-    """Gerencia memória persistente do DevSynapse."""
-    
-    def __init__(self):
-        self.db_path = MEMORY_DB_PATH
-        self._init_database()
-        
-    def _init_database(self):
-        """Inicializa banco de dados SQLite"""
+class ConversationStore:
+    """Manages conversation persistence and LLM usage analytics."""
 
-        build_memory_migration_manager(self.db_path).apply_migrations()
-
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Inserir preferências padrão
-        for key, value in DEFAULT_PREFERENCES.items():
-            cursor.execute('''
-                INSERT OR IGNORE INTO user_preferences 
-                (key, value, source, confidence, last_updated, evidence_count)
-                VALUES (?, ?, 'default', 1.0, ?, 1)
-            ''', (key, value, datetime.now().isoformat()))
-        
-        # Inserir projetos conhecidos
-        for name, info in KNOWN_PROJECTS.items():
-            cursor.execute('''
-                INSERT OR IGNORE INTO projects
-                (name, path, type, priority, last_accessed, access_count)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (name, info['path'], info['type'], info['priority'], 
-                  datetime.now().isoformat(), 0))
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"Banco de dados inicializado: {self.db_path}")
-
-    def add_project(
-        self,
-        name: str,
-        path: str,
-        project_type: str = "project",
-        priority: str = "medium",
-        replace: bool = True,
-    ):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        insert_clause = "INSERT OR REPLACE" if replace else "INSERT"
-        cursor.execute(
-            f"""
-            {insert_clause} INTO projects
-            (name, path, type, priority, last_accessed, access_count)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (name, path, project_type, priority, datetime.now().isoformat(), 0),
-        )
-        conn.commit()
-        conn.close()
-
-    def get_project(self, name: str) -> Optional[Dict[str, Any]]:
-        """Return a registered project by exact name."""
-
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT name, path, type, priority, last_accessed, access_count
-            FROM projects
-            WHERE name = ?
-            """,
-            (name,),
-        )
-        row = cursor.fetchone()
-        conn.close()
-        return dict(row) if row else None
-
-    def list_projects(self) -> list[Dict[str, Any]]:
-        """Return all registered projects."""
-
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT name, path, type, priority, last_accessed, access_count
-            FROM projects
-            ORDER BY priority DESC, access_count DESC, name
-            """
-        )
-        projects = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return projects
-
-    def list_project_names(self) -> list[str]:
-        """Return registered project names in stable order."""
-
-        return [project["name"] for project in self.list_projects()]
-
-    def get_project_lookup(self) -> Dict[str, Dict[str, str]]:
-        """Return configured and persisted projects keyed by project name."""
-
-        return self._get_project_lookup()
+    def __init__(self, db_path: str):
+        self.db_path = db_path
 
     def get_db_connection(self) -> sqlite3.Connection:
         """Return a SQLite connection for internal/service use."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
-    
+
     async def get_conversation_context(self, conversation_id: Optional[str] = None) -> Dict:
         """Obtém contexto para uma conversa"""
-        
+
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        
+
         context = {
             "conversation_history": [],
             "conversation_messages": [],
-            "user_preferences": self.get_user_preferences(),
-            "projects_context": self.get_projects_context(),
+            "user_preferences": getattr(self, '_get_user_preferences_fn', lambda: "")( ),
+            "projects_context": getattr(self, '_get_projects_context_fn', lambda: "")( ),
             "project_name": None,
             "recent_decisions": []
         }
-        
+
         # Obter histórico recente da conversa
         if conversation_id:
             cursor.execute('''
@@ -167,7 +68,7 @@ class MemorySystem:
                 ORDER BY timestamp DESC 
                 LIMIT 5
             ''')
-        
+
         rows = cursor.fetchall()
         for row in reversed(rows):  # Ordem cronológica
             user_message = {
@@ -212,12 +113,27 @@ class MemorySystem:
                     "estimated_cost_usd": row["estimated_cost_usd"],
                 }
 
-            context["conversation_history"].extend([
-                {"role": "user", "content": row["user_message"]},
-                {"role": "assistant", "content": row["ai_response"]}
-            ])
+            history_user = {"role": "user", "content": row["user_message"]}
+            history_assistant = {"role": "assistant", "content": row["ai_response"]}
+
+            if row["opencode_command"] and row["command_executed"]:
+                output_text = row["execution_output"] or row["execution_result"] or ""
+                status = row["execution_status"] or "success"
+                if output_text:
+                    history_assistant["content"] += (
+                        f"\n\n---\n"
+                        f"User executed: `{row['opencode_command']}`\n"
+                        f"Output:\n```\n{output_text[:2000]}\n```"
+                    )
+                else:
+                    history_assistant["content"] += (
+                        f"\n\n---\n"
+                        f"User executed: `{row['opencode_command']}` (status: {status}, no output)"
+                    )
+
+            context["conversation_history"].extend([history_user, history_assistant])
             context["conversation_messages"].extend([user_message, assistant_message])
-        
+
         # Obter decisões recentes
         cursor.execute('''
             SELECT decision, outcome, user_rating
@@ -225,7 +141,7 @@ class MemorySystem:
             ORDER BY timestamp DESC
             LIMIT 3
         ''')
-        
+
         decisions = cursor.fetchall()
         for decision in decisions:
             context["recent_decisions"].append({
@@ -233,7 +149,7 @@ class MemorySystem:
                 "outcome": decision["outcome"],
                 "rating": decision["user_rating"]
             })
-        
+
         conn.close()
         return context
 
@@ -334,6 +250,8 @@ class MemorySystem:
                 SUM(COALESCE(prompt_tokens, 0)) AS prompt_tokens,
                 SUM(COALESCE(completion_tokens, 0)) AS completion_tokens,
                 SUM(COALESCE(total_tokens, 0)) AS total_tokens,
+                SUM(COALESCE(prompt_cache_hit_tokens, 0)) AS prompt_cache_hit_tokens,
+                SUM(COALESCE(prompt_cache_miss_tokens, 0)) AS prompt_cache_miss_tokens,
                 SUM(COALESCE(estimated_cost_usd, 0)) AS estimated_cost_usd
             FROM conversations
             WHERE total_tokens IS NOT NULL
@@ -344,6 +262,10 @@ class MemorySystem:
         )
         by_day = [dict(row) for row in cursor.fetchall()]
         conn.close()
+        totals_usage = {
+            "prompt_cache_hit_tokens": int(totals.get("prompt_cache_hit_tokens") or 0),
+            "prompt_cache_miss_tokens": int(totals.get("prompt_cache_miss_tokens") or 0),
+        }
 
         return {
             "totals": {
@@ -354,6 +276,7 @@ class MemorySystem:
                 "total_tokens": int(totals.get("total_tokens") or 0),
                 "prompt_cache_hit_tokens": int(totals.get("prompt_cache_hit_tokens") or 0),
                 "prompt_cache_miss_tokens": int(totals.get("prompt_cache_miss_tokens") or 0),
+                "cache_hit_rate_pct": cache_hit_rate_pct(totals_usage),
                 "reasoning_tokens": int(totals.get("reasoning_tokens") or 0),
                 "estimated_cost_usd": float(totals.get("estimated_cost_usd") or 0.0),
             },
@@ -364,6 +287,9 @@ class MemorySystem:
                     "prompt_tokens": int(row["prompt_tokens"] or 0),
                     "completion_tokens": int(row["completion_tokens"] or 0),
                     "total_tokens": int(row["total_tokens"] or 0),
+                    "prompt_cache_hit_tokens": int(row["prompt_cache_hit_tokens"] or 0),
+                    "prompt_cache_miss_tokens": int(row["prompt_cache_miss_tokens"] or 0),
+                    "cache_hit_rate_pct": cache_hit_rate_pct(row),
                     "estimated_cost_usd": float(row["estimated_cost_usd"] or 0.0),
                 }
                 for row in by_day
@@ -434,81 +360,6 @@ class MemorySystem:
             "estimated_cost_usd": float(row.get("estimated_cost_usd") or 0.0),
         }
 
-    def get_llm_budget_status(self) -> Dict[str, Any]:
-        persisted = self.get_app_settings()
-        daily_budget_usd = float(
-            persisted.get("llm_daily_budget_usd", settings.llm_daily_budget_usd)
-        )
-        monthly_budget_usd = float(
-            persisted.get("llm_monthly_budget_usd", settings.llm_monthly_budget_usd)
-        )
-        warning_threshold_pct = float(
-            persisted.get(
-                "llm_budget_warning_threshold_pct",
-                settings.llm_budget_warning_threshold_pct,
-            )
-        )
-        critical_threshold_pct = float(
-            persisted.get(
-                "llm_budget_critical_threshold_pct",
-                settings.llm_budget_critical_threshold_pct,
-            )
-        )
-
-        now = datetime.now()
-        last_24h_start = (now - timedelta(hours=24)).isoformat()
-        month_start = datetime(now.year, now.month, 1).isoformat()
-
-        daily_usage = self._aggregate_llm_usage_between(last_24h_start)
-        monthly_usage = self._aggregate_llm_usage_between(month_start)
-
-        def build_status(window: str, actual_cost_usd: float, budget_usd: float) -> Dict[str, Any]:
-            warning_cost = budget_usd * (warning_threshold_pct / 100) if budget_usd > 0 else 0.0
-            critical_cost = budget_usd * (critical_threshold_pct / 100) if budget_usd > 0 else 0.0
-            usage_pct = (actual_cost_usd / budget_usd * 100) if budget_usd > 0 else 0.0
-
-            if budget_usd <= 0:
-                level = "disabled"
-            elif actual_cost_usd >= critical_cost:
-                level = "critical"
-            elif actual_cost_usd >= warning_cost:
-                level = "warning"
-            else:
-                level = "healthy"
-
-            return {
-                "window": window,
-                "budget_usd": budget_usd,
-                "actual_cost_usd": actual_cost_usd,
-                "usage_pct": usage_pct,
-                "warning_threshold_pct": warning_threshold_pct,
-                "critical_threshold_pct": critical_threshold_pct,
-                "warning_threshold_cost_usd": warning_cost,
-                "critical_threshold_cost_usd": critical_cost,
-                "level": level,
-            }
-
-        daily_status = build_status("daily", daily_usage["estimated_cost_usd"], daily_budget_usd)
-        monthly_status = build_status(
-            "monthly",
-            monthly_usage["estimated_cost_usd"],
-            monthly_budget_usd,
-        )
-
-        overall_status = "disabled"
-        if any(item["level"] == "critical" for item in (daily_status, monthly_status)):
-            overall_status = "critical"
-        elif any(item["level"] == "warning" for item in (daily_status, monthly_status)):
-            overall_status = "warning"
-        elif any(item["level"] == "healthy" for item in (daily_status, monthly_status)):
-            overall_status = "healthy"
-
-        return {
-            "overall_status": overall_status,
-            "daily": daily_status,
-            "monthly": monthly_status,
-        }
-
     def get_project_usage_breakdown(self, hours: int = 24) -> list[Dict[str, Any]]:
         """Infer LLM usage by project from conversation text and commands."""
 
@@ -535,10 +386,12 @@ class MemorySystem:
         rows = cursor.fetchall()
         conn.close()
 
+        project_lookup = getattr(self, '_get_project_lookup_fn', lambda: {})( )
         project_totals: dict[str, dict[str, Any]] = {}
 
         for row in rows:
             matched_project = row["conversation_project_name"] or self._infer_project_name_from_text(
+                project_lookup,
                 row["user_message"],
                 row["ai_response"],
                 row["opencode_command"],
@@ -667,62 +520,7 @@ class MemorySystem:
         conn.commit()
         conn.close()
         return changed
-    
-    def get_user_preferences(self) -> str:
-        """Retorna preferências do usuário como texto formatado"""
-        
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT key, value, confidence, source
-            FROM user_preferences
-            ORDER BY confidence DESC, evidence_count DESC
-        ''')
-        
-        rows = cursor.fetchall()
-        conn.close()
-        
-        if not rows:
-            return "Nenhuma preferência aprendida ainda."
-        
-        text = "Preferências conhecidas do Irving:\n"
-        for row in rows:
-            source_emoji = "🎯" if row["source"] == "explicit" else "📚" if row["source"] == "learned" else "⚙️"
-            text += f"- {source_emoji} **{row['key']}**: {row['value']} "
-            text += f"(confiança: {row['confidence']:.0%})\n"
-        
-        return text
-    
-    def get_projects_context(self) -> str:
-        """Retorna contexto sobre projetos"""
-        
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT name, type, priority, last_accessed, access_count
-            FROM projects
-            ORDER BY priority DESC, access_count DESC
-        ''')
-        
-        rows = cursor.fetchall()
-        conn.close()
-        
-        if not rows:
-            return "Nenhum projeto registrado."
-        
-        text = "Projetos conhecidos:\n"
-        for row in rows:
-            priority_emoji = "🔥" if row["priority"] == "high" else "⚡" if row["priority"] == "medium" else "📁"
-            last_access = datetime.fromisoformat(row["last_accessed"]).strftime("%d/%m %H:%M")
-            text += f"- {priority_emoji} **{row['name']}** ({row['type']}) "
-            text += f"- acessado {row['access_count']}x, último: {last_access}\n"
-        
-        return text
-    
+
     async def save_interaction(
         self,
         conversation_id: Optional[str],
@@ -734,13 +532,15 @@ class MemorySystem:
         project_name: Optional[str] = None,
     ):
         """Salva uma interação na memória"""
-        
+
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         timestamp = datetime.now().isoformat()
-        
+
+        project_lookup = getattr(self, '_get_project_lookup_fn', lambda: {})( )
         inferred_project_name = project_name or self._infer_project_name_from_text(
+            project_lookup,
             user_message,
             ai_response,
             opencode_command,
@@ -774,81 +574,25 @@ class MemorySystem:
             llm_usage.get("estimated_cost_usd") if llm_usage else None,
             inferred_project_name,
         ))
-        
+
         conn.commit()
         conn.close()
-        
-        # Atualizar contador de acesso se houver projeto explícito ou mencionado.
-        self._update_project_access(user_message, inferred_project_name)
-        
+
         logger.debug(f"Interação salva: {user_message[:50]}...")
-    
-    def _update_project_access(self, message: str, project_name: Optional[str] = None):
-        """Atualiza contador de acesso para projetos mencionados"""
-        
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        return inferred_project_name
 
-        if project_name:
-            projects = [project_name]
-        else:
-            cursor.execute('SELECT name FROM projects')
-            projects = [row[0] for row in cursor.fetchall()]
-
-        for project in projects:
-            if project_name or project.lower() in message.lower():
-                cursor.execute('''
-                    UPDATE projects 
-                    SET access_count = access_count + 1, 
-                        last_accessed = ?
-                    WHERE name = ?
-                ''', (datetime.now().isoformat(), project))
-                logger.debug(f"Projeto acessado: {project}")
-        
-        conn.commit()
-        conn.close()
-
-    def _infer_project_name_from_text(self, *texts: Optional[str]) -> Optional[str]:
+    def _infer_project_name_from_text(self, project_lookup: Dict, *texts: Optional[str]) -> Optional[str]:
         blob = " ".join(part for part in texts if part).lower()
         if not blob:
             return None
 
-        for project_name, info in self._get_project_lookup().items():
+        for project_name, info in project_lookup.items():
             project_path = str(info.get("path", "")).lower()
             if project_name.lower() in blob or (project_path and project_path in blob):
                 return project_name
 
         return None
 
-    def _get_project_lookup(self) -> Dict[str, Dict[str, str]]:
-        """Return configured projects plus projects persisted in this memory database."""
-
-        projects = {name: dict(info) for name, info in KNOWN_PROJECTS.items()}
-        conn = None
-        try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute(
-                '''
-                SELECT name, path, type, priority
-                FROM projects
-                '''
-            )
-            for row in cursor.fetchall():
-                projects[row["name"]] = {
-                    "path": row["path"],
-                    "type": row["type"],
-                    "priority": row["priority"],
-                }
-        except sqlite3.Error as exc:
-            logger.debug("Não foi possível carregar projetos persistidos: %s", exc)
-        finally:
-            if conn is not None:
-                conn.close()
-
-        return projects
-    
     async def save_command_execution(
         self,
         conversation_id: Optional[str],
@@ -861,10 +605,10 @@ class MemorySystem:
         project_name: Optional[str] = None,
     ):
         """Salva resultado da execução de um comando"""
-        
+
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         cursor.execute('''
             UPDATE conversations 
             SET command_executed = 1,
@@ -878,26 +622,26 @@ class MemorySystem:
             ORDER BY timestamp DESC
             LIMIT 1
         ''', (result, output, status, reason_code, project_name, conversation_id, command))
-        
+
         # Aprender com o resultado
         if success:
             self._learn_from_success(command, result)
         else:
             self._learn_from_failure(command, result)
-        
+
         conn.commit()
         conn.close()
-    
+
     def _learn_from_success(self, command: str, result: str):
         """Aprende com execução bem-sucedida"""
         # Implementar aprendizado baseado em sucesso
         pass
-    
+
     def _learn_from_failure(self, command: str, result: str):
         """Aprende com execução falha"""
         # Implementar aprendizado baseado em falha
         pass
-    
+
     async def save_feedback(
         self,
         conversation_id: Optional[str],
@@ -905,10 +649,10 @@ class MemorySystem:
         score: Optional[int] = None
     ):
         """Salva feedback do usuário"""
-        
+
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         cursor.execute('''
             UPDATE conversations 
             SET user_feedback = ?,
@@ -917,27 +661,27 @@ class MemorySystem:
             ORDER BY timestamp DESC
             LIMIT 1
         ''', (feedback, score, conversation_id))
-        
+
         conn.commit()
         conn.close()
-        
+
         # Aprender com feedback (após fechar primeira conexão)
         if feedback:
             self._learn_from_feedback(feedback, score)
-    
+
     def _learn_from_feedback(self, feedback: str, score: Optional[int]):
         """Aprende com feedback explícito do usuário"""
-        
+
         # Análise simples de feedback
         positive_keywords = ["bom", "ótimo", "excelente", "útil", "correto", "perfeito"]
         negative_keywords = ["ruim", "errado", "inútil", "incorreto", "péssimo"]
-        
+
         feedback_lower = feedback.lower()
-        
+
         # Atualizar preferências baseado no feedback
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         # Exemplo simples: se feedback positivo, aumentar confiança
         if any(keyword in feedback_lower for keyword in positive_keywords) or (score and score > 3):
             # Aumentar confiança nas preferências recentes
@@ -948,7 +692,7 @@ class MemorySystem:
                     last_updated = ?
                 WHERE source IN ('learned', 'explicit')
             ''', (datetime.now().isoformat(),))
-        
+
         # Se feedback negativo, reconsiderar
         elif any(keyword in feedback_lower for keyword in negative_keywords) or (score and score < 3):
             cursor.execute('''
@@ -957,285 +701,6 @@ class MemorySystem:
                     last_updated = ?
                 WHERE source IN ('learned', 'explicit')
             ''', (datetime.now().isoformat(),))
-        
+
         conn.commit()
         conn.close()
-    
-    def update_preference(self, key: str, value: str, source: str = "learned"):
-        """Atualiza ou cria uma preferência do usuário"""
-        
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT value, confidence, evidence_count 
-            FROM user_preferences 
-            WHERE key = ?
-        ''', (key,))
-        
-        row = cursor.fetchone()
-        
-        if row:
-            # Já existe - atualizar
-            old_value, old_confidence, old_count = row
-            if old_value == value:
-                # Mesmo valor - aumentar confiança
-                new_confidence = min(old_confidence * 1.05, 1.0)
-                new_count = old_count + 1
-                cursor.execute(
-                    '''
-                    UPDATE user_preferences
-                    SET confidence = ?, evidence_count = ?, last_updated = ?
-                    WHERE key = ? AND value = ?
-                    ''',
-                    (new_confidence, new_count, datetime.now().isoformat(), key, old_value),
-                )
-            else:
-                # Valor diferente - diminuir confiança no antigo, criar novo
-                new_confidence = max(old_confidence * 0.7, 0.1)
-                cursor.execute('''
-                    UPDATE user_preferences 
-                    SET confidence = ?, last_updated = ?
-                    WHERE key = ? AND value = ?
-                ''', (new_confidence, datetime.now().isoformat(), key, old_value))
-                
-                # Inserir novo valor
-                cursor.execute('''
-                    INSERT OR REPLACE INTO user_preferences 
-                    (key, value, source, confidence, last_updated, evidence_count)
-                    VALUES (?, ?, ?, ?, ?, 1)
-                ''', (key, value, source, 0.5, datetime.now().isoformat()))
-        else:
-            # Nova preferência
-            cursor.execute('''
-                INSERT INTO user_preferences 
-                (key, value, source, confidence, last_updated, evidence_count)
-                VALUES (?, ?, ?, ?, ?, 1)
-            ''', (key, value, source, 0.7, datetime.now().isoformat()))
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"Preferência atualizada: {key} = {value} ({source})")
-
-    def get_user(self, username: str) -> Optional[Dict[str, Any]]:
-        """Return a stored user by username."""
-
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            '''
-            SELECT username, password_hash, role, is_active, created_at, last_login
-            FROM users
-            WHERE username = ?
-            ''',
-            (username,),
-        )
-        row = cursor.fetchone()
-        conn.close()
-
-        if row is None:
-            return None
-
-        return {
-            "username": row["username"],
-            "password_hash": row["password_hash"],
-            "role": row["role"],
-            "is_active": bool(row["is_active"]),
-            "created_at": row["created_at"],
-            "last_login": row["last_login"],
-        }
-
-    def upsert_user(self, username: str, password_hash: str, role: str = "user", is_active: bool = True):
-        """Create or update a user record."""
-
-        now = datetime.now().isoformat()
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute(
-            '''
-            INSERT INTO users (username, password_hash, role, is_active, created_at, last_login)
-            VALUES (?, ?, ?, ?, ?, NULL)
-            ON CONFLICT(username) DO UPDATE SET
-                password_hash = excluded.password_hash,
-                role = excluded.role,
-                is_active = excluded.is_active
-            ''',
-            (username, password_hash, role, int(is_active), now),
-        )
-        conn.commit()
-        conn.close()
-
-    def touch_user_login(self, username: str):
-        """Update the user's last successful login timestamp."""
-
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute(
-            '''
-            UPDATE users
-            SET last_login = ?
-            WHERE username = ?
-            ''',
-            (datetime.now().isoformat(), username),
-        )
-        conn.commit()
-        conn.close()
-
-    def get_app_settings(self) -> Dict[str, Any]:
-        """Return persisted application settings."""
-
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            '''
-            SELECT key, value
-            FROM app_settings
-            '''
-        )
-        rows = cursor.fetchall()
-        conn.close()
-        return {row["key"]: row["value"] for row in rows}
-
-    def update_app_settings(self, settings_data: Dict[str, Any]):
-        """Persist runtime-adjustable settings."""
-
-        now = datetime.now().isoformat()
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        for key, value in settings_data.items():
-            cursor.execute(
-                '''
-                INSERT INTO app_settings (key, value, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(key) DO UPDATE SET
-                    value = excluded.value,
-                    updated_at = excluded.updated_at
-                ''',
-                (key, str(value), now),
-            )
-        conn.commit()
-        conn.close()
-
-    def get_project_permissions(self, username: Optional[str] = None) -> Dict[str, list[str]] | list[str]:
-        """Return project mutation permissions for one user or for all users."""
-
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-
-        if username is None:
-            cursor.execute(
-                """
-                SELECT username, project_name
-                FROM project_permissions
-                WHERE permission = 'mutate'
-                ORDER BY username, project_name
-                """
-            )
-            rows = cursor.fetchall()
-            conn.close()
-
-            permissions: Dict[str, list[str]] = {}
-            for row in rows:
-                permissions.setdefault(row["username"], []).append(row["project_name"])
-            return permissions
-
-        cursor.execute(
-            """
-            SELECT project_name
-            FROM project_permissions
-            WHERE username = ? AND permission = 'mutate'
-            ORDER BY project_name
-            """,
-            (username,),
-        )
-        rows = cursor.fetchall()
-        conn.close()
-        return [row["project_name"] for row in rows]
-
-    def replace_project_permissions(self, username: str, project_names: list[str], permission: str = "mutate"):
-        """Replace a user's project permissions with an explicit list."""
-
-        now = datetime.now().isoformat()
-        unique_projects = sorted(set(project_names))
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            DELETE FROM project_permissions
-            WHERE username = ? AND permission = ?
-            """,
-            (username, permission),
-        )
-        for project_name in unique_projects:
-            cursor.execute(
-                """
-                INSERT INTO project_permissions (username, project_name, permission, created_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (username, project_name, permission, now),
-            )
-        conn.commit()
-        conn.close()
-
-    def log_admin_action(
-        self,
-        actor_username: str,
-        action: str,
-        target_username: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-    ):
-        """Persist an administrative audit event."""
-
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO admin_audit_logs (
-                actor_username,
-                target_username,
-                action,
-                details,
-                created_at
-            )
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (
-                actor_username,
-                target_username,
-                action,
-                json.dumps(details or {}),
-                datetime.now().isoformat(),
-            ),
-        )
-        conn.commit()
-        conn.close()
-
-    def get_admin_audit_logs(self, limit: int = 50) -> list[Dict[str, Any]]:
-        """Return recent administrative audit events."""
-
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT id, actor_username, target_username, action, details, created_at
-            FROM admin_audit_logs
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        )
-        rows = cursor.fetchall()
-        conn.close()
-
-        return [
-            {
-                "id": row["id"],
-                "actor_username": row["actor_username"],
-                "target_username": row["target_username"],
-                "action": row["action"],
-                "details": json.loads(row["details"] or "{}"),
-                "created_at": row["created_at"],
-            }
-            for row in rows
-        ]

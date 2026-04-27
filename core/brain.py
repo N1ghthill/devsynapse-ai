@@ -6,13 +6,13 @@ import logging
 import re
 import shlex
 from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from typing import AsyncIterator, Dict, List, Optional, Tuple
-
-import requests
 
 import config.settings as app_settings
 from config.settings import BLACKLISTED_PATTERNS, READ_ONLY_COMMANDS
+from core.deepseek import DeepSeekClient
+from core.llm_optimization import ModelRoute, ModelRouter, build_task_profile
 from core.plugin_system import plugin_manager
 
 logger = logging.getLogger(__name__)
@@ -181,20 +181,12 @@ AUTOEXEC_BASH_OUTPUT_FLAGS = {"-o", "--output"}
 
 class DevSynapseBrain:
     """Gerencia a inteligência do DevSynapse via API DeepSeek."""
-    
+
     def __init__(self, memory_system, opencode_bridge):
         self.memory = memory_system
         self.opencode = opencode_bridge
         settings = app_settings.get_settings()
-        self.api_key = app_settings.DEEPSEEK_API_KEY
-        self.deepseek_model = settings.deepseek_model
-        self.deepseek_base_url = settings.deepseek_base_url
-        self.reasoning_effort = settings.deepseek_reasoning_effort
-        self.thinking_enabled = settings.deepseek_thinking_enabled
-        self.temperature = settings.llm_temperature
-        self.max_tokens = settings.llm_max_tokens
-        self.request_timeout = settings.llm_request_timeout
-        self.deepseek_flash_pricing = {
+        flash_pricing = {
             "cache_hit": Decimal(
                 str(settings.deepseek_flash_input_cache_hit_price_usd_per_million)
             ),
@@ -203,7 +195,7 @@ class DevSynapseBrain:
             ),
             "output": Decimal(str(settings.deepseek_flash_output_price_usd_per_million)),
         }
-        self.deepseek_pro_pricing = {
+        pro_pricing = {
             "cache_hit": Decimal(
                 str(settings.deepseek_pro_input_cache_hit_price_usd_per_million)
             ),
@@ -212,15 +204,36 @@ class DevSynapseBrain:
             ),
             "output": Decimal(str(settings.deepseek_pro_output_price_usd_per_million)),
         }
-        
-        if not self.api_key:
+        self.deepseek = DeepSeekClient(
+            api_key=app_settings.DEEPSEEK_API_KEY,
+            model=settings.deepseek_model,
+            base_url=settings.deepseek_base_url,
+            reasoning_effort=settings.deepseek_reasoning_effort,
+            thinking_enabled=settings.deepseek_thinking_enabled,
+            temperature=settings.llm_temperature,
+            max_tokens=settings.llm_max_tokens,
+            request_timeout=settings.llm_request_timeout,
+            flash_pricing=flash_pricing,
+            pro_pricing=pro_pricing,
+        )
+
+        if not self.deepseek.configured:
             logger.warning("DeepSeek API key não configurada")
+
+    @property
+    def api_key(self) -> Optional[str]:
+        return self.deepseek.api_key
+
+    @api_key.setter
+    def api_key(self, value: Optional[str]) -> None:
+        self.deepseek.api_key = value
         
     def generate_system_prompt(self, context: Dict) -> str:
         """Gera prompt de sistema personalizado baseado no contexto"""
         
         user_prefs = self.memory.get_user_preferences()
         projects_info = self.memory.get_projects_context()
+        agent_learning = self._get_agent_learning_context()
         active_project_name = context.get("project_name")
         active_project_section = (
             f"\n## PROJETO ATIVO\n{active_project_name}\n"
@@ -237,6 +250,9 @@ Blend deep technical skills with natural conversational communication.
 
 ## IRVING'S PREFERENCES
 {user_prefs}
+
+## AGENT LEARNING
+{agent_learning}
 
 ## CURRENT PROJECTS
 {projects_info}
@@ -276,7 +292,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
 """
         
         return system_prompt
-    
+
     async def process_message(
         self,
         user_message: str,
@@ -302,7 +318,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
 
         bp_event = await plugin_manager.emit_event("brain:before_process", event_data)
         if bp_event.cancelled:
-            return "Processamento cancelado por plugin.", None
+            return "Processamento cancelado por plugin.", None, None
         user_message = bp_event.data.get("user_message", user_message)
         conversation_id = bp_event.data.get("conversation_id", conversation_id)
         project_name = bp_event.data.get("project_name", project_name)
@@ -327,23 +343,26 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         if not llm_event.cancelled:
             messages = llm_event.data.get("messages", messages)
 
+        route = self._select_llm_route(user_message, context)
+
         # Chamar API com loop de auto-execução para comandos read-only
         max_autoexec_rounds = 5
         round_count = 0
         aggregated_usage = None
         opencode_command = None
         response_text = ""
+        autoexecuted_command = None
 
         while round_count < max_autoexec_rounds:
             round_count += 1
-            llm_result = self._coerce_llm_result(await self._call_llm_api(messages))
+            llm_result = self._coerce_llm_result(await self._call_llm_api(messages, route=route))
             response_text = llm_result.content
             opencode_command = self._tool_calls_to_opencode_command(llm_result.tool_calls)
             if opencode_command is None:
                 opencode_command = self._extract_opencode_command(response_text)
             aggregated_usage = self._merge_usage(aggregated_usage, llm_result.usage)
 
-            autoexec_enabled = bool(user_id and user_role)
+            autoexec_enabled = bool(self.api_key and user_id and user_role)
             if not (
                 autoexec_enabled
                 and opencode_command
@@ -358,17 +377,15 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                 user_role=user_role,
                 project_mutation_allowlist=project_mutation_allowlist or [],
             )
-
-            await self.memory.save_command_execution(
-                conversation_id=conversation_id,
-                command=opencode_command,
-                success=success,
-                result=msg,
-                output=output,
-                status=status,
-                reason_code=reason,
-                project_name=proj,
-            )
+            autoexecuted_command = {
+                "command": opencode_command,
+                "success": success,
+                "result": msg,
+                "output": output,
+                "status": status,
+                "reason_code": reason,
+                "project_name": proj,
+            }
 
             if not success:
                 response_text = (
@@ -407,14 +424,38 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             opencode_command,
         )
 
+        persisted_command = opencode_command
+        if persisted_command is None and autoexecuted_command is not None:
+            persisted_command = autoexecuted_command["command"]
+
         # Salvar na memória
         await self.memory.save_interaction(
             conversation_id=conversation_id,
             user_message=user_message,
             ai_response=response_text,
-            opencode_command=opencode_command,
+            opencode_command=persisted_command,
             llm_usage=aggregated_usage,
             project_name=effective_project_name,
+        )
+
+        if autoexecuted_command is not None and persisted_command == autoexecuted_command["command"]:
+            await self.memory.save_command_execution(
+                conversation_id=conversation_id,
+                command=autoexecuted_command["command"],
+                success=autoexecuted_command["success"],
+                result=autoexecuted_command["result"],
+                output=autoexecuted_command["output"],
+                status=autoexecuted_command["status"],
+                reason_code=autoexecuted_command["reason_code"],
+                project_name=autoexecuted_command["project_name"],
+            )
+
+        self._record_agent_route_decision(
+            conversation_id=conversation_id,
+            route=route,
+            usage=aggregated_usage,
+            project_name=effective_project_name,
+            opencode_command=persisted_command,
         )
 
         await plugin_manager.emit_event("memory:after_save", {
@@ -451,167 +492,155 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         messages.append({"role": "user", "content": user_message})
         
         return messages
-    
-    async def _call_llm_api(self, messages: List[Dict]) -> LLMResult:
-        """Chama API do DeepSeek e retorna resposta degradada se a API falhar."""
-        
-        # Tentar DeepSeek primeiro
-        if self.api_key:
+
+    def _select_llm_route(self, user_message: str, context: Dict) -> ModelRoute:
+        persisted = self._get_persisted_app_settings()
+        settings = app_settings.get_settings()
+        profile = build_task_profile(user_message, context=context)
+        learned_policy = self._get_agent_learning(profile.signature)
+        router = ModelRouter(
+            flash_model=str(
+                persisted.get("deepseek_flash_model", settings.deepseek_flash_model)
+            ),
+            pro_model=str(persisted.get("deepseek_pro_model", settings.deepseek_pro_model)),
+            default_model=str(persisted.get("deepseek_model", self.deepseek.model)),
+            routing_enabled=self._as_bool(
+                persisted.get("llm_model_routing_enabled", settings.llm_model_routing_enabled)
+            ),
+            auto_economy_enabled=self._as_bool(
+                persisted.get("llm_auto_economy_enabled", settings.llm_auto_economy_enabled)
+            ),
+        )
+        budget_status = None
+        if router.auto_economy_enabled and hasattr(self.memory, "get_llm_budget_status"):
             try:
-                return await self._call_deepseek_api(messages)
+                budget_status = self.memory.get_llm_budget_status()
+            except Exception:
+                logger.debug("Could not read LLM budget status for routing", exc_info=True)
+
+        route = router.select_model(
+            user_message,
+            context=context,
+            budget_status=budget_status,
+            learned_policy=learned_policy,
+        )
+        logger.info(
+            "LLM route selected: model=%s complexity=%s reason=%s budget=%s fallback=%s",
+            route.model,
+            route.complexity,
+            route.reason,
+            route.budget_mode,
+            route.fallback_model,
+        )
+        return route
+
+    def _get_agent_learning(self, task_signature: str) -> Optional[Dict]:
+        if not hasattr(self.memory, "get_agent_learning"):
+            return None
+        try:
+            return self.memory.get_agent_learning(task_signature)
+        except Exception:
+            logger.debug("Could not load agent learning for routing", exc_info=True)
+            return None
+
+    def _get_agent_learning_context(self) -> str:
+        if not hasattr(self.memory, "get_agent_learning_context"):
+            return "Nenhum padrão de agente aprendido ainda."
+        try:
+            return self.memory.get_agent_learning_context()
+        except Exception:
+            logger.debug("Could not load agent learning context", exc_info=True)
+            return "Nenhum padrão de agente aprendido ainda."
+
+    def _record_agent_route_decision(
+        self,
+        conversation_id: Optional[str],
+        route: ModelRoute,
+        usage: Optional[Dict],
+        project_name: Optional[str],
+        opencode_command: Optional[str],
+    ) -> None:
+        if not hasattr(self.memory, "record_agent_route_decision"):
+            return
+        try:
+            self.memory.record_agent_route_decision(
+                conversation_id=conversation_id,
+                route=route,
+                usage=usage,
+                project_name=project_name,
+                opencode_command=opencode_command,
+            )
+        except Exception:
+            logger.debug("Could not persist agent route decision", exc_info=True)
+
+    def _get_persisted_app_settings(self) -> Dict[str, str]:
+        if not hasattr(self.memory, "get_app_settings"):
+            return {}
+        try:
+            persisted = self.memory.get_app_settings()
+            return persisted if isinstance(persisted, dict) else {}
+        except Exception:
+            logger.debug("Could not load persisted app settings", exc_info=True)
+            return {}
+
+    @staticmethod
+    def _as_bool(value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+    async def _call_llm_api(
+        self,
+        messages: List[Dict],
+        route: Optional[ModelRoute] = None,
+    ) -> LLMResult:
+        """Chama API do DeepSeek e retorna resposta degradada se a API falhar."""
+
+        if self.deepseek.configured:
+            model = route.model if route else self.deepseek.model
+            try:
+                result = self.deepseek.chat_completion(messages, OPENCODE_TOOLS, model=model)
+                return LLMResult(
+                    content=result["content"],
+                    provider=result["provider"],
+                    model=result["model"],
+                    usage=result["usage"],
+                    tool_calls=result["tool_calls"],
+                    reasoning_content=result["reasoning_content"],
+                )
             except Exception as e:
+                fallback_model = route.fallback_model if route else None
+                if fallback_model and fallback_model != model:
+                    try:
+                        logger.warning(
+                            "DeepSeek %s call failed (%s); retrying with %s",
+                            model,
+                            e,
+                            fallback_model,
+                        )
+                        result = self.deepseek.chat_completion(
+                            messages,
+                            OPENCODE_TOOLS,
+                            model=fallback_model,
+                        )
+                        return LLMResult(
+                            content=result["content"],
+                            provider=result["provider"],
+                            model=result["model"],
+                            usage=result["usage"],
+                            tool_calls=result["tool_calls"],
+                            reasoning_content=result["reasoning_content"],
+                        )
+                    except Exception as fallback_error:
+                        logger.warning(
+                            "DeepSeek fallback model %s failed: %s",
+                            fallback_model,
+                            fallback_error,
+                        )
                 logger.warning(f"DeepSeek API falhou: {e}. Usando resposta degradada.")
+                return LLMResult(content=self._get_fallback_response(messages))
 
         return LLMResult(content=self._get_fallback_response(messages))
-    
-    async def _call_deepseek_api(self, messages: List[Dict]) -> LLMResult:
-        """Chama API do DeepSeek"""
-        
-        url = f"{self.deepseek_base_url}/chat/completions"
-        
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        thinking_config = {"type": "enabled" if self.thinking_enabled else "disabled"}
-        payload = {
-            "model": self.deepseek_model,
-            "messages": messages,
-            "max_tokens": self.max_tokens,
-            "stream": False,
-            "tools": OPENCODE_TOOLS,
-            "tool_choice": "auto",
-            "reasoning_effort": self.reasoning_effort,
-            "thinking": thinking_config,
-        }
-        if not self.thinking_enabled:
-            payload["temperature"] = self.temperature
-        
-        response = requests.post(
-            url,
-            headers=headers,
-            json=payload,
-            timeout=(5, self.request_timeout),
-        )
-        response.raise_for_status()
-        
-        result = response.json()
-        choice = result["choices"][0]
-        message = choice.get("message", {})
-        content = message.get("content") or ""
-        tool_calls = message.get("tool_calls")
-        reasoning_content = message.get("reasoning_content")
-        usage = self._build_usage_snapshot(
-            provider="deepseek",
-            model=result.get("model") or self.deepseek_model,
-            usage=result.get("usage") or {},
-        )
-        return LLMResult(
-            content=content,
-            provider="deepseek",
-            model=result.get("model") or self.deepseek_model,
-            usage=usage,
-            tool_calls=tool_calls,
-            reasoning_content=reasoning_content,
-        )
-
-    async def _call_deepseek_api_streaming(
-        self, messages: List[Dict]
-    ) -> AsyncIterator[Dict]:
-        """Call DeepSeek API with streaming, yielding delta chunks."""
-        import httpx
-
-        url = f"{self.deepseek_base_url}/chat/completions"
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-
-        thinking_config = {"type": "enabled" if self.thinking_enabled else "disabled"}
-        payload = {
-            "model": self.deepseek_model,
-            "messages": messages,
-            "max_tokens": self.max_tokens,
-            "stream": True,
-            "tools": OPENCODE_TOOLS,
-            "tool_choice": "auto",
-            "reasoning_effort": self.reasoning_effort,
-            "thinking": thinking_config,
-        }
-        if not self.thinking_enabled:
-            payload["temperature"] = self.temperature
-
-        collected_content = ""
-        collected_reasoning = ""
-        collected_usage: Optional[Dict] = None
-        tool_call_buffers: Dict[int, Dict] = {}
-
-        async with httpx.AsyncClient() as client:
-            async with client.stream(
-                "POST",
-                url,
-                headers=headers,
-                json=payload,
-                timeout=httpx.Timeout(5.0, read=self.request_timeout),
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line or not line.startswith("data: "):
-                        continue
-                    data_str = line[6:]
-                    if data_str == "[DONE]":
-                        break
-                    try:
-                        import json
-
-                        chunk = json.loads(data_str)
-                    except Exception:
-                        continue
-
-                    choices = chunk.get("choices", [])
-                    if choices:
-                        delta = choices[0].get("delta", {})
-                        reasoning = delta.get("reasoning_content", "")
-                        if reasoning:
-                            collected_reasoning += reasoning
-                            yield {"type": "reasoning", "content": reasoning}
-
-                        content = delta.get("content", "")
-                        if content:
-                            collected_content += content
-                            yield {"type": "text", "content": content}
-
-                        tc_deltas = delta.get("tool_calls")
-                        if tc_deltas:
-                            for tc in tc_deltas:
-                                idx = tc.get("index", 0)
-                                buf = tool_call_buffers.setdefault(
-                                    idx,
-                                    {"id": None, "type": "function", "function": {"name": "", "arguments": ""}},
-                                )
-                                if "id" in tc and tc["id"]:
-                                    buf["id"] = tc["id"]
-                                if tc.get("function") and tc["function"].get("name"):
-                                    buf["function"]["name"] = tc["function"]["name"]
-                                if tc.get("function") and "arguments" in tc["function"]:
-                                    buf["function"]["arguments"] += tc["function"]["arguments"]
-
-                    usage_chunk = chunk.get("usage")
-                    if usage_chunk:
-                        collected_usage = usage_chunk
-
-        collected_tool_calls = [
-            tool_call_buffers[idx] for idx in sorted(tool_call_buffers)
-        ] or None
-
-        usage = self._build_usage_snapshot(
-            provider="deepseek",
-            model=self.deepseek_model,
-            usage=collected_usage or {},
-        )
-        yield {"type": "done", "content": collected_content, "usage": usage, "tool_calls": collected_tool_calls, "reasoning_content": collected_reasoning or None}
 
     async def process_message_streaming(
         self,
@@ -633,16 +662,23 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             context["project_name"] = effective_project_name
 
         messages = self._prepare_messages(user_message, context)
+        route = self._select_llm_route(user_message, context)
 
-        if not self.api_key:
-            yield {"type": "text", "content": self._get_fallback_response(messages)}
+        if not self.deepseek.configured:
+            fallback = self._get_fallback_response(messages)
+            yield {"type": "text", "content": fallback}
             yield {"type": "done", "usage": None}
             return
 
         full_response = ""
         collected_tool_calls = None
+        usage = None
         try:
-            async for chunk in self._call_deepseek_api_streaming(messages):
+            async for chunk in self.deepseek.chat_completion_streaming(
+                messages,
+                OPENCODE_TOOLS,
+                model=route.model,
+            ):
                 if chunk["type"] == "text":
                     full_response += chunk["content"]
                     yield chunk
@@ -654,11 +690,41 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                     collected_tool_calls = chunk.get("tool_calls")
                     break
         except Exception as e:
-            logger.warning(f"DeepSeek streaming failed: {e}")
-            fallback = self._get_fallback_response(messages)
-            yield {"type": "text", "content": fallback}
-            yield {"type": "done", "usage": None}
-            return
+            if route.fallback_model and not full_response:
+                try:
+                    logger.warning(
+                        "DeepSeek streaming with %s failed (%s); retrying with %s",
+                        route.model,
+                        e,
+                        route.fallback_model,
+                    )
+                    async for chunk in self.deepseek.chat_completion_streaming(
+                        messages,
+                        OPENCODE_TOOLS,
+                        model=route.fallback_model,
+                    ):
+                        if chunk["type"] == "text":
+                            full_response += chunk["content"]
+                            yield chunk
+                        elif chunk["type"] == "reasoning":
+                            yield chunk
+                        elif chunk["type"] == "done":
+                            full_response = chunk.get("content", full_response)
+                            usage = chunk.get("usage")
+                            collected_tool_calls = chunk.get("tool_calls")
+                            break
+                except Exception as fallback_error:
+                    logger.warning(f"DeepSeek streaming fallback failed: {fallback_error}")
+                    fallback = self._get_fallback_response(messages)
+                    yield {"type": "text", "content": fallback}
+                    yield {"type": "done", "usage": None}
+                    return
+            else:
+                logger.warning(f"DeepSeek streaming failed: {e}")
+                fallback = self._get_fallback_response(messages)
+                yield {"type": "text", "content": fallback}
+                yield {"type": "done", "usage": None}
+                return
 
         opencode_command = self._tool_calls_to_opencode_command(collected_tool_calls)
         if opencode_command is None:
@@ -667,7 +733,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         if opencode_command:
             yield {"type": "command", "command": opencode_command}
 
-        await self.memory.save_interaction(
+        persisted_project_name = await self.memory.save_interaction(
             conversation_id=conversation_id,
             user_message=user_message,
             ai_response=full_response,
@@ -675,82 +741,20 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             llm_usage=usage,
             project_name=effective_project_name,
         )
+        self._record_agent_route_decision(
+            conversation_id=conversation_id,
+            route=route,
+            usage=usage,
+            project_name=persisted_project_name,
+            opencode_command=opencode_command,
+        )
 
-        yield {"type": "done", "usage": usage}
+        yield {"type": "done", "usage": usage, "project_name": persisted_project_name}
 
     def _coerce_llm_result(self, result: str | LLMResult) -> LLMResult:
         if isinstance(result, LLMResult):
             return result
         return LLMResult(content=result)
-
-    def _build_usage_snapshot(
-        self,
-        provider: str,
-        model: str,
-        usage: Dict,
-    ) -> Dict[str, int | float | str | None]:
-        prompt_tokens = int(usage.get("prompt_tokens") or 0)
-        completion_tokens = int(usage.get("completion_tokens") or 0)
-        total_tokens = int(usage.get("total_tokens") or (prompt_tokens + completion_tokens))
-        prompt_cache_hit_tokens = int(usage.get("prompt_cache_hit_tokens") or 0)
-        prompt_cache_miss_tokens = int(usage.get("prompt_cache_miss_tokens") or 0)
-        reasoning_tokens = int(
-            (usage.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
-        )
-
-        if prompt_tokens and not prompt_cache_hit_tokens and not prompt_cache_miss_tokens:
-            prompt_cache_miss_tokens = prompt_tokens
-
-        estimated_cost_usd = self._calculate_usage_cost(
-            provider=provider,
-            model=model,
-            prompt_cache_hit_tokens=prompt_cache_hit_tokens,
-            prompt_cache_miss_tokens=prompt_cache_miss_tokens,
-            completion_tokens=completion_tokens,
-        )
-
-        return {
-            "provider": provider,
-            "model": model,
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": total_tokens,
-            "prompt_cache_hit_tokens": prompt_cache_hit_tokens,
-            "prompt_cache_miss_tokens": prompt_cache_miss_tokens,
-            "reasoning_tokens": reasoning_tokens,
-            "estimated_cost_usd": estimated_cost_usd,
-        }
-
-    def _calculate_usage_cost(
-        self,
-        provider: str,
-        model: str,
-        prompt_cache_hit_tokens: int,
-        prompt_cache_miss_tokens: int,
-        completion_tokens: int,
-    ) -> Optional[float]:
-        if provider != "deepseek":
-            return None
-
-        pricing = self._get_deepseek_model_pricing(model)
-        if pricing is None:
-            return None
-
-        per_million = Decimal("1000000")
-        total = (
-            Decimal(prompt_cache_hit_tokens) * pricing["cache_hit"] / per_million
-            + Decimal(prompt_cache_miss_tokens) * pricing["cache_miss"] / per_million
-            + Decimal(completion_tokens) * pricing["output"] / per_million
-        )
-        return float(total.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP))
-
-    def _get_deepseek_model_pricing(self, model: str) -> Optional[Dict[str, Decimal]]:
-        normalized = model.lower()
-        if normalized in {"deepseek-chat", "deepseek-v4-flash"}:
-            return self.deepseek_flash_pricing
-        if normalized == "deepseek-v4-pro":
-            return self.deepseek_pro_pricing
-        return None
 
     def _merge_usage(self, base: Optional[Dict], extra: Optional[Dict]) -> Optional[Dict]:
         if not base and not extra:
@@ -1098,7 +1102,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         project_name: Optional[str] = None,
     ) -> Optional[str]:
         """Feed command output back to the LLM for natural language interpretation."""
-        if not self.api_key:
+        if not self.deepseek.configured:
             return None
 
         try:
@@ -1124,24 +1128,12 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                     ),
                 })
 
-            payload = {
-                "model": self.deepseek_model,
-                "messages": messages,
-                "max_tokens": 400,
-                "stream": False,
-                "thinking": {"type": "disabled"},
-            }
-
-            url = f"{self.deepseek_base_url}/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            }
-
-            resp = requests.post(url, headers=headers, json=payload, timeout=(5, 15))
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
+            result = self.deepseek.chat_completion(
+                messages,
+                max_tokens=400,
+                thinking={"type": "disabled"},
+            )
+            return result["content"].strip()
 
         except Exception:
             logger.debug("Failed to interpret execution result", exc_info=True)

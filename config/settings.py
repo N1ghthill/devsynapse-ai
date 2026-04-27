@@ -104,7 +104,7 @@ class AppSettings(BaseSettings):
     )
 
     app_name: str = "DevSynapse AI"
-    app_version: str = "0.4.1"
+    app_version: str = "0.5.0"
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     api_debug: bool = True
@@ -114,17 +114,23 @@ class AppSettings(BaseSettings):
     deepseek_api_key: Optional[str] = None
     deepseek_model: str = "deepseek-v4-pro"
     deepseek_base_url: str = "https://api.deepseek.com/beta"
+    deepseek_flash_model: str = "deepseek-v4-flash"
+    deepseek_pro_model: str = "deepseek-v4-pro"
+    deepseek_reasoner_model: str = "deepseek-reasoner"
     deepseek_reasoning_effort: str = "high"
     deepseek_thinking_enabled: bool = True
+    llm_model_routing_enabled: bool = True
+    llm_auto_economy_enabled: bool = True
+    llm_cache_hit_warning_threshold_pct: float = 70.0
     llm_temperature: float = 0.7
     llm_max_tokens: int = 1500
     llm_request_timeout: int = 12
-    deepseek_flash_input_cache_hit_price_usd_per_million: float = 0.028
+    deepseek_flash_input_cache_hit_price_usd_per_million: float = 0.0028
     deepseek_flash_input_cache_miss_price_usd_per_million: float = 0.14
     deepseek_flash_output_price_usd_per_million: float = 0.28
-    deepseek_pro_input_cache_hit_price_usd_per_million: float = 0.145
-    deepseek_pro_input_cache_miss_price_usd_per_million: float = 1.74
-    deepseek_pro_output_price_usd_per_million: float = 3.48
+    deepseek_pro_input_cache_hit_price_usd_per_million: float = 0.003625
+    deepseek_pro_input_cache_miss_price_usd_per_million: float = 0.435
+    deepseek_pro_output_price_usd_per_million: float = 0.87
     llm_daily_budget_usd: float = 1.0
     llm_monthly_budget_usd: float = 20.0
     llm_budget_warning_threshold_pct: float = 80.0
@@ -211,8 +217,14 @@ _settings = get_settings()
 DEEPSEEK_API_KEY: Optional[str] = _settings.deepseek_api_key
 DEEPSEEK_MODEL = _settings.deepseek_model
 DEEPSEEK_BASE_URL = _settings.deepseek_base_url
+DEEPSEEK_FLASH_MODEL = _settings.deepseek_flash_model
+DEEPSEEK_PRO_MODEL = _settings.deepseek_pro_model
+DEEPSEEK_REASONER_MODEL = _settings.deepseek_reasoner_model
 DEEPSEEK_REASONING_EFFORT = _settings.deepseek_reasoning_effort
 DEEPSEEK_THINKING_ENABLED = _settings.deepseek_thinking_enabled
+LLM_MODEL_ROUTING_ENABLED = _settings.llm_model_routing_enabled
+LLM_AUTO_ECONOMY_ENABLED = _settings.llm_auto_economy_enabled
+LLM_CACHE_HIT_WARNING_THRESHOLD_PCT = _settings.llm_cache_hit_warning_threshold_pct
 LLM_REQUEST_TIMEOUT = _settings.llm_request_timeout
 DEEPSEEK_FLASH_INPUT_CACHE_HIT_PRICE_USD_PER_MILLION = (
     _settings.deepseek_flash_input_cache_hit_price_usd_per_million

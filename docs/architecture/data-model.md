@@ -12,7 +12,7 @@ Runtime database files are user state, not source files. By default they live un
 Primary implementation files:
 - [core/db.py](../../core/db.py)
 - [core/migrations.py](../../core/migrations.py)
-- [core/memory.py](../../core/memory.py)
+- [core/memory/system.py](../../core/memory/system.py)
 - [scripts/migrate.py](../../scripts/migrate.py)
 
 ## Main Persisted Concepts
@@ -35,6 +35,7 @@ This table is central to:
 - token and cost reporting
 - conversation lists and export
 - project-aware authorization, telemetry and dashboard reporting
+- restoring project scope in the chat UI when a persisted conversation is opened
 
 ### Users
 
@@ -65,6 +66,20 @@ Stores:
 This context supports assistant prompt construction and project-aware reporting.
 Administrators can register additional existing local project directories at runtime; these rows are persisted and are loaded into command attribution and project working-directory resolution.
 User-facing project lists expose project identity and usage metadata only; local paths are reserved for administrative project management.
+
+### Agent learning
+
+Stores:
+- semantic task signatures and task type
+- preferred model for similar future tasks
+- confidence, success and failure counts
+- recent evidence from feedback and command outcomes
+- route decision telemetry including selected model, fallback, budget mode, cache
+  hit rate and estimated cost
+
+This lets the agent use prior local outcomes when choosing Flash or Pro, instead
+of treating every request as a stateless prompt. Learned patterns are local
+SQLite state and are surfaced in monitoring stats.
 
 ### Project permissions
 
@@ -115,6 +130,10 @@ Contributors should add a new migration when:
 - historical rows are intentionally tolerated with partial fields
 - project attribution now prefers explicit persisted project names over text-only inference
 - explicit chat project context should be persisted as `conversation_project_name`
+- streaming chat should return the resolved persisted project name in the terminal
+  `done` event when attribution is available
+- agent learning is advisory: it can influence model routing, but budget-critical
+  economy mode still wins over learned Pro preferences
 
 ## Current Tradeoff
 

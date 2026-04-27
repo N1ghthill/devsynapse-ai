@@ -21,21 +21,23 @@ Project context can come from:
 - Regular `/projects` responses must not expose local project paths; `/admin/projects` is the path-bearing management surface.
 - `/execute` responses must include `project_name` when the bridge resolves one.
 - `POST /chat` may receive `project_name` and must persist it with the conversation row.
+- `/chat/stream` `done` events should include `project_name` when persistence resolves one.
 - Later chat turns should reuse the persisted conversation project when no new project is provided.
 - Chat history and conversation detail responses must return persisted `project_name` when available.
+- Conversation list summaries should include `project_name` so the UI can restore project scope when a conversation is opened.
 - Conversation persistence should store explicit project names when available.
 - Reporting should prefer persisted project names over text-only inference.
 - The frontend should display backend-provided project names, not derive them independently.
 
 ## Current Gaps
 
-- Some chat flows still rely on inferred project context from message text.
 - Older conversation rows may not have `conversation_project_name`.
 - Dashboard reporting still needs clearer visibility into attributed, inferred and unattributed usage.
 
 ## Completed
 
 - **Frontend project selector** (v0.3.0): the chat UI now includes a dropdown populated from `/projects` that sends the selected project as `project_name` in chat and command-execution requests.
+- **Conversation scope restore**: opening a persisted conversation now restores the saved project selector state, shows project chips in chat history and conversation summaries, and uses backend-resolved project names from streaming `done` events.
 
 ## Next Implementation Steps
 

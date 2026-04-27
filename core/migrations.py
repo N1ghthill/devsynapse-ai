@@ -176,6 +176,51 @@ MEMORY_MIGRATIONS = (
             """,
         ),
     ),
+    Migration(
+        version=9,
+        description="Agent learning and route decision telemetry",
+        statements=(
+            """
+            CREATE TABLE IF NOT EXISTS agent_learning (
+                task_signature TEXT PRIMARY KEY,
+                task_type TEXT NOT NULL,
+                preferred_model TEXT NOT NULL,
+                confidence REAL NOT NULL DEFAULT 0.0,
+                success_count INTEGER NOT NULL DEFAULT 0,
+                failure_count INTEGER NOT NULL DEFAULT 0,
+                learned_reason TEXT,
+                evidence TEXT,
+                updated_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS agent_route_decisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT,
+                timestamp TEXT NOT NULL,
+                task_signature TEXT NOT NULL,
+                task_type TEXT NOT NULL,
+                complexity TEXT NOT NULL,
+                selected_model TEXT NOT NULL,
+                fallback_model TEXT,
+                budget_mode TEXT,
+                routing_reason TEXT,
+                learned_preference TEXT,
+                learned_confidence REAL NOT NULL DEFAULT 0.0,
+                prompt_tokens INTEGER,
+                completion_tokens INTEGER,
+                cache_hit_rate_pct REAL,
+                estimated_cost_usd REAL,
+                project_name TEXT,
+                opencode_command TEXT
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_agent_route_decisions_signature
+            ON agent_route_decisions(task_signature, timestamp)
+            """,
+        ),
+    ),
 )
 
 

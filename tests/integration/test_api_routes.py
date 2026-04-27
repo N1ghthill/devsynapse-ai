@@ -359,6 +359,7 @@ async def test_list_conversations_and_stats_include_llm_usage(route_services):
     )
     assert stats.llm_usage["totals"]["total_tokens"] == 340
     assert stats.llm_usage["totals"]["estimated_cost_usd"] == pytest.approx(0.0000462)
+    assert stats.llm_usage["totals"]["cache_hit_rate_pct"] == pytest.approx(16.67)
     assert stats.llm_usage["by_project"][0]["project_name"] == "devsynapse-ai"
     assert stats.llm_usage["budget"]["daily"]["level"] == "critical"
     assert stats.llm_usage["budget"]["monthly"]["level"] == "healthy"
@@ -374,18 +375,25 @@ async def test_get_settings_includes_budget_fields(route_services):
             "llm_monthly_budget_usd": 150.0,
             "llm_budget_warning_threshold_pct": 70,
             "llm_budget_critical_threshold_pct": 95,
+            "llm_model_routing_enabled": "False",
+            "llm_auto_economy_enabled": "True",
+            "llm_cache_hit_warning_threshold_pct": 75,
         }
     )
 
     response = await get_settings_route(
         user=route_services.user,
         memory_system=route_services.memory,
+        brain=route_services.brain,
     )
 
     assert response.llm_daily_budget_usd == pytest.approx(12.5)
     assert response.llm_monthly_budget_usd == pytest.approx(150.0)
     assert response.llm_budget_warning_threshold_pct == pytest.approx(70)
     assert response.llm_budget_critical_threshold_pct == pytest.approx(95)
+    assert response.llm_model_routing_enabled is False
+    assert response.llm_auto_economy_enabled is True
+    assert response.llm_cache_hit_warning_threshold_pct == pytest.approx(75)
 
 
 @pytest.mark.asyncio
@@ -395,6 +403,7 @@ async def test_get_settings_admin_includes_all_project_names(route_services):
     response = await get_settings_route(
         user=route_services.admin,
         memory_system=route_services.memory,
+        brain=route_services.brain,
     )
 
     assert "devsynapse-ai" in response.project_mutation_allowlist
@@ -439,12 +448,28 @@ async def test_update_settings_rejects_critical_threshold_below_warning(route_se
                 llm_budget_warning_threshold_pct=90,
                 llm_budget_critical_threshold_pct=80,
             ),
-            user=route_services.user,
+            admin=route_services.admin,
             memory_system=route_services.memory,
             brain=route_services.brain,
         )
 
     assert exc_info.value.status_code == 400
+
+
+def test_update_settings_route_requires_admin_dependency():
+    from fastapi.routing import APIRoute
+
+    from api.dependencies import require_admin
+    from api.routes.settings import router
+
+    route = next(
+        route
+        for route in router.routes
+        if isinstance(route, APIRoute) and route.path == "/settings" and "PUT" in route.methods
+    )
+
+    dependency_calls = {dependency.call for dependency in route.dependant.dependencies}
+    assert require_admin in dependency_calls
 
 
 @pytest.mark.asyncio

@@ -123,6 +123,11 @@ class DashboardStats(BaseModel):
 class SettingsResponse(BaseModel):
     deepseek_api_key: bool | str
     deepseek_model: str
+    deepseek_flash_model: str
+    deepseek_pro_model: str
+    llm_model_routing_enabled: bool
+    llm_auto_economy_enabled: bool
+    llm_cache_hit_warning_threshold_pct: float
     temperature: float
     max_tokens: int
     conversation_history_limit: int
@@ -138,6 +143,11 @@ class SettingsResponse(BaseModel):
 class SettingsUpdateRequest(BaseModel):
     deepseek_api_key: Optional[str] = None
     deepseek_model: Optional[str] = None
+    deepseek_flash_model: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    deepseek_pro_model: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    llm_model_routing_enabled: Optional[bool] = None
+    llm_auto_economy_enabled: Optional[bool] = None
+    llm_cache_hit_warning_threshold_pct: Optional[float] = Field(default=None, ge=0, le=100)
     temperature: Optional[float] = Field(default=None, ge=0, le=2)
     max_tokens: Optional[int] = Field(default=None, ge=1, le=32000)
     conversation_history_limit: Optional[int] = Field(default=None, ge=1, le=100)

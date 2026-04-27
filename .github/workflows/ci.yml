@@ -38,10 +38,11 @@ jobs:
           bash -n scripts/uninstall.sh
           bash -n scripts/update.sh
           bash -n scripts/ui_smoke.sh
+          bash -n scripts/build-backend.sh
           bash -n scripts/update_locks.sh
           bash -n devsynapse.sh
-          python -m py_compile scripts/dev.py scripts/ensure_runtime_config.py scripts/migrate.py scripts/manage_users.py
-          shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh scripts/ui_smoke.sh scripts/update_locks.sh devsynapse.sh
+          python -m py_compile scripts/dev.py scripts/ensure_runtime_config.py scripts/generate-tauri-update-manifest.py scripts/migrate.py scripts/manage_users.py
+          shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh scripts/ui_smoke.sh scripts/build-backend.sh scripts/update_locks.sh devsynapse.sh
 
       - name: Run backend tests
         run: pytest -q

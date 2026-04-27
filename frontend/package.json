@@ -1,7 +1,7 @@
 {
-  "name": "frontend",
+  "name": "devsynapse-ai",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,9 +9,19 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "smoke:ui": "node scripts/smoke-ui.mjs",
-    "capture:docs-screenshots": "node scripts/capture-doc-screenshots.mjs"
+    "capture:docs-screenshots": "node scripts/capture-doc-screenshots.mjs",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:build:updates": "tauri build --config src-tauri/tauri.updater.conf.json",
+    "tauri:build:appimage": "tauri build -- --bundles appimage",
+    "backend:build": "bash ../scripts/build-backend.sh",
+    "desktop:dev": "npm run backend:build && npm run tauri:dev",
+    "desktop:build": "npm run backend:build && npm run tauri:build",
+    "icons:tauri": "tauri icon ../assets/Favcon.png"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.10.1",
     "axios": "^1.15.2",
     "lucide-react": "^1.11.0",
     "react": "^19.2.5",
@@ -22,6 +32,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@tauri-apps/cli": "^2",
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

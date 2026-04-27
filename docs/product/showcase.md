@@ -1,20 +1,35 @@
 # Product Showcase
 
-DevSynapse AI is a DeepSeek-first coding workspace. The product thesis is narrow on purpose: DeepSeek is robust for development work, but developers still need a practical environment around it for project context, safe command execution, persistence, cost controls and operational visibility.
+DevSynapse AI is a DeepSeek-first coding workspace. The product thesis is narrow
+on purpose: DeepSeek is robust for development work, but developers still need a
+practical environment around it for project context, safe command execution,
+persistence, cost controls and operational visibility.
+
+The current MVP position is:
+
+> AI coding assistant for Linux developers who want DeepSeek without losing local control.
+
+![DevSynapse AI demo flow](../screenshots/devsynapse-demo-flow.gif)
+
+The demo GIF is assembled from current product screenshots to communicate the
+core loop quickly: project context, command review, confirmed execution,
+assistant interpretation and cost visibility. A live recording should replace it
+when a release demo video is captured.
 
 This page maps the current product surface to concrete use cases and evidence captured from the local app.
 
 ## Current Evidence
 
-Baseline validated on `2026-04-26`:
+Baseline validated on `2026-04-27`:
 - `make verify` passed with `186` tests, script checks, frontend lint and frontend build
+- `make desktop-build` generated Linux `.deb` and `.rpm` desktop artifacts
 - GitHub Actions CI passed on `main`
 - portable configuration via environment variables verified
 
 Screenshot sources:
 - [screenshot evidence index](../screenshots/README.md)
 - [testing guide](../development/testing.md)
-- [release notes](../releases/v0.4.1.md)
+- [release notes](../releases/v0.5.0.md)
 
 ## Use Cases
 
@@ -39,6 +54,8 @@ This user needs to work across client repositories without mixing context or wri
 Current support:
 - explicit project context on chat and execution flows
 - project selector in the chat UI
+- project chips in conversation history and chat messages
+- saved conversations restore their persisted project scope when reopened
 - project-scoped mutation authorization for non-admin users
 - working directory resolution per project for bash/grep commands
 - command execution telemetry by project
@@ -53,8 +70,10 @@ Current support:
 - authenticated operator UI
 - chat with real-time streaming responses
 - command proposals with execution confirmation
+- command confirmation details for risk, directory and expected effect before execution
 - controlled execution for `bash`, `read`, `glob`, `grep`, `edit` and `write`
 - explicit command status for success, blocked and failed states
+- workflow templates for test runs, failing-test analysis, TODO search, repository summaries, changelog drafts and Docker inspection
 - monitoring dashboard for command/API activity
 - keyboard shortcuts: Enter / Ctrl+Enter to send, Shift+Enter for newline
 

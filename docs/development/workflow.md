@@ -31,6 +31,9 @@ npm run dev
 - `make script-check`: run shell syntax checks, Python script compilation and ShellCheck when installed
 - `make frontend-lint`: run frontend ESLint
 - `make frontend-build`: build the frontend bundle
+- `make desktop-backend`: build the PyInstaller backend sidecar for Tauri
+- `make desktop-dev`: build the sidecar and run the Tauri app in dev mode
+- `make desktop-build`: build the sidecar and generate default desktop packages
 - `make verify`: run Python lint, backend tests, script checks, frontend lint and frontend build in one pass
 - `make ui-smoke`: build and smoke-test the served UI with Playwright against temporary local databases and seeded smoke users
 - `make update`: update code, refresh dependencies, apply migrations and rebuild the frontend for an existing install
@@ -47,6 +50,9 @@ Python dependency manifests are split by purpose:
 Dependabot watches GitHub Actions, Python and frontend manifests weekly. The `Dependency Locks` workflow also runs weekly and can be dispatched manually to regenerate Python lock constraints and open a pull request when they change.
 
 GitHub Releases are published from pushed `v*.*.*` tags by reading `docs/releases/<tag>.md`. Create the release notes before pushing the tag; manual dispatch is available for an existing tag.
+
+Desktop artifacts for landing-page downloads are tracked in
+[../deployment/desktop-distribution.md](../deployment/desktop-distribution.md).
 
 ## Updating An Existing Install
 
@@ -65,7 +71,7 @@ update-devsynapse
 For a specific published release:
 
 ```bash
-devsynapse update --version v0.4.1
+devsynapse update --version v0.5.0
 ```
 
 The updater backs up existing runtime files when present, preserves runtime

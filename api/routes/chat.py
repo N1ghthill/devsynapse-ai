@@ -35,6 +35,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
 
 
+async def _log_api_request_background(monitoring_system, **kwargs):
+    monitoring_system.log_api_request(**kwargs)
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(
     request: ChatRequest,
@@ -239,7 +243,8 @@ async def execute_command(
 
         response_time = time.time() - start_time
         background_tasks.add_task(
-            monitoring_system.log_api_request,
+            _log_api_request_background,
+            monitoring_system,
             endpoint="/execute",
             method="POST",
             status_code=200,
@@ -273,7 +278,8 @@ async def execute_command(
         logger.error("Erro executando comando: %s", exc)
         response_time = time.time() - start_time
         background_tasks.add_task(
-            monitoring_system.log_api_request,
+            _log_api_request_background,
+            monitoring_system,
             endpoint="/execute",
             method="POST",
             status_code=500,

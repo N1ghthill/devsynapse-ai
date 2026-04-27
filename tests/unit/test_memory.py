@@ -1,12 +1,13 @@
 """
 Unit tests for memory system
 """
-import pytest
 import sqlite3
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
+from core.llm_optimization import build_task_profile
 
 PROJECT_NAME = "devsynapse-ai"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -29,7 +30,7 @@ class TestMemorySystem:
 
     def test_init_creates_db(self, tmp_path):
         db_path = tmp_path / "test_init.db"
-        memory = _create_memory(db_path)
+        _create_memory(db_path)
 
         conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
@@ -41,6 +42,8 @@ class TestMemorySystem:
         assert 'user_preferences' in tables
         assert 'projects' in tables
         assert 'decisions' in tables
+        assert 'agent_learning' in tables
+        assert 'agent_route_decisions' in tables
 
     def test_get_user_preferences(self, tmp_path):
         db_path = tmp_path / "test_prefs.db"
@@ -146,6 +149,71 @@ class TestMemorySystem:
         assert row[0] > 0.7
 
     @pytest.mark.asyncio
+    async def test_negative_feedback_teaches_agent_to_prefer_pro(self, tmp_path):
+        db_path = tmp_path / "test_agent_feedback.db"
+        memory = _create_memory(db_path)
+        message = "Debug erro complexo no cache"
+
+        await memory.save_interaction(
+            conversation_id="conv_agent_feedback",
+            user_message=message,
+            ai_response="Resposta incompleta",
+            llm_usage={
+                "provider": "deepseek",
+                "model": "deepseek-v4-flash",
+                "prompt_tokens": 100,
+                "completion_tokens": 10,
+                "total_tokens": 110,
+                "prompt_cache_hit_tokens": 0,
+                "prompt_cache_miss_tokens": 100,
+                "reasoning_tokens": 0,
+                "estimated_cost_usd": 0.0000168,
+            },
+        )
+
+        await memory.save_feedback(
+            conversation_id="conv_agent_feedback",
+            feedback="Resposta ruim, estava errado",
+            score=1,
+        )
+
+        learning = memory.get_agent_learning(build_task_profile(message).signature)
+        stats = memory.get_agent_learning_stats()
+
+        assert learning is not None
+        assert learning["preferred_model"] == "deepseek-v4-pro"
+        assert learning["failure_count"] == 1
+        assert stats["learned_patterns"] == 1
+
+    def test_record_agent_route_decision_tracks_model(self, tmp_path):
+        from core.llm_optimization import ModelRoute
+
+        db_path = tmp_path / "test_agent_decision.db"
+        memory = _create_memory(db_path)
+
+        memory.record_agent_route_decision(
+            conversation_id="conv_route",
+            route=ModelRoute(
+                model="deepseek-v4-flash",
+                complexity="simple",
+                reason="short_request",
+                task_type="concept",
+                task_signature="concept:abc",
+            ),
+            usage={
+                "model": "deepseek-v4-flash",
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "prompt_cache_hit_tokens": 8,
+                "prompt_cache_miss_tokens": 2,
+                "estimated_cost_usd": 0.00001,
+            },
+        )
+
+        stats = memory.get_agent_learning_stats()
+        assert stats["by_model"] == [{"selected_model": "deepseek-v4-flash", "count": 1}]
+
+    @pytest.mark.asyncio
     async def test_save_command_execution(self, tmp_path):
         db_path = tmp_path / "test_cmd.db"
         memory = _create_memory(db_path)
@@ -193,7 +261,7 @@ class TestMemorySystem:
         db_path = tmp_path / "test_project_infer.db"
         memory = _create_memory(db_path)
 
-        await memory.save_interaction(
+        inferred_project = await memory.save_interaction(
             conversation_id="conv_project_infer",
             user_message="Analise o devsynapse-ai",
             ai_response=f'read "{PROJECT_ROOT / "README.md"}"',
@@ -201,6 +269,7 @@ class TestMemorySystem:
         )
 
         context = await memory.get_conversation_context("conv_project_infer")
+        assert inferred_project == "devsynapse-ai"
         assert context["project_name"] == "devsynapse-ai"
         assert context["conversation_messages"][0]["projectName"] == "devsynapse-ai"
         assistant_message = context["conversation_messages"][1]

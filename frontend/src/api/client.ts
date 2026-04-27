@@ -1,4 +1,5 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
+import { invoke } from '@tauri-apps/api/core';
 import type {
   AdminAuditLog,
   AdminUser,
@@ -15,19 +16,117 @@ import type {
   TokenUsage,
 } from '../types';
 
-const API_BASE_URL = (
-  import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? '' : 'http://127.0.0.1:8000')
-).replace(/\/$/, '');
+type BackendStatus = {
+  port: number;
+  running: boolean;
+  pid: number;
+};
+
+export type DesktopUpdateStatus = {
+  configured: boolean;
+  available: boolean;
+  currentVersion: string;
+  version?: string | null;
+  date?: string | null;
+  body?: string | null;
+  endpoint?: string | null;
+};
+
+declare global {
+  interface Window {
+    __TAURI_INTERNALS__?: unknown;
+  }
+}
+
+const DEV_API_BASE_URL = 'http://127.0.0.1:8000';
+
+const normalizeApiBaseUrl = (value?: string): string | null => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.replace(/\/$/, '') : null;
+};
+
+const configuredApiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
+
+let cachedApiBaseUrl: string | null =
+  configuredApiBaseUrl ?? null;
+let apiBaseUrlPromise: Promise<string> | null = null;
+
+const isTauriRuntime = () =>
+  typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
+
+export const isDesktopRuntime = isTauriRuntime;
+
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const pingBackend = async (baseUrl: string): Promise<void> => {
+  const response = await fetch(`${baseUrl}/health`, { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error(`health check returned HTTP ${response.status}`);
+  }
+};
+
+const waitForTauriBackendUrl = async (): Promise<string> => {
+  let lastError = 'backend has not reported a port yet';
+
+  for (let attempt = 0; attempt < 45; attempt += 1) {
+    try {
+      const status = await invoke<BackendStatus>('get_backend_status');
+      if (status.running && status.port > 0) {
+        const baseUrl = `http://127.0.0.1:${status.port}`;
+        await pingBackend(baseUrl);
+        return baseUrl;
+      }
+      lastError = status.port > 0 ? 'backend process is not running' : lastError;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+
+    await sleep(Math.min(250 + attempt * 100, 1000));
+  }
+
+  throw new Error(`Tauri backend not ready: ${lastError}`);
+};
+
+export const resolveApiBaseUrl = async (): Promise<string> => {
+  if (cachedApiBaseUrl !== null) {
+    return cachedApiBaseUrl;
+  }
+
+  if (apiBaseUrlPromise) {
+    return apiBaseUrlPromise;
+  }
+
+  apiBaseUrlPromise = (async () => {
+    if (isTauriRuntime()) {
+      try {
+        cachedApiBaseUrl = await waitForTauriBackendUrl();
+        return cachedApiBaseUrl;
+      } catch (error) {
+        if (!import.meta.env.DEV) {
+          throw error;
+        }
+      }
+    }
+
+    cachedApiBaseUrl = import.meta.env.PROD ? '' : DEV_API_BASE_URL;
+    return cachedApiBaseUrl;
+  })().finally(() => {
+    apiBaseUrlPromise = null;
+  });
+
+  return apiBaseUrlPromise;
+};
 
 const api: AxiosInstance = axios.create({
-  baseURL: API_BASE_URL,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+  config.baseURL = await resolveApiBaseUrl();
+
   const token = localStorage.getItem('auth_token');
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -101,76 +200,78 @@ export const chatApi = {
     onToken: (token: string) => void,
     onCommand: (command: string) => void,
     onReasoning: (reasoning: string) => void,
-    onDone: (usage: TokenUsage | null) => void,
+    onDone: (usage: TokenUsage | null, projectName?: string | null) => void,
     onError: (error: string) => void,
   ): AbortController => {
     const controller = new AbortController();
-    const token = localStorage.getItem('auth_token');
-    const url = `${API_BASE_URL}/chat/stream`;
 
-    fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(data),
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (response.status === 401) {
-          localStorage.removeItem('auth_token');
-          window.location.href = '/login';
-          return;
-        }
-        if (!response.ok) {
-          const text = await response.text();
-          onError(`HTTP ${response.status}: ${text}`);
-          return;
-        }
-        const reader = response.body?.getReader();
-        if (!reader) {
-          onError('Stream reader not available');
-          return;
-        }
-        const decoder = new TextDecoder();
-        let buffer = '';
+    void (async () => {
+      const apiBaseUrl = await resolveApiBaseUrl();
+      const token = localStorage.getItem('auth_token');
+      const url = `${apiBaseUrl}/chat/stream`;
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(data),
+        signal: controller.signal,
+      });
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+      if (response.status === 401) {
+        localStorage.removeItem('auth_token');
+        window.location.href = '/login';
+        return;
+      }
+      if (!response.ok) {
+        const text = await response.text();
+        onError(`HTTP ${response.status}: ${text}`);
+        return;
+      }
+      const reader = response.body?.getReader();
+      if (!reader) {
+        onError('Stream reader not available');
+        return;
+      }
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const dataStr = line.slice(6);
-            try {
-              const event = JSON.parse(dataStr);
-              if (event.type === 'text') {
-                onToken(event.content);
-              } else if (event.type === 'reasoning') {
-                onReasoning(event.content);
-              } else if (event.type === 'command') {
-                onCommand(event.command);
-              } else if (event.type === 'done') {
-                onDone(event.usage || null);
-              } else if (event.type === 'error') {
-                onError(event.message || 'Stream error');
-              }
-            } catch {
-              // Skip unparseable lines
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const dataStr = line.slice(6);
+          try {
+            const event = JSON.parse(dataStr);
+            if (event.type === 'text') {
+              onToken(event.content);
+            } else if (event.type === 'reasoning') {
+              onReasoning(event.content);
+            } else if (event.type === 'command') {
+              onCommand(event.command);
+            } else if (event.type === 'done') {
+              onDone(event.usage || null, event.project_name || null);
+            } else if (event.type === 'error') {
+              onError(event.message || 'Stream error');
             }
+          } catch {
+            // Skip unparseable lines
           }
         }
-      })
-      .catch((err) => {
-        if (err.name !== 'AbortError') {
-          onError(err.message || 'Stream failed');
-        }
-      });
+      }
+    })().catch((err) => {
+      if (err.name !== 'AbortError') {
+        onError(err.message || 'Stream failed');
+      }
+    });
 
     return controller;
   },
@@ -216,6 +317,16 @@ export const settingsApi = {
   listProjects: async (): Promise<ProjectInfo[]> => {
     const response = await api.get<{ projects: ProjectInfo[] }>('/projects');
     return response.data.projects || [];
+  },
+};
+
+export const desktopUpdaterApi = {
+  check: async (): Promise<DesktopUpdateStatus> => {
+    return invoke<DesktopUpdateStatus>('check_desktop_update');
+  },
+
+  install: async (): Promise<void> => {
+    return invoke<void>('install_desktop_update');
   },
 };
 

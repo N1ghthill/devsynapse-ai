@@ -6,10 +6,42 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+## [v0.5.0] - 2026-04-27
+
+### Added
+- Added persistent agent learning for model-routing decisions, feedback signals
+  and command outcomes.
+- Added semantic task profiling so repeated task shapes can reuse learned
+  Flash/Pro preferences.
+- Added dashboard reporting for learned patterns and success/failure learning
+  signals.
+- Added SQLite migration `9` for `agent_learning` and
+  `agent_route_decisions`.
+- Added the Tauri desktop distribution flow with `make desktop-backend`,
+  `make desktop-dev`, `make desktop-build` and Linux `deb`/`rpm` packaging.
+- Added desktop distribution status documentation for landing-page download
+  decisions.
+
+### Changed
+- DeepSeek Flash/Pro routing can now use confident local learning signals while
+  preserving critical budget economy behavior.
+- Chat system prompts now include locally learned agent patterns when available.
+- Linux desktop builds now default to `deb` and `rpm`; AppImage is explicit
+  opt-in because `linuxdeploy` is environment-sensitive.
+- Tauri sidecar startup now resolves the dynamic backend port from the frontend
+  and keeps macOS/Windows package claims marked as unvalidated until target-OS
+  builds exist.
+
+### Fixed
+- API request telemetry background logging now uses async background tasks to
+  avoid threadpool stalls in constrained local environments.
+
 ### Documentation
 - Clarified that the supported release installer target is Debian/Ubuntu-style
   Linux, with native Windows setup currently unvalidated and WSL2 recommended
   for Windows users.
+- Documented the agent-learning data model, monitoring stats and runtime
+  behavior.
 - Reworked release documentation into an explicit compliance gate covering
   version alignment, platform support, contracts, migrations, security notes and
   validation evidence.

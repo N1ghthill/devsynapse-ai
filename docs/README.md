@@ -31,11 +31,13 @@ This directory is the technical documentation entrypoint for contributors and ma
 - local workflow: [development/workflow.md](development/workflow.md)
 - testing guide: [development/testing.md](development/testing.md)
 - project attribution plan: [development/project-attribution.md](development/project-attribution.md)
+- DeepSeek cost optimization plan: [development/deepseek-cost-optimization-plan.md](development/deepseek-cost-optimization-plan.md)
 - development roadmap: [development/roadmap.md](development/roadmap.md)
 
 ## Deployment
 
 - runtime and delivery notes: [deployment/runtime.md](deployment/runtime.md)
+- desktop distribution status: [deployment/desktop-distribution.md](deployment/desktop-distribution.md)
 
 ## Security
 
@@ -44,7 +46,7 @@ This directory is the technical documentation entrypoint for contributors and ma
 ## Releases
 
 - release checklist: [../RELEASING.md](../RELEASING.md)
-- latest release notes: [releases/v0.4.1.md](releases/v0.4.1.md)
+- latest release notes: [releases/v0.5.0.md](releases/v0.5.0.md)
 
 ## Documentation Rule
 

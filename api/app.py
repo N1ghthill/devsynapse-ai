@@ -55,11 +55,15 @@ def _log_api_request_safely(monitoring_system, **kwargs) -> None:
         logger.exception("Failed to persist API request telemetry")
 
 
+async def _log_api_request_background(monitoring_system, **kwargs) -> None:
+    _log_api_request_safely(monitoring_system, **kwargs)
+
+
 def _attach_api_request_log(response, monitoring_system, **kwargs):
     background_tasks = BackgroundTasks()
     if response.background is not None:
         background_tasks.add_task(response.background)
-    background_tasks.add_task(_log_api_request_safely, monitoring_system, **kwargs)
+    background_tasks.add_task(_log_api_request_background, monitoring_system, **kwargs)
     response.background = background_tasks
     return response
 

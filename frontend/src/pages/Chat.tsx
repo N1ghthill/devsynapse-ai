@@ -1,11 +1,70 @@
 import { useState, useRef, useEffect } from 'react';
-import { Download, Loader2, MessageSquarePlus, Pencil, Search, Trash2 } from 'lucide-react';
+import {
+  BookOpenText,
+  ClipboardList,
+  Container,
+  Download,
+  FileSearch,
+  FlaskConical,
+  GitPullRequestArrow,
+  ListTodo,
+  Loader2,
+  MessageSquarePlus,
+  Pencil,
+  Search,
+  Trash2,
+  type LucideIcon,
+} from 'lucide-react';
 import { ChatMessage } from '../components/ChatMessage';
 import { ChatInput } from '../components/ChatInput';
 import { chatApi, dashboardApi, settingsApi } from '../api/client';
 import type { BudgetWindowStatus, ConversationSummary, Message, ProjectInfo, TokenUsage } from '../types';
 
 const CONVERSATION_STORAGE_KEY = 'devsynapse_conversation_id';
+
+const workflowTemplates: Array<{
+  title: string;
+  description: string;
+  prompt: string;
+  icon: LucideIcon;
+}> = [
+  {
+    title: 'Rodar testes',
+    description: 'Encontra o comando de teste do projeto e propõe execução.',
+    prompt: 'Analise o projeto selecionado e proponha o comando mais seguro para executar a suite de testes.',
+    icon: FlaskConical,
+  },
+  {
+    title: 'Explicar teste falho',
+    description: 'Inspeciona a saída de falha e aponta a provável correção.',
+    prompt: 'Revise a última falha de teste ou me peça a saída; explique a causa provável e a próxima correção.',
+    icon: ClipboardList,
+  },
+  {
+    title: 'Buscar TODOs',
+    description: 'Lista comentários TODO e FIXME com prioridades de limpeza.',
+    prompt: 'Busque comentários TODO e FIXME neste projeto e resuma os itens de limpeza mais prioritários.',
+    icon: ListTodo,
+  },
+  {
+    title: 'Resumir repositório',
+    description: 'Mapeia stack, estrutura e principais pontos de entrada.',
+    prompt: 'Resuma a estrutura, stack tecnológica e pontos de entrada mais importantes do repositório selecionado.',
+    icon: BookOpenText,
+  },
+  {
+    title: 'Criar changelog',
+    description: 'Gera rascunho de release notes do histórico recente.',
+    prompt: 'Crie um rascunho de changelog conciso a partir do histórico git recente deste projeto.',
+    icon: GitPullRequestArrow,
+  },
+  {
+    title: 'Inspecionar Docker',
+    description: 'Revisa arquivos de container e comandos de execução local.',
+    prompt: 'Inspecione a configuração Docker deste projeto e explique como executá-lo localmente.',
+    icon: Container,
+  },
+];
 
 const reasonLabels: Record<string, string> = {
   validation_failed: 'Bloqueado por regra de segurança do comando.',
@@ -30,6 +89,7 @@ export function Chat() {
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageIdSequenceRef = useRef(0);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -60,10 +120,12 @@ export function Chat() {
         if (!cancelled) {
           setMessages(conversationResponse.history || []);
           setConversations(listResponse.conversations || []);
+          setSelectedProject(conversationResponse.project_name || '');
         }
       } catch {
         if (!cancelled) {
           setMessages([]);
+          setSelectedProject('');
           void loadConversationList();
         }
       }
@@ -126,6 +188,11 @@ export function Chat() {
     setMessages((prev) =>
       prev.map((message) => (message.id === messageId ? { ...message, ...updates } : message))
     );
+  };
+
+  const createMessageId = () => {
+    messageIdSequenceRef.current += 1;
+    return `msg_${conversationId}_${messageIdSequenceRef.current}`;
   };
 
   const summarizeUsage = (items: Message[]): TokenUsage | null => {
@@ -191,6 +258,10 @@ export function Chat() {
     };
   })();
 
+  const currentConversation = conversations.find((conversation) => conversation.id === conversationId);
+  const currentScopeProject = selectedProject || null;
+  const conversationUsage = summarizeUsage(messages);
+
   const downloadUsageCsv = async () => {
     const csv = await chatApi.exportUsageCsv();
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -227,14 +298,19 @@ export function Chat() {
   };
 
   const handleSend = async (content: string) => {
+    const prompt = content.trim();
+    if (!prompt || isLoading) return;
+
+    const userMessageId = createMessageId();
+    const assistantMessageId = createMessageId();
     const userMessage: Message = {
-      id: `msg_${Date.now()}`,
+      id: userMessageId,
       role: 'user',
-      content,
+      content: prompt,
       timestamp: new Date().toISOString(),
+      projectName: selectedProject || null,
     };
 
-    const assistantMessageId = `msg_${Date.now() + 1}`;
     const assistantMessage: Message = {
       id: assistantMessageId,
       role: 'assistant',
@@ -249,7 +325,7 @@ export function Chat() {
     try {
       chatApi.sendMessageStreaming(
         {
-          message: content,
+          message: prompt,
           conversation_id: conversationId,
           project_name: selectedProject || undefined,
         },
@@ -280,14 +356,20 @@ export function Chat() {
             )
           );
         },
-        (usage) => {
+        (usage, projectName) => {
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantMessageId
-                ? { ...msg, tokenUsage: usage }
-                : msg
+                ? { ...msg, tokenUsage: usage, projectName: projectName || msg.projectName }
+                : msg.id === userMessageId && projectName
+                  ? { ...msg, projectName }
+                  : msg
             )
           );
+          if (projectName) {
+            setSelectedProject(projectName);
+          }
+          setIsLoading(false);
           void loadConversationList();
         },
         (error) => {
@@ -298,20 +380,20 @@ export function Chat() {
                 : msg
             )
           );
+          setIsLoading(false);
           void loadConversationList();
         }
       );
     } catch {
       const errorMessage: Message = {
-        id: `msg_${Date.now() + 2}`,
+        id: createMessageId(),
         role: 'system',
         content: 'Failed to get response. Please check your connection.',
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMessage]);
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   const handleExecute = async (messageId: string) => {
@@ -328,7 +410,11 @@ export function Chat() {
         conversation_id: conversationId,
         command: targetMessage.command,
         confirm: true,
-        project_name: targetMessage.projectName || selectedProject || undefined,
+        project_name:
+          targetMessage.projectName ||
+          selectedProject ||
+          currentConversation?.project_name ||
+          undefined,
       });
 
       updateMessage(messageId, {
@@ -375,6 +461,10 @@ export function Chat() {
   };
 
   const handleSelectConversation = (nextConversationId: string) => {
+    const nextConversation = conversations.find(
+      (conversation) => conversation.id === nextConversationId
+    );
+    setSelectedProject(nextConversation?.project_name || '');
     setConversationId(nextConversationId);
   };
 
@@ -414,7 +504,8 @@ export function Chat() {
     if (!normalizedQuery) return true;
     return (
       conversation.title.toLowerCase().includes(normalizedQuery) ||
-      conversation.preview.toLowerCase().includes(normalizedQuery)
+      conversation.preview.toLowerCase().includes(normalizedQuery) ||
+      (conversation.project_name || '').toLowerCase().includes(normalizedQuery)
     );
   });
 
@@ -458,6 +549,9 @@ export function Chat() {
           <span className="conversation-time">{formatConversationTime(conversation.updated_at)}</span>
         </div>
         <p className="conversation-preview">{conversation.preview || 'Sem resumo disponível.'}</p>
+        {conversation.project_name && (
+          <span className="conversation-project-chip">{conversation.project_name}</span>
+        )}
         <div className="conversation-metrics">
           <span>{(conversation.total_tokens || 0).toLocaleString()} tok</span>
           <span>{formatUsd(conversation.estimated_cost_usd || 0)}</span>
@@ -483,9 +577,6 @@ export function Chat() {
       </div>
     </div>
   );
-
-  const currentConversation = conversations.find((conversation) => conversation.id === conversationId);
-  const conversationUsage = summarizeUsage(messages);
 
   const renderConversationRail = () => (
     <aside className="chat-rail">
@@ -562,6 +653,11 @@ export function Chat() {
               </select>
             </div>
           )}
+          <div className="chat-scope-line">
+            <span className={currentScopeProject ? 'scope-chip active' : 'scope-chip'}>
+              {currentScopeProject ? `Project: ${currentScopeProject}` : 'Scope: all projects'}
+            </span>
+          </div>
           {budgetSummary && (
             <div className={`chat-budget-banner banner-${budgetSummary.severity}`}>
               {budgetSummary.text}
@@ -602,23 +698,33 @@ export function Chat() {
         {!hasMessages && !isLoading && (
           <div className="empty-state">
             <div className="empty-icon">
-              <Loader2 size={48} />
+              <FileSearch size={44} />
             </div>
-            <h2>Welcome to DevSynapse</h2>
+            <h2>Start with a local workflow</h2>
             <p>
-              Your AI development assistant. Ask me anything about your code,
-              projects, or development tasks.
+              {selectedProject
+                ? `Selected project: ${selectedProject}`
+                : 'Choose a project or start with read-only repository discovery.'}
             </p>
-            <div className="suggestions">
-              <button onClick={() => handleSend("List my projects")}>
-                List my projects
-              </button>
-              <button onClick={() => handleSend("Show recent activity")}>
-                Show recent activity
-              </button>
-              <button onClick={() => handleSend("Help me debug")}>
-                Help me debug
-              </button>
+            <div className="workflow-templates">
+              {workflowTemplates.map((template) => {
+                const Icon = template.icon;
+                return (
+                  <button
+                    key={template.title}
+                    className="workflow-template-btn"
+                    onClick={() => void handleSend(template.prompt)}
+                    disabled={isLoading}
+                    type="button"
+                  >
+                    <Icon size={18} />
+                    <span>
+                      <strong>{template.title}</strong>
+                      <small>{template.description}</small>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

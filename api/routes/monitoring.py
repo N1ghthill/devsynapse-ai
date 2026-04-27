@@ -38,7 +38,7 @@ async def health_check(
         status=system_health["overall_status"],
         version=settings.app_version,
         memory_entries=memory_count,
-        deepseek_configured=brain.api_key is not None,
+        deepseek_configured=bool(brain.api_key),
     )
 
 
@@ -70,6 +70,7 @@ async def get_monitoring_stats(
             **memory_system.get_llm_usage_stats(hours=hours),
             "by_project": memory_system.get_project_usage_breakdown(hours=hours),
             "budget": budget_status,
+            "agent_learning": memory_system.get_agent_learning_stats(),
         },
         active_alerts=monitoring_system.get_active_alerts(),
     )
