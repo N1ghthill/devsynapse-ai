@@ -2,6 +2,7 @@
 Unit tests for brain system
 """
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -20,6 +21,11 @@ def mock_memory():
         "projects_context": "DevSynapse",
         "recent_decisions": []
     })
+    memory.get_app_settings.return_value = {}
+    memory.get_llm_budget_status.return_value = {"overall_status": "healthy"}
+    memory.get_agent_learning.return_value = None
+    memory.get_agent_learning_context.return_value = "Nenhum padrão de agente aprendido ainda."
+    memory.record_agent_route_decision = Mock()
     memory.save_interaction = AsyncMock()
     memory.save_command_execution = AsyncMock()
     return memory
@@ -137,6 +143,22 @@ class TestDevSynapseBrain:
             assert usage is None
 
     @pytest.mark.asyncio
+    async def test_process_message_plugin_cancel_returns_full_contract(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        with patch("core.brain.plugin_manager.emit_event", new_callable=AsyncMock) as mock_emit:
+            mock_emit.return_value = SimpleNamespace(cancelled=True, data={})
+
+            response, cmd, usage = await brain.process_message("Hello", "test_session")
+
+        assert response == "Processamento cancelado por plugin."
+        assert cmd is None
+        assert usage is None
+        mock_memory.save_interaction.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_process_message_sanitizes_unconfirmed_side_effect_claims(
         self, mock_memory, mock_bridge
     ):
@@ -183,6 +205,7 @@ class TestDevSynapseBrain:
         self, mock_memory, mock_bridge
     ):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
+        brain.api_key = "test-key"
         mock_bridge.execute_command = AsyncMock(
             return_value=(True, "ok", "tool output", "success", None, None)
         )
@@ -252,6 +275,17 @@ class TestDevSynapseBrain:
         self, mock_memory, mock_bridge
     ):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
+        brain.api_key = "test-key"
+        persistence_events = []
+
+        async def record_interaction(**kwargs):
+            persistence_events.append(("interaction", kwargs))
+
+        async def record_command_execution(**kwargs):
+            persistence_events.append(("command_execution", kwargs))
+
+        mock_memory.save_interaction.side_effect = record_interaction
+        mock_memory.save_command_execution.side_effect = record_command_execution
         mock_bridge.execute_command = AsyncMock(
             return_value=(True, "created", "write output", "success", None, None)
         )
@@ -293,16 +327,25 @@ class TestDevSynapseBrain:
         assert response == "Created it."
         assert cmd is None
         assert usage is None
+        assert [event[0] for event in persistence_events] == [
+            "interaction",
+            "command_execution",
+        ]
+        assert persistence_events[0][1]["opencode_command"] == (
+            'write "/tmp/admin.txt" --content="hello"'
+        )
+        assert persistence_events[1][1]["command"] == (
+            'write "/tmp/admin.txt" --content="hello"'
+        )
 
     @pytest.mark.asyncio
     async def test_process_message_error_handling(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
+        brain.api_key = "test-key"
 
-        # Mock the low-level Deepseek call to fail
-        with patch.object(brain, '_call_deepseek_api', new_callable=AsyncMock) as mock_deepseek:
-            mock_deepseek.side_effect = Exception("API connection failed")
+        with patch.object(brain.deepseek, 'chat_completion') as mock_chat:
+            mock_chat.side_effect = Exception("API connection failed")
 
-            # Mock the degraded response to test it's called
             with patch.object(brain, '_get_fallback_response') as mock_fallback:
                 mock_fallback.return_value = "Fallback response"
 
@@ -317,7 +360,7 @@ class TestDevSynapseBrain:
     async def test_call_deepseek_api_success(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
-        with patch('core.brain.requests.post') as mock_post:
+        with patch('core.deepseek.requests.post') as mock_post:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -331,21 +374,16 @@ class TestDevSynapseBrain:
             }
             mock_post.return_value = mock_response
 
-            result = await brain._call_deepseek_api([{"role": "user", "content": "Hi"}])
+            result = brain.deepseek.chat_completion(
+                [{"role": "user", "content": "Hi"}],
+                tools=[],
+            )
 
-            assert result.content == "Hello from Deepseek!"
-            assert result.provider == "deepseek"
-            assert result.usage["total_tokens"] == 26
-            assert result.usage["prompt_cache_miss_tokens"] == 16
-            assert result.usage["estimated_cost_usd"] == pytest.approx(0.00000504)
-
-            call_kwargs = mock_post.call_args[1]
-            payload = call_kwargs["json"]
-            assert "tools" in payload
-            assert len(payload["tools"]) == 6
-            assert payload["tools"][0]["function"]["name"] == "bash"
-            assert payload["tool_choice"] == "auto"
-            assert payload["stream"] is False
+            assert result["content"] == "Hello from Deepseek!"
+            assert result["provider"] == "deepseek"
+            assert result["usage"]["total_tokens"] == 26
+            assert result["usage"]["prompt_cache_miss_tokens"] == 16
+            assert result["usage"]["estimated_cost_usd"] == pytest.approx(0.00000504)
 
     def test_merge_usage_adds_prompt_tokens_and_cost(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
@@ -382,21 +420,90 @@ class TestDevSynapseBrain:
         assert merged["prompt_cache_miss_tokens"] == 100
         assert merged["estimated_cost_usd"] == pytest.approx(0.00003)
 
+    def test_select_llm_route_uses_flash_for_simple_work(self, mock_memory, mock_bridge):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        route = brain._select_llm_route("Explique dependency injection", {})
+
+        assert route.model == "deepseek-v4-flash"
+        assert route.fallback_model == "deepseek-v4-pro"
+
+    def test_select_llm_route_forces_flash_on_critical_budget(self, mock_memory, mock_bridge):
+        mock_memory.get_llm_budget_status.return_value = {"overall_status": "critical"}
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        route = brain._select_llm_route("Desenhe uma arquitetura de cache", {})
+
+        assert route.model == "deepseek-v4-flash"
+        assert route.budget_mode == "economy"
+        assert route.fallback_model is None
+
+    def test_select_llm_route_uses_agent_learning(self, mock_memory, mock_bridge):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        mock_memory.get_agent_learning.return_value = {
+            "preferred_model": "deepseek-v4-pro",
+            "confidence": 0.8,
+            "learned_reason": "feedback_negative",
+        }
+
+        route = brain._select_llm_route("Explique esse erro simples", {})
+
+        assert route.model == "deepseek-v4-pro"
+        assert route.learned_preference == "deepseek-v4-pro"
+
+    @pytest.mark.asyncio
+    async def test_call_llm_api_falls_back_from_flash_to_pro(self, mock_memory, mock_bridge):
+        from core.llm_optimization import ModelRoute
+
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        brain.api_key = "test-key"
+
+        with patch.object(brain.deepseek, "chat_completion") as mock_chat:
+            mock_chat.side_effect = [
+                Exception("flash unavailable"),
+                {
+                    "content": "Pro response",
+                    "provider": "deepseek",
+                    "model": "deepseek-v4-pro",
+                    "usage": {"total_tokens": 1},
+                    "tool_calls": None,
+                    "reasoning_content": None,
+                },
+            ]
+
+            result = await brain._call_llm_api(
+                [{"role": "user", "content": "Hi"}],
+                route=ModelRoute(
+                    model="deepseek-v4-flash",
+                    complexity="simple",
+                    reason="test",
+                    fallback_model="deepseek-v4-pro",
+                ),
+            )
+
+        assert result.content == "Pro response"
+        assert result.model == "deepseek-v4-pro"
+        assert mock_chat.call_args_list[0].kwargs["model"] == "deepseek-v4-flash"
+        assert mock_chat.call_args_list[1].kwargs["model"] == "deepseek-v4-pro"
+
     @pytest.mark.asyncio
     async def test_call_deepseek_api_error(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
-        with patch('core.brain.requests.post') as mock_post:
+        with patch('core.deepseek.requests.post') as mock_post:
             mock_post.side_effect = Exception("Connection refused")
 
             with pytest.raises(Exception):
-                await brain._call_deepseek_api([{"role": "user", "content": "Hi"}])
+                brain.deepseek.chat_completion(
+                    [{"role": "user", "content": "Hi"}],
+                    tools=[],
+                )
 
     @pytest.mark.asyncio
     async def test_call_deepseek_api_with_tool_calls(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
-        with patch('core.brain.requests.post') as mock_post:
+        with patch('core.deepseek.requests.post') as mock_post:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -422,12 +529,15 @@ class TestDevSynapseBrain:
             }
             mock_post.return_value = mock_response
 
-            result = await brain._call_deepseek_api([{"role": "user", "content": "List files"}])
+            result = brain.deepseek.chat_completion(
+                [{"role": "user", "content": "List files"}],
+                tools=[],
+            )
 
-            assert result.content == ""
-            assert result.tool_calls is not None
-            assert len(result.tool_calls) == 1
-            assert result.tool_calls[0]["function"]["name"] == "bash"
+            assert result["content"] == ""
+            assert result["tool_calls"] is not None
+            assert len(result["tool_calls"]) == 1
+            assert result["tool_calls"][0]["function"]["name"] == "bash"
 
     def test_extract_opencode_command_bash(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
@@ -667,4 +777,4 @@ class TestDevSynapseBrain:
 
     def test_init_uses_llm_request_timeout(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
-        assert brain.request_timeout == 12
+        assert brain.deepseek.request_timeout == 12

@@ -7,16 +7,16 @@ This document is the release compliance checklist for DevSynapse AI.
 The current public-readiness baseline is:
 
 ```text
-v0.4.1
+v0.5.0
 ```
 
-It aligns with application version `0.4.1` in [config/settings.py](config/settings.py)
-and release notes in [docs/releases/v0.4.1.md](docs/releases/v0.4.1.md).
+It aligns with application version `0.5.0` in [config/settings.py](config/settings.py)
+and release notes in [docs/releases/v0.5.0.md](docs/releases/v0.5.0.md).
 
 ## Supported Target
 
-The supported installer and updater target is Linux on Debian/Ubuntu or close
-`apt`-based derivatives.
+The supported shell installer and updater target is Linux on Debian/Ubuntu or
+close `apt`-based derivatives.
 
 Required system tools:
 - `bash`
@@ -31,6 +31,19 @@ Native Windows is not a validated release target. There is no supported
 PowerShell or `.bat` installer. Windows users should use WSL2 with an
 Ubuntu/Debian distribution for the supported path.
 
+## Desktop Distribution Status
+
+The desktop packaging flow is Tauri v2 plus a PyInstaller backend sidecar. The
+current repository baseline has validated Linux desktop artifacts only:
+
+- `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.0_amd64.deb`
+- `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.5.0-1.x86_64.rpm`
+
+macOS and Windows bundles are configured in Tauri, but they are not validated
+release artifacts until built and smoke-tested on their target operating systems.
+Do not attach or link macOS/Windows downloads from the landing page without that
+validation evidence.
+
 ## Compliance Gate
 
 Before tagging or updating a release, confirm:
@@ -38,7 +51,7 @@ Before tagging or updating a release, confirm:
 - version references match `config/settings.py`, `README.md`, `CHANGELOG.md`,
   `RELEASING.md` and the target `docs/releases/<tag>.md`
 - platform support is explicit: Debian/Ubuntu-style Linux is supported; native
-  Windows is experimental/manual
+  Windows is experimental/manual; desktop macOS/Windows packages are unvalidated
 - API contract changes are reflected in `api/models.py`, `frontend/src/types.ts`,
   `frontend/src/api/client.ts` and `docs/api/overview.md`
 - schema changes have migrations and data-model documentation
@@ -55,6 +68,7 @@ Run the complete local gate:
 
 ```bash
 make verify
+make desktop-build
 make ui-smoke
 ./venv/bin/pip check
 cd frontend && npm audit --audit-level=high
@@ -64,6 +78,7 @@ Expected coverage:
 - Ruff and backend tests
 - shell syntax checks and utility script compilation
 - frontend ESLint and production build
+- Linux desktop `.deb`/`.rpm` packaging
 - Playwright UI smoke against a disposable runtime
 - Python dependency consistency
 - high-severity frontend dependency audit
@@ -75,17 +90,17 @@ Expected coverage:
 3. Create an annotated tag, for example:
 
 ```bash
-git tag -a v0.4.1 -m "DevSynapse AI v0.4.1"
+git tag -a v0.5.0 -m "DevSynapse AI v0.5.0"
 ```
 
 4. Push the tag:
 
 ```bash
-git push origin v0.4.1
+git push origin v0.5.0
 ```
 
 5. Confirm the GitHub release workflow publishes from
-   `docs/releases/v0.4.1.md`.
+   `docs/releases/v0.5.0.md`.
 
 ## Post-Release Corrections
 
@@ -94,5 +109,5 @@ If release notes are clarified after publication, update the release body
 explicitly after reviewing the diff:
 
 ```bash
-gh release edit v0.4.1 --notes-file docs/releases/v0.4.1.md
+gh release edit v0.5.0 --notes-file docs/releases/v0.5.0.md
 ```

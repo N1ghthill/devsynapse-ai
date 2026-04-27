@@ -1,6 +1,22 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { User, Bot, Copy, Check, Terminal, Play, Loader2, ShieldAlert, CheckCircle2, Brain, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  AlertTriangle,
+  Bot,
+  Brain,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  FileText,
+  Folder,
+  Loader2,
+  Play,
+  ShieldAlert,
+  Terminal,
+  User,
+} from 'lucide-react';
 import type { Message } from '../types';
 
 interface ChatMessageProps {
@@ -16,11 +32,91 @@ const statusLabels = {
   failed: 'Falhou',
 } as const;
 
+type CommandRisk = 'low' | 'medium' | 'high';
+
+interface CommandReview {
+  commandType: string;
+  expectedEffect: string;
+  risk: CommandRisk;
+  riskLabel: string;
+  workingDirectory: string;
+}
+
+function getCommandType(command: string): string {
+  return command.match(/^([a-z_][\w-]*)/i)?.[1]?.toLowerCase() || 'command';
+}
+
+function getCommandReview(command: string, projectName?: string | null): CommandReview {
+  const commandType = getCommandType(command);
+  const projectScope = projectName ? `Project root: ${projectName}` : 'Default execution scope';
+
+  if (commandType === 'read') {
+    return {
+      commandType,
+      expectedEffect: 'Read file contents',
+      risk: 'low',
+      riskLabel: 'Read-only',
+      workingDirectory: projectName ? projectScope : 'Resolved from file path',
+    };
+  }
+
+  if (commandType === 'glob') {
+    return {
+      commandType,
+      expectedEffect: 'Find files by pattern',
+      risk: 'low',
+      riskLabel: 'Read-only',
+      workingDirectory: projectScope,
+    };
+  }
+
+  if (commandType === 'grep') {
+    return {
+      commandType,
+      expectedEffect: 'Search file contents',
+      risk: 'low',
+      riskLabel: 'Read-only',
+      workingDirectory: projectScope,
+    };
+  }
+
+  if (commandType === 'edit' || commandType === 'write') {
+    return {
+      commandType,
+      expectedEffect: commandType === 'edit' ? 'Modify an existing file' : 'Write file contents',
+      risk: 'high',
+      riskLabel: 'File mutation',
+      workingDirectory: projectName ? projectScope : 'Resolved from target path',
+    };
+  }
+
+  if (commandType === 'bash') {
+    return {
+      commandType,
+      expectedEffect: 'Run a shell command',
+      risk: 'medium',
+      riskLabel: 'Shell execution',
+      workingDirectory: projectScope,
+    };
+  }
+
+  return {
+    commandType,
+    expectedEffect: 'Run an allowed tool command',
+    risk: 'medium',
+    riskLabel: 'Review required',
+    workingDirectory: projectScope,
+  };
+}
+
 export function ChatMessage({ message, onExecute }: ChatMessageProps) {
   const [copied, setCopied] = React.useState(false);
   const [reasoningOpen, setReasoningOpen] = React.useState(false);
   const isUser = message.role === 'user';
   const commandStatus = message.commandStatus ?? 'proposed';
+  const commandReview = message.command
+    ? getCommandReview(message.command, message.projectName)
+    : null;
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message.content);
@@ -42,6 +138,9 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
           <span className="message-time">
             {new Date(message.timestamp).toLocaleTimeString()}
           </span>
+          {message.projectName && (
+            <span className="message-project-chip">{message.projectName}</span>
+          )}
         </div>
 
         <div className="message-body">
@@ -96,29 +195,54 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
 
         {message.command && (
           <div className={`message-command command-${commandStatus}`}>
-            <div className="message-command-main">
-              <Terminal size={14} />
-              <div className="message-command-text">
-                <code>{message.command}</code>
-                {message.projectName && (
-                  <span className="command-project-chip">Projeto: {message.projectName}</span>
-                )}
+            <div className="message-command-header">
+              <div className="message-command-main">
+                <Terminal size={14} />
+                <div className="message-command-text">
+                  <span className="command-label">Command</span>
+                  <code>{message.command}</code>
+                </div>
               </div>
+              <span className={`command-status-badge status-${commandStatus}`}>
+                {commandStatus === 'running' && <Loader2 size={12} className="spinner" />}
+                {commandStatus === 'success' && <CheckCircle2 size={12} />}
+                {commandStatus === 'blocked' && <ShieldAlert size={12} />}
+                {statusLabels[commandStatus]}
+              </span>
+              <button
+                className="execute-btn"
+                onClick={() => onExecute(message.id)}
+                disabled={!canExecute}
+              >
+                {commandStatus === 'running' ? (
+                  <Loader2 size={14} className="spinner" />
+                ) : (
+                  <Play size={14} />
+                )}
+                {commandStatus === 'running' ? 'Running...' : 'Run'}
+              </button>
             </div>
-            <span className={`command-status-badge status-${commandStatus}`}>
-              {commandStatus === 'running' && <Loader2 size={12} className="spinner" />}
-              {commandStatus === 'success' && <CheckCircle2 size={12} />}
-              {commandStatus === 'blocked' && <ShieldAlert size={12} />}
-              {statusLabels[commandStatus]}
-            </span>
-            <button
-              className="execute-btn"
-              onClick={() => onExecute(message.id)}
-              disabled={!canExecute}
-            >
-              {commandStatus === 'running' ? <Loader2 size={14} className="spinner" /> : <Play size={14} />}
-              {commandStatus === 'running' ? 'Running...' : 'Run'}
-            </button>
+            {commandReview && (
+              <div className="command-review-grid">
+                <div className="command-review-item">
+                  <AlertTriangle size={13} />
+                  <span className="command-review-label">Risk</span>
+                  <span className={`command-review-value risk-${commandReview.risk}`}>
+                    {commandReview.riskLabel}
+                  </span>
+                </div>
+                <div className="command-review-item">
+                  <Folder size={13} />
+                  <span className="command-review-label">Directory</span>
+                  <span className="command-review-value">{commandReview.workingDirectory}</span>
+                </div>
+                <div className="command-review-item">
+                  <FileText size={13} />
+                  <span className="command-review-label">Effect</span>
+                  <span className="command-review-value">{commandReview.expectedEffect}</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

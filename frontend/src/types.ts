@@ -113,6 +113,7 @@ export interface DashboardStats {
       total_tokens: number;
       prompt_cache_hit_tokens: number;
       prompt_cache_miss_tokens: number;
+      cache_hit_rate_pct: number;
       reasoning_tokens: number;
       estimated_cost_usd: number;
     };
@@ -122,6 +123,9 @@ export interface DashboardStats {
       prompt_tokens: number;
       completion_tokens: number;
       total_tokens: number;
+      prompt_cache_hit_tokens: number;
+      prompt_cache_miss_tokens: number;
+      cache_hit_rate_pct: number;
       estimated_cost_usd: number;
     }>;
     by_project: Array<{
@@ -134,6 +138,13 @@ export interface DashboardStats {
       overall_status: 'disabled' | 'healthy' | 'warning' | 'critical';
       daily: BudgetWindowStatus;
       monthly: BudgetWindowStatus;
+    };
+    agent_learning: {
+      learned_patterns: number;
+      success_signals: number;
+      failure_signals: number;
+      avg_confidence: number;
+      by_model: Array<{ selected_model: string; count: number }>;
     };
     timeframe_hours: number;
   };
@@ -174,6 +185,11 @@ export interface AuthState {
 export interface SettingsData {
   deepseek_api_key: boolean | string;
   deepseek_model: string;
+  deepseek_flash_model: string;
+  deepseek_pro_model: string;
+  llm_model_routing_enabled: boolean;
+  llm_auto_economy_enabled: boolean;
+  llm_cache_hit_warning_threshold_pct: number;
   temperature: number;
   max_tokens: number;
   conversation_history_limit: number;

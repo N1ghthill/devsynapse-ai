@@ -1,0 +1,24 @@
+[package]
+name = "devsynapse-ai"
+version = "0.5.0"
+description = "DevSynapse AI — local-first DeepSeek coding agent"
+authors = ["Irving Ruas <n1ghthill@proton.me>"]
+edition = "2021"
+rust-version = "1.80"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["time"] }
+log = "0.4"
+env_logger = "0.11"
+tauri-plugin-updater = "2.10.1"
+
+[features]
+default = ["custom-protocol", "tray-icon"]
+custom-protocol = ["tauri/custom-protocol"]
+tray-icon = []

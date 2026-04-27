@@ -1,7 +1,9 @@
 # Screenshots and Evidence
 
-This directory contains curated screenshots for public documentation, release notes and contributor context.
-They are product evidence, not mockups. Use them to show what the local FastAPI + React/Vite app currently exposes.
+This directory contains curated screenshots and a derived demo GIF for public
+documentation, release notes and contributor context. They are based on product
+evidence, not fabricated mockups. Use them to show what the local FastAPI +
+React/Vite app currently exposes.
 
 ## Current Set
 
@@ -15,6 +17,10 @@ They are product evidence, not mockups. Use them to show what the local FastAPI 
   Settings view with DeepSeek API key state, model configuration, budget controls and project mutation scope.
 - [2026-04-24-admin-project-permissions.png](2026-04-24-admin-project-permissions.png)
   Admin panel showing project mutation permissions and audit history.
+- [devsynapse-demo-flow.gif](devsynapse-demo-flow.gif)
+  Short top-of-README product loop assembled from the current screenshots:
+  project context, command review, execution interpretation, usage telemetry and
+  DeepSeek budget/project controls.
 
 ## Use-Case Mapping
 
@@ -26,7 +32,7 @@ The narrative version is maintained in [../product/showcase.md](../product/showc
 
 ## Regenerating Screenshots
 
-The current set can be regenerated from a running local environment with:
+The still screenshots can be regenerated from a running local environment with:
 
 ```bash
 cd frontend
@@ -41,6 +47,9 @@ Requirements:
 - credentials are read from `DEFAULT_USER_*` and `DEFAULT_ADMIN_*` in the runtime config when present
 
 The automation script is stored in [../../frontend/scripts/capture-doc-screenshots.mjs](../../frontend/scripts/capture-doc-screenshots.mjs).
+
+The demo GIF is a derived README asset assembled from the still screenshots.
+Replace or regenerate it whenever the documented product flow changes.
 
 ## Guidelines
 

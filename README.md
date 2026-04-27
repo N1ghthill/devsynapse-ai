@@ -2,30 +2,81 @@
 
 [![CI](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.4.1-blue)
+![Version](https://img.shields.io/badge/version-0.5.0-blue)
 
-DevSynapse AI is an open source development assistant that combines:
-- DeepSeek-first LLM access (v4-pro with thinking mode) through a user-provided API key;
-- native tool calling via the OpenAI-compatible tools API (strict mode) with regex fallback;
-- real-time streaming chat with token-by-token delivery (SSE);
-- project-aware technical chat with a project selector in the UI;
-- persistent memory for conversations, preferences and projects;
-- controlled command execution with explicit authorization boundaries and per-project working directories;
-- execution result interpretation loop (LLM explains command output in natural language);
-- operational visibility through monitoring, usage tracking, budget thresholds (enabled by default) and alerts;
-- per-user runtime configuration via environment variables with sensible auto-detection.
+**A local-first DeepSeek coding agent with safe command execution, project memory, and cost visibility.**
 
-The repository is organized for contributors, not only for local use. Backend contracts, frontend behavior, persistence and runtime workflows are documented and versioned in-repo.
+Run an AI development assistant on your machine, connected to your own DeepSeek API key,
+with project-aware context, controlled tools, audit logs and usage telemetry.
+
+![DevSynapse AI demo flow](docs/screenshots/devsynapse-demo-flow.gif)
+
+DevSynapse AI is built for Linux developers who want DeepSeek without losing local control:
+select a project, ask for help, review the proposed command, confirm execution and see
+the token/cost impact in the dashboard.
 
 ## Why It Exists
 
-DeepSeek is strong for development work, but it does not ship with a dedicated coding-agent environment. DevSynapse AI is that missing layer: a local-first browser workspace around a DeepSeek API key, with persistent memory, controlled command execution, project-scoped authorization and cost visibility.
+DeepSeek is strong for development work, but it does not ship with a dedicated
+coding-agent environment. DevSynapse AI is that missing layer: a local-first
+browser workspace around your DeepSeek API key, with persistent memory,
+controlled command execution, project-scoped authorization and cost visibility.
+
+The MVP focus is intentionally narrow: an AI coding assistant for Linux developers
+who want DeepSeek without SaaS lock-in, hidden shell access or surprise API bills.
+
+## Core Loop
+
+1. Select the project you want DevSynapse to understand.
+2. Ask a development task such as `analyze this repo and run tests`.
+3. Review the proposed command, risk level, working directory and expected effect.
+4. Confirm the command only when the scope and risk are clear.
+5. Let DevSynapse interpret the result and preserve the conversation context.
+6. Track token usage, estimated cost, alerts and project attribution in the dashboard.
 
 ## Use Cases
 
 - **Budget-conscious developer:** use DeepSeek through your own API key, keep conversations local, track token/cost usage and set daily or monthly budget thresholds.
 - **Freelancer with multiple clients:** keep project context explicit, scope mutating commands per project and report usage/cost by project.
 - **Contributor or maintainer:** inspect chat history, command outcomes, monitoring data, budget alerts, permissions and audit records from one local UI.
+
+## Try It On Linux
+
+```bash
+bash scripts/install.sh
+```
+
+The supported installer target is Debian/Ubuntu-style Linux. The setup asks for
+your DeepSeek API key and repositories directory, then registers local launcher
+and updater commands.
+
+## Desktop App Builds
+
+The repository also contains a Tauri v2 desktop app under `frontend/src-tauri`.
+For a local desktop build:
+
+```bash
+make desktop-build
+```
+
+That target compiles the Python sidecar, places it at
+`frontend/src-tauri/binaries/devsynapse-backend-{target-triple}`. Generate
+release builds on each target OS; PyInstaller does not cross-compile the Python
+backend.
+
+Current desktop distribution status:
+
+| Platform | Status |
+| --- | --- |
+| Linux `.deb` | validated locally on 2026-04-27 |
+| Linux `.rpm` | validated locally on 2026-04-27 |
+| Linux AppImage | opt-in/experimental |
+| macOS | configured, not yet validated |
+| Windows | configured, not yet validated |
+
+See [TAURI.md](TAURI.md) for the build workflow and
+[docs/deployment/desktop-distribution.md](docs/deployment/desktop-distribution.md)
+for landing-page artifact status.
 
 ## Product Showcase
 
@@ -45,16 +96,18 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Verified Baseline
 
-Release validation completed on `2026-04-26` (v0.4.1):
+Release validation completed on `2026-04-27` (v0.5.0 repository baseline):
 - full repository verification: `make verify`
+- desktop build verification: `make desktop-build`
 - browser smoke validation: `make ui-smoke`
 - dependency consistency: `pip check`
 - frontend dependency audit: `npm audit --audit-level=high`
-- backend test suite: `186 passed`
+- backend test suite: `201 passed`
 - Python/Ruff checks, shell syntax checks, Python script compilation and frontend ESLint: passed
 - frontend production build: passed
 - GitHub Actions CI: passed on `main`
-- supported installer target: Debian/Ubuntu-style Linux with `apt`; native Windows is unvalidated, with WSL2 recommended
+- supported shell installer target: Debian/Ubuntu-style Linux with `apt`
+- validated desktop artifacts: Linux `.deb` and `.rpm`; macOS and Windows are configured but not validated
 - LLM usage telemetry, streaming chat delivery, project selector, conversation persistence, execution workflow and dashboard metrics are active in the current codebase
 
 ## What The Project Does
@@ -63,10 +116,12 @@ DevSynapse AI provides:
 - a FastAPI backend for auth, chat, streaming chat (SSE), command execution, monitoring, settings and admin flows;
 - a React/Vite frontend with chat, project selector, dashboard, settings and admin interfaces;
 - SQLite-backed persistence for runtime state and migration-controlled schema evolution;
-- a DeepSeek API orchestration layer with native tool calling (strict function definitions, thinking mode), streaming token delivery, and execution result interpretation;
+- a DeepSeek API orchestration layer with native tool calling (strict function definitions, thinking mode), Flash/Pro routing, local agent learning, streaming token delivery, and execution result interpretation;
 - a constrained execution bridge for `bash`, `read`, `glob`, `grep`, `edit` and `write` with per-project working directories;
+- workflow templates for common local coding tasks such as test runs, failing-test analysis, TODO search, repository summaries, changelog drafts and Docker inspection;
+- visible project attribution in conversation summaries, chat messages, command execution and usage reporting;
 - per-user, project-scoped mutation authorization for non-admin users;
-- token and cost telemetry for LLM usage;
+- token, cache hit-rate and cost telemetry for LLM usage;
 - configurable daily/monthly LLM budgets with warning and critical thresholds, enabled by default.
 
 ## Repository Map
@@ -88,9 +143,15 @@ devsynapse-ai/
 
 ## Platform Support
 
-The supported release target is Linux, specifically Debian/Ubuntu and close
-derivatives that use `apt`. The installer, updater and launcher are shell-based
-and assume `bash`, `python3`, `python3-venv`, `npm` and standard Linux paths.
+The supported shell installer target is Linux, specifically Debian/Ubuntu and
+close derivatives that use `apt`. The installer, updater and launcher are
+shell-based and assume `bash`, `python3`, `python3-venv`, `npm` and standard
+Linux paths.
+
+The desktop packaging flow currently has validated Linux `.deb` and `.rpm`
+artifacts. macOS and Windows desktop packaging is configured through Tauri, but
+release artifacts still need to be generated and validated on those operating
+systems before they should be linked publicly.
 
 Windows native usage is not currently validated and there is no PowerShell or
 `.bat` installer. Windows users should use WSL2 with an Ubuntu/Debian
@@ -177,7 +238,7 @@ update-devsynapse
 To pin a specific published release:
 
 ```bash
-devsynapse update --version v0.4.1
+devsynapse update --version v0.5.0
 ```
 
 ### Manual Backend
@@ -213,6 +274,7 @@ make lint
 make script-check
 make frontend-lint
 make frontend-build
+make desktop-build
 make verify
 make migrate
 make migration-status
@@ -241,7 +303,7 @@ Technical guides:
 - development roadmap: [docs/development/roadmap.md](docs/development/roadmap.md)
 - runtime and delivery notes: [docs/deployment/runtime.md](docs/deployment/runtime.md)
 - local security model: [docs/security/local-security-model.md](docs/security/local-security-model.md)
-- latest release notes: [docs/releases/v0.4.1.md](docs/releases/v0.4.1.md)
+- latest release notes: [docs/releases/v0.5.0.md](docs/releases/v0.5.0.md)
 
 Supplementary references:
 - engineering guide: [README_PROFESSIONAL.md](README_PROFESSIONAL.md)

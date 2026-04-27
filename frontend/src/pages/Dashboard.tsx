@@ -76,6 +76,7 @@ export function Dashboard() {
   const costSeries = stats?.llm_usage?.by_day || [];
   const projectSeries = stats?.llm_usage?.by_project || [];
   const budget = stats?.llm_usage?.budget;
+  const agentLearning = stats?.llm_usage?.agent_learning;
   const maxDailyCost = Math.max(...costSeries.map((item) => item.estimated_cost_usd), 0.000001);
   const maxProjectCost = Math.max(
     ...projectSeries.map((item) => item.estimated_cost_usd),
@@ -241,9 +242,41 @@ export function Dashboard() {
               </span>
             </div>
             <div className="health-item">
+              <span>Cache Hit Rate</span>
+              <span
+                className={`health-value ${
+                  (stats?.llm_usage?.totals?.cache_hit_rate_pct || 0) >= 70
+                    ? 'success'
+                    : 'warning'
+                }`}
+              >
+                {(stats?.llm_usage?.totals?.cache_hit_rate_pct || 0).toFixed(1)}%
+              </span>
+            </div>
+            <div className="health-item">
+              <span>Cache Hit / Miss</span>
+              <span className="health-value">
+                {(stats?.llm_usage?.totals?.prompt_cache_hit_tokens || 0).toLocaleString()} /{' '}
+                {(stats?.llm_usage?.totals?.prompt_cache_miss_tokens || 0).toLocaleString()}
+              </span>
+            </div>
+            <div className="health-item">
               <span>Requests</span>
               <span className="health-value">
                 {stats?.llm_usage?.totals?.request_count || 0}
+              </span>
+            </div>
+            <div className="health-item">
+              <span>Learned Patterns</span>
+              <span className="health-value">
+                {agentLearning?.learned_patterns || 0}
+              </span>
+            </div>
+            <div className="health-item">
+              <span>Learning Signals</span>
+              <span className="health-value">
+                {(agentLearning?.success_signals || 0).toLocaleString()} /{' '}
+                {(agentLearning?.failure_signals || 0).toLocaleString()}
               </span>
             </div>
           </div>

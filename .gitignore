@@ -18,8 +18,15 @@ logs/
 
 frontend/node_modules/
 frontend/dist/
+frontend/src-tauri/target/
+frontend/src-tauri/gen/
+frontend/src-tauri/binaries/devsynapse-backend-*
+
+build/
+dist/
 
 .DS_Store
 Thumbs.db
+.codex
 
 TESTE_DEVSYNAPSE.md

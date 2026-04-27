@@ -60,9 +60,13 @@ def test_api_request_log_is_attached_to_response_background() -> None:
 def test_api_request_log_preserves_existing_background_tasks() -> None:
     recorder = _MonitoringRecorder()
     completed = []
+
+    async def mark_existing(value: str) -> None:
+        completed.append(value)
+
     response = Response("ok")
     existing_background = BackgroundTasks()
-    existing_background.add_task(completed.append, "existing")
+    existing_background.add_task(mark_existing, "existing")
     response.background = existing_background
 
     _attach_api_request_log(

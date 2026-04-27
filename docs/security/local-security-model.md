@@ -12,6 +12,7 @@ The main goal is to reduce local development risk while keeping the app useful:
 - bind the API to localhost by default
 - restrict browser origins to local frontend origins by default
 - require authentication for chat, settings, admin and command execution routes
+- require admin authorization for global runtime settings updates
 - validate command format before execution
 - restrict command types and non-admin bash commands through allowlists
 - require explicit project scope for mutating commands
@@ -64,6 +65,7 @@ Before normal use:
 - configure `DEEPSEEK_API_KEY` only in runtime config or environment
 - replace default local passwords
 - use the admin role only when unrestricted local agent execution is intended
+- keep global runtime settings changes limited to trusted admins
 - register only project directories you trust
 - grant mutation permissions only where writes are expected
 - review proposed commands before confirming mutations

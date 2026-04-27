@@ -1,0 +1,13 @@
+{
+  "bundle": {
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE3NTk1M0Y3NDVCRDUzNkMKUldSc1U3MUY5MU5acDE2bDlZMGx2QStXMEl0RG9ldHV1MGxXazVVRHNLWnpkNStBZG0zTjhoSlUK",
+      "endpoints": [
+        "https://github.com/N1ghthill/devsynapse-ai/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}
