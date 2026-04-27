@@ -18,9 +18,13 @@ cd "$ROOT_DIR"
 
 # ── Python venv ──────────────────────────────────────────────────────────────
 PYTHON="${PYTHON:-./venv/bin/python}"
-if [ ! -f "$PYTHON" ]; then
+if ! command -v "$PYTHON" >/dev/null 2>&1 && [ ! -f "$PYTHON" ]; then
     echo "Creating virtual environment..."
-    python3 -m venv venv
+    BASE_PYTHON="${BASE_PYTHON:-python3}"
+    if ! command -v "$BASE_PYTHON" >/dev/null 2>&1; then
+        BASE_PYTHON="python"
+    fi
+    "$BASE_PYTHON" -m venv venv
     "$PYTHON" -m pip install --upgrade pip
 fi
 

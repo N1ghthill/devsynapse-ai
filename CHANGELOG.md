@@ -6,6 +6,19 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+## [v0.5.1] - 2026-04-27
+
+### Added
+- Added Windows desktop release automation on GitHub Actions.
+- Added signed Windows updater artifacts and combined Linux/Windows
+  `latest.json` generation.
+
+### Changed
+- Release publishing now waits for Linux and Windows desktop builds before
+  creating or updating the GitHub Release.
+- Windows desktop distribution is now a validated release artifact instead of a
+  configured-only target.
+
 ## [v0.5.0] - 2026-04-27
 
 ### Added

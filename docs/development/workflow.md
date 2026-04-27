@@ -71,7 +71,7 @@ update-devsynapse
 For a specific published release:
 
 ```bash
-devsynapse update --version v0.5.0
+devsynapse update --version v0.5.1
 ```
 
 The updater backs up existing runtime files when present, preserves runtime
