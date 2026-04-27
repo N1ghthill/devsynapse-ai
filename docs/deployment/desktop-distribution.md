@@ -5,24 +5,25 @@ from a public landing page.
 
 ## Status As Of 2026-04-27
 
-Validated on the current Linux development environment:
+Validated on the current Linux development environment and GitHub Actions:
 
 - `make verify`
 - `cd frontend/src-tauri && cargo check`
 - `make desktop-build`
+- `windows-latest` release job for the Windows sidecar and installer
 
 Generated artifacts:
 
 | Platform | Artifact | Status |
 | --- | --- | --- |
-| Linux x86_64 | `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.0_amd64.deb` | validated locally |
-| Linux x86_64 | `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.5.0-1.x86_64.rpm` | validated locally |
+| Linux x86_64 | `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.1_amd64.deb` | validated locally |
+| Linux x86_64 | `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.5.1-1.x86_64.rpm` | validated locally |
 | Linux x86_64 | AppImage | opt-in only; not part of the default build because `linuxdeploy` is environment-sensitive |
 | macOS | `.dmg` / `.app` bundle | configured but not validated in this repository yet |
-| Windows | NSIS installer | configured but not validated in this repository yet |
+| Windows x86_64 | NSIS installer | validated in GitHub Actions |
 
-Do not publish macOS or Windows download links until those artifacts have been
-built and smoke-tested on their target operating systems.
+Do not publish macOS download links until those artifacts have been built and
+smoke-tested on macOS.
 
 ## Build Flow
 
@@ -76,10 +77,10 @@ the static manifest:
 
 ```bash
 python3 scripts/generate-tauri-update-manifest.py \
-  --version 0.5.0 \
+  --version 0.5.1 \
   --platform linux-x86_64 \
-  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.5.0/DevSynapse_AI_0.5.0_amd64.deb" \
-  --signature-file "frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.0_amd64.deb.sig" \
+  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.5.1/DevSynapse_AI_0.5.1_amd64.deb" \
+  --signature-file "frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.1_amd64.deb.sig" \
   --notes "Release notes" \
   --output latest.json
 ```
@@ -105,11 +106,11 @@ For the first public landing page, the accurate download state is:
 
 - Linux `.deb`: available after uploading the generated artifact
 - Linux `.rpm`: available after uploading the generated artifact
+- Windows installer: available after uploading the generated artifact
 - macOS: coming soon / unvalidated
-- Windows: coming soon / unvalidated
 
-If macOS or Windows links are shown, they should point only to artifacts produced
-by target-OS CI jobs or manually validated target machines.
+If macOS links are shown, they should point only to artifacts produced by
+target-OS CI jobs or manually validated target machines.
 
 ## Optional AppImage
 

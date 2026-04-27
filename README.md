@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.5.0-blue)
+![Version](https://img.shields.io/badge/version-0.5.1-blue)
 
 **A local-first DeepSeek coding agent with safe command execution, project memory, and cost visibility.**
 
@@ -72,7 +72,7 @@ Current desktop distribution status:
 | Linux `.rpm` | validated locally on 2026-04-27 |
 | Linux AppImage | opt-in/experimental |
 | macOS | configured, not yet validated |
-| Windows | configured, not yet validated |
+| Windows NSIS installer | validated in GitHub Actions on 2026-04-27 |
 
 See [TAURI.md](TAURI.md) for the build workflow and
 [docs/deployment/desktop-distribution.md](docs/deployment/desktop-distribution.md)
@@ -96,7 +96,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Verified Baseline
 
-Release validation completed on `2026-04-27` (v0.5.0 repository baseline):
+Release validation completed on `2026-04-27` (v0.5.1 repository baseline):
 - full repository verification: `make verify`
 - desktop build verification: `make desktop-build`
 - browser smoke validation: `make ui-smoke`
@@ -107,7 +107,7 @@ Release validation completed on `2026-04-27` (v0.5.0 repository baseline):
 - frontend production build: passed
 - GitHub Actions CI: passed on `main`
 - supported shell installer target: Debian/Ubuntu-style Linux with `apt`
-- validated desktop artifacts: Linux `.deb` and `.rpm`; macOS and Windows are configured but not validated
+- validated desktop artifacts: Linux `.deb` / `.rpm` and Windows NSIS installer; macOS is configured but not validated
 - LLM usage telemetry, streaming chat delivery, project selector, conversation persistence, execution workflow and dashboard metrics are active in the current codebase
 
 ## What The Project Does
@@ -148,17 +148,16 @@ close derivatives that use `apt`. The installer, updater and launcher are
 shell-based and assume `bash`, `python3`, `python3-venv`, `npm` and standard
 Linux paths.
 
-The desktop packaging flow currently has validated Linux `.deb` and `.rpm`
-artifacts. macOS and Windows desktop packaging is configured through Tauri, but
-release artifacts still need to be generated and validated on those operating
-systems before they should be linked publicly.
+The desktop packaging flow currently has validated Linux `.deb` / `.rpm`
+artifacts and a validated Windows x86_64 installer generated on GitHub Actions.
+macOS desktop packaging is configured through Tauri, but release artifacts still
+need to be generated and validated on macOS before they should be linked
+publicly.
 
-Windows native usage is not currently validated and there is no PowerShell or
-`.bat` installer. Windows users should use WSL2 with an Ubuntu/Debian
-distribution for the supported path. A manual native Windows setup may work in
-principle because the backend is Python and the UI runs in a browser, but it is
-experimental: shell aliases, path handling and command execution behavior have
-not been tested there.
+Windows users should use the packaged desktop installer for the validated
+Windows path. Native Windows source-checkout setup is still not a supported
+shell workflow: there is no PowerShell or `.bat` installer, and command-line
+aliases/path behavior remain Linux-oriented.
 
 For specific areas where community help is most needed, see the
 [Platform Contributions](CONTRIBUTING.md#platform-contributions) section in
@@ -203,9 +202,9 @@ individually.
 
 ### Manual Path
 
-This path is still documented for Linux-like shells. For native Windows, treat it
-as an experimental contributor path until a tested Windows setup guide or script
-exists.
+This path is still documented for Linux-like shells. On Windows, use the
+packaged desktop installer for normal use; source-checkout setup remains an
+experimental contributor path until a tested PowerShell setup exists.
 
 ```bash
 python3 -m venv venv
@@ -238,7 +237,7 @@ update-devsynapse
 To pin a specific published release:
 
 ```bash
-devsynapse update --version v0.5.0
+devsynapse update --version v0.5.1
 ```
 
 ### Manual Backend
@@ -303,7 +302,7 @@ Technical guides:
 - development roadmap: [docs/development/roadmap.md](docs/development/roadmap.md)
 - runtime and delivery notes: [docs/deployment/runtime.md](docs/deployment/runtime.md)
 - local security model: [docs/security/local-security-model.md](docs/security/local-security-model.md)
-- latest release notes: [docs/releases/v0.5.0.md](docs/releases/v0.5.0.md)
+- latest release notes: [docs/releases/v0.5.1.md](docs/releases/v0.5.1.md)
 
 Supplementary references:
 - engineering guide: [README_PROFESSIONAL.md](README_PROFESSIONAL.md)

@@ -25,19 +25,15 @@ launcher are Bash scripts and expect Linux-style paths, `python3`,
 `python3-venv`, `npm` and a local browser.
 
 The desktop distribution path is Tauri v2 plus a PyInstaller backend sidecar.
-As of `2026-04-27`, Linux `.deb` and `.rpm` packages have been generated through
-`make desktop-build`. AppImage is opt-in/experimental because `linuxdeploy` is
-environment-sensitive. macOS and Windows bundles are configured but not validated
-in this repository yet; generate them on target OS runners before linking them
-from a public landing page.
+As of `2026-04-27`, Linux `.deb` / `.rpm` packages and a Windows x86_64
+installer are generated through the release workflow. AppImage is
+opt-in/experimental because `linuxdeploy` is environment-sensitive. macOS
+bundles are configured but not validated in this repository yet; generate them
+on macOS runners before linking them from a public landing page.
 
-Native Windows is not part of the validated release target for `v0.5.0`. There
-is currently no PowerShell or `.bat` installer. Windows users should run the
-supported flow through WSL2 with an Ubuntu/Debian distribution. A manual native
-Windows setup may be possible because the backend is Python and the frontend is
-browser-based, but command execution, shell aliases, path normalization and
-installer/update behavior are untested there and should be treated as
-experimental.
+Windows users should use the packaged desktop installer for the validated
+Windows path. Native Windows source-checkout setup remains experimental because
+there is no PowerShell or `.bat` installer.
 
 ## Authorization Boundary
 
@@ -108,7 +104,7 @@ The updater:
 For a pinned release:
 
 ```bash
-devsynapse update --version v0.5.0
+devsynapse update --version v0.5.1
 ```
 
 ## LLM Budget Controls

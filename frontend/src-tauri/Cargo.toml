@@ -1,6 +1,6 @@
 [package]
 name = "devsynapse-ai"
-version = "0.5.0"
+version = "0.5.1"
 description = "DevSynapse AI — local-first DeepSeek coding agent"
 authors = ["Irving Ruas <n1ghthill@proton.me>"]
 edition = "2021"
