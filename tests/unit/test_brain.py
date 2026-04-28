@@ -25,6 +25,9 @@ def mock_memory():
     memory.get_llm_budget_status.return_value = {"overall_status": "healthy"}
     memory.get_agent_learning.return_value = None
     memory.get_agent_learning_context.return_value = "Nenhum padrão de agente aprendido ainda."
+    memory.get_project_memory_context.return_value = "Nenhuma memória procedural relevante encontrada."
+    memory.get_skills_context.return_value = "Nenhuma skill registrada ainda."
+    memory.review_completed_task = Mock()
     memory.record_agent_route_decision = Mock()
     memory.save_interaction = AsyncMock()
     memory.save_command_execution = AsyncMock()

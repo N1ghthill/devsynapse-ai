@@ -88,6 +88,130 @@ def route_services(tmp_path, monkeypatch):
     )
 
 
+def _isolate_bootstrap_runtime(monkeypatch, tmp_path):
+    import core.bootstrap as bootstrap_module
+    import core.runtime_config as runtime_config_module
+
+    config_file = tmp_path / "runtime" / "config" / ".env"
+    data_dir = tmp_path / "runtime" / "data"
+    logs_dir = tmp_path / "runtime" / "logs"
+
+    monkeypatch.setattr(bootstrap_module, "CONFIG_FILE", config_file)
+    monkeypatch.setattr(bootstrap_module, "DATA_DIR", data_dir)
+    monkeypatch.setattr(bootstrap_module, "LOGS_DIR", logs_dir)
+    monkeypatch.setattr(runtime_config_module, "CONFIG_FILE", config_file)
+    monkeypatch.setattr(runtime_config_module, "DATA_DIR", data_dir)
+    monkeypatch.setattr(runtime_config_module, "LOGS_DIR", logs_dir)
+
+    return config_file
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_complete_configures_first_run_runtime(route_services, tmp_path, monkeypatch):
+    from api.models import BootstrapAdminRequest
+    from api.routes.bootstrap import bootstrap_status, complete_bootstrap
+    from core.auth import AuthService
+
+    config_file = _isolate_bootstrap_runtime(monkeypatch, tmp_path)
+    repos_root = tmp_path / "repos"
+    project_dir = repos_root / "example-project"
+    (project_dir / ".git").mkdir(parents=True)
+
+    auth = AuthService(route_services.memory)
+    auth.ensure_default_users()
+
+    initial_status = await bootstrap_status(auth_service=auth)
+    assert initial_status.requires_setup is True
+    assert initial_status.admin_password_required is True
+    assert initial_status.default_admin_username == "admin"
+
+    response = await complete_bootstrap(
+        request=BootstrapAdminRequest(
+            admin_password="local-admin-pass",
+            deepseek_api_key="sk-bootstrap-test",
+            workspace_root=str(tmp_path),
+            repos_root=str(repos_root),
+        ),
+        user=None,
+        auth_service=auth,
+        memory_system=route_services.memory,
+        bridge=route_services.bridge,
+        brain=route_services.brain,
+    )
+
+    assert response.user == {"username": "admin", "role": "admin"}
+    assert response.access_token
+    assert response.status.requires_setup is False
+    assert response.registered_projects[0].name == "example-project"
+    assert auth.authenticate_user("admin", "admin") is None
+    assert auth.authenticate_user("admin", "local-admin-pass") == {
+        "username": "admin",
+        "role": "admin",
+    }
+    assert route_services.brain.api_key == "sk-bootstrap-test"
+    assert route_services.bridge.known_projects["example-project"]["path"] == str(
+        project_dir.resolve()
+    )
+
+    env_text = config_file.read_text(encoding="utf-8")
+    assert "DEEPSEEK_API_KEY=sk-bootstrap-test" in env_text
+    assert f"DEV_WORKSPACE_ROOT={tmp_path.resolve()}" in env_text
+    assert f"DEV_REPOS_ROOT={repos_root.resolve()}" in env_text
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_requires_admin_after_admin_password_is_configured(
+    route_services, tmp_path, monkeypatch
+):
+    from api.models import BootstrapAdminRequest
+    from api.routes.bootstrap import bootstrap_status, complete_bootstrap
+    from core.auth import AuthService
+
+    _isolate_bootstrap_runtime(monkeypatch, tmp_path)
+    repos_root = tmp_path / "repos"
+    repos_root.mkdir()
+
+    auth = AuthService(route_services.memory)
+    auth.bootstrap_admin_password("already-configured")
+
+    status_response = await bootstrap_status(auth_service=auth)
+    assert status_response.admin_password_required is False
+
+    with pytest.raises(HTTPException) as exc_info:
+        await complete_bootstrap(
+            request=BootstrapAdminRequest(
+                deepseek_api_key="sk-auth-required",
+                repos_root=str(repos_root),
+            ),
+            user=None,
+            auth_service=auth,
+            memory_system=route_services.memory,
+            bridge=route_services.bridge,
+            brain=route_services.brain,
+        )
+
+    assert exc_info.value.status_code == 403
+
+    response = await complete_bootstrap(
+        request=BootstrapAdminRequest(
+            deepseek_api_key="sk-auth-required",
+            repos_root=str(repos_root),
+        ),
+        user=route_services.admin,
+        auth_service=auth,
+        memory_system=route_services.memory,
+        bridge=route_services.bridge,
+        brain=route_services.brain,
+    )
+
+    assert response.access_token is None
+    assert response.status.requires_setup is False
+    assert auth.authenticate_user("admin", "already-configured") == {
+        "username": "admin",
+        "role": "admin",
+    }
+
+
 @pytest.mark.asyncio
 async def test_chat_route_forwards_and_returns_explicit_project_name(route_services):
     from api.models import ChatRequest
@@ -609,3 +733,110 @@ async def test_export_usage_csv_route(route_services):
 
     assert response.media_type == "text/csv"
     assert "conv_csv" in response.body.decode()
+
+
+@pytest.mark.asyncio
+async def test_knowledge_routes_manage_memories_and_skills(route_services):
+    from api.models import (
+        ProjectMemoryCreateRequest,
+        ProjectMemoryFeedbackRequest,
+        SkillActivateRequest,
+        SkillCreateRequest,
+    )
+    from api.routes.knowledge import (
+        activate_skill,
+        adjust_memory_confidence,
+        create_memory,
+        create_skill,
+        knowledge_stats,
+        list_memories,
+        list_skills,
+    )
+
+    route_services.memory.replace_project_permissions("irving", ["devsynapse-ai"])
+
+    memory_response = await create_memory(
+        payload=ProjectMemoryCreateRequest(
+            content="Prefer pytest -q before broader integration checks.",
+            project_name="devsynapse-ai",
+            memory_type="procedure",
+            confidence_score=0.75,
+        ),
+        user=route_services.user,
+        memory_system=route_services.memory,
+    )
+    memories = await list_memories(
+        project_name="devsynapse-ai",
+        query="pytest",
+        user=route_services.user,
+        memory_system=route_services.memory,
+    )
+    adjusted_memory = await adjust_memory_confidence(
+        memory_id=memory_response.id,
+        payload=ProjectMemoryFeedbackRequest(delta=0.1),
+        user=route_services.user,
+        memory_system=route_services.memory,
+    )
+    skill_response = await create_skill(
+        payload=SkillCreateRequest(
+            name="pytest triage",
+            description="Debug pytest failures with the local project test loop.",
+            category="test",
+            body="## Steps\nRun `pytest -q`, inspect the first failure, then patch narrowly.",
+            project_name=None,
+        ),
+        admin=route_services.admin,
+        memory_system=route_services.memory,
+    )
+    activated = await activate_skill(
+        skill_name="pytest-triage",
+        payload=SkillActivateRequest(project_name=None, reason="test"),
+        user=route_services.user,
+        memory_system=route_services.memory,
+    )
+    skills = await list_skills(
+        user=route_services.user,
+        memory_system=route_services.memory,
+    )
+    stats = await knowledge_stats(
+        user=route_services.user,
+        memory_system=route_services.memory,
+    )
+
+    assert memory_response.project_name == "devsynapse-ai"
+    assert adjusted_memory.confidence_score > memory_response.confidence_score
+    assert memories.memories[0].effective_confidence > 0
+    assert skill_response.slug == "pytest-triage"
+    assert activated.use_count == 1
+    assert skills.skills[0].slug == "pytest-triage"
+    assert stats.memories["total_memories"] == 1
+    assert stats.skills["active_skills"] == 1
+
+
+@pytest.mark.asyncio
+async def test_knowledge_memory_global_write_requires_admin(route_services):
+    from api.models import ProjectMemoryCreateRequest
+    from api.routes.knowledge import create_memory
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_memory(
+            payload=ProjectMemoryCreateRequest(
+                content="Global memory should be admin controlled.",
+                project_name=None,
+            ),
+            user=route_services.user,
+            memory_system=route_services.memory,
+        )
+
+    assert exc_info.value.status_code == 403
+
+    response = await create_memory(
+        payload=ProjectMemoryCreateRequest(
+            content="Global memory should be admin controlled.",
+            project_name=None,
+        ),
+        user=route_services.admin,
+        memory_system=route_services.memory,
+    )
+
+    assert response.project_name is None

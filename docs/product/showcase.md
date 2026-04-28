@@ -29,7 +29,7 @@ Baseline validated on `2026-04-27`:
 Screenshot sources:
 - [screenshot evidence index](../screenshots/README.md)
 - [testing guide](../development/testing.md)
-- [release notes](../releases/v0.5.1.md)
+- [release notes](../releases/v0.5.2.md)
 
 ## Use Cases
 

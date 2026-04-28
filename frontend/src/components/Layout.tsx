@@ -1,10 +1,11 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { MessageSquare, BarChart3, Settings, LogOut, Cpu, Shield } from 'lucide-react';
+import { MessageSquare, BarChart3, Settings, LogOut, Cpu, Shield, Library } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 const navItems = [
   { path: '/chat', icon: MessageSquare, label: 'Chat' },
   { path: '/dashboard', icon: BarChart3, label: 'Dashboard' },
+  { path: '/knowledge', icon: Library, label: 'Knowledge' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
 

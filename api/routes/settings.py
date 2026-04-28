@@ -14,6 +14,7 @@ from api.models import (
 from config.settings import get_settings
 from core.brain import DevSynapseBrain
 from core.memory import MemorySystem
+from core.runtime_config import set_runtime_config_values
 
 router = APIRouter(tags=["settings"])
 settings = get_settings()
@@ -107,6 +108,7 @@ async def update_settings(
 
     if "deepseek_api_key" in updates and updates["deepseek_api_key"]:
         brain.api_key = updates["deepseek_api_key"]
+        set_runtime_config_values({"DEEPSEEK_API_KEY": updates["deepseek_api_key"]})
     if "deepseek_model" in updates and updates["deepseek_model"]:
         brain.deepseek.model = updates["deepseek_model"]
 

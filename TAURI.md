@@ -156,10 +156,10 @@ Depois gere e publique `latest.json` com:
 
 ```bash
 python3 scripts/generate-tauri-update-manifest.py \
-  --version 0.5.1 \
+  --version 0.5.2 \
   --platform linux-x86_64 \
-  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.5.1/DevSynapse_AI_0.5.1_amd64.deb" \
-  --signature-file "frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.1_amd64.deb.sig" \
+  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.5.2/DevSynapse_AI_0.5.2_amd64.deb" \
+  --signature-file "frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.2_amd64.deb.sig" \
   --notes "Release notes" \
   --output latest.json
 ```
@@ -184,8 +184,8 @@ Status dos artefatos para downloads públicos:
 
 | Plataforma | Artefato | Status |
 |------------|----------|--------|
-| Linux x86_64 | `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.1_amd64.deb` | validado em 2026-04-27 |
-| Linux x86_64 | `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.5.1-1.x86_64.rpm` | validado em 2026-04-27 |
+| Linux x86_64 | `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.2_amd64.deb` | validado em 2026-04-28 |
+| Linux x86_64 | `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.5.2-1.x86_64.rpm` | validado em 2026-04-28 |
 | Linux x86_64 | AppImage | opt-in/experimental |
 | macOS | `.dmg` / `.app` | configurado, ainda não validado |
 | Windows x86_64 | NSIS `.exe` | validado via GitHub Actions em 2026-04-27 |

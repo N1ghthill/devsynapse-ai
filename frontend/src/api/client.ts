@@ -3,16 +3,25 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
   AdminAuditLog,
   AdminUser,
+  BootstrapCompleteRequest,
+  BootstrapCompleteResponse,
+  BootstrapStatus,
   ChatRequest,
   ChatResponse,
   CommandResult,
   ConversationSummary,
   DashboardStats,
   ExecuteCommandRequest,
+  KnowledgeStats,
   Message,
+  ProjectMemory,
+  ProjectMemoryCreateRequest,
   ProjectCreateRequest,
   ProjectInfo,
   SettingsData,
+  SkillCreateRequest,
+  SkillDetail,
+  SkillSummary,
   TokenUsage,
 } from '../types';
 
@@ -296,6 +305,64 @@ export const dashboardApi = {
   },
 };
 
+export const knowledgeApi = {
+  getStats: async (): Promise<KnowledgeStats> => {
+    const response = await api.get<KnowledgeStats>('/knowledge/stats');
+    return response.data;
+  },
+
+  listMemories: async (
+    projectName?: string,
+    query?: string
+  ): Promise<ProjectMemory[]> => {
+    const response = await api.get<{ memories: ProjectMemory[] }>('/memories', {
+      params: {
+        ...(projectName ? { project_name: projectName } : {}),
+        ...(query ? { query } : {}),
+      },
+    });
+    return response.data.memories || [];
+  },
+
+  createMemory: async (data: ProjectMemoryCreateRequest): Promise<ProjectMemory> => {
+    const response = await api.post<ProjectMemory>('/memories', data);
+    return response.data;
+  },
+
+  adjustMemoryConfidence: async (
+    memoryId: number,
+    delta: number
+  ): Promise<ProjectMemory> => {
+    const response = await api.post<ProjectMemory>(`/memories/${memoryId}/feedback`, {
+      delta,
+    });
+    return response.data;
+  },
+
+  listSkills: async (projectName?: string): Promise<SkillSummary[]> => {
+    const response = await api.get<{ skills: SkillSummary[] }>('/skills', {
+      params: projectName ? { project_name: projectName } : {},
+    });
+    return response.data.skills || [];
+  },
+
+  createSkill: async (data: SkillCreateRequest): Promise<SkillDetail> => {
+    const response = await api.post<SkillDetail>('/skills', data);
+    return response.data;
+  },
+
+  activateSkill: async (
+    skillName: string,
+    projectName?: string | null
+  ): Promise<SkillDetail> => {
+    const response = await api.post<SkillDetail>(`/skills/${skillName}/activate`, {
+      project_name: projectName || null,
+      reason: 'ui',
+    });
+    return response.data;
+  },
+};
+
 export const settingsApi = {
   get: async (): Promise<SettingsData> => {
     const response = await api.get<SettingsData>('/settings');
@@ -363,6 +430,22 @@ export const adminApi = {
 };
 
 export const authApi = {
+  bootstrapStatus: async (): Promise<BootstrapStatus> => {
+    const response = await api.get<BootstrapStatus>('/bootstrap/status');
+    return response.data;
+  },
+
+  completeBootstrap: async (
+    data: BootstrapCompleteRequest
+  ): Promise<BootstrapCompleteResponse> => {
+    const response = await api.post<BootstrapCompleteResponse>('/bootstrap/complete', data);
+    const token = response.data.token || response.data.access_token;
+    if (token) {
+      localStorage.setItem('auth_token', token);
+    }
+    return response.data;
+  },
+
   login: async (username: string, password: string) => {
     const response = await api.post('/auth/login', { username, password });
     const token = response.data.token || response.data.access_token;

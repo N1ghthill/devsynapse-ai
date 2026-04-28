@@ -71,12 +71,12 @@ update-devsynapse
 For a specific published release:
 
 ```bash
-devsynapse update --version v0.5.1
+devsynapse update --version v0.5.2
 ```
 
 The updater backs up existing runtime files when present, preserves runtime
 configuration, refreshes Python/frontend dependencies, applies migrations,
-updates seeded users and rebuilds the production frontend bundle.
+ensures missing seeded users and rebuilds the production frontend bundle.
 
 ## Revalidated Public Onboarding
 

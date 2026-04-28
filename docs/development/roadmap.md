@@ -6,7 +6,7 @@ Do not present planned items as shipped behavior in user-facing documentation.
 
 ## Current Baseline
 
-The current documented baseline is `v0.5.1`, validated on `2026-04-27`.
+The current documented baseline is `v0.5.2`, validated on `2026-04-28`.
 It includes:
 
 - local-first FastAPI, React/Vite and SQLite architecture;
@@ -42,12 +42,14 @@ It includes:
   shell installer target, and Linux/Windows desktop packages are validated;
 - Tauri desktop packaging with validated Linux `.deb` / `.rpm` and Windows NSIS
   artifacts;
+- in-app first-run setup for packaged desktop installs, covering admin password,
+  DeepSeek API key and default repository workspace;
 - macOS desktop packaging configured but still unvalidated on macOS;
 - keyboard shortcuts for chat input (Enter, Ctrl+Enter, Shift+Enter);
 - portable CI and setup validation for shell scripts, frontend linting and installer/uninstaller smoke tests;
 - Docker delivery with a FastAPI runtime image that serves the production frontend bundle;
 - admin project registration for existing local project directories;
-- non-interactive update flow through `devsynapse update`, `update-devsynapse`, `scripts/update.sh` and `make update`.
+- non-interactive update flow through `devsynapse update`, `update-devsynapse`, `scripts/update.sh` and `make update` without overwriting existing admin passwords.
 
 ## Current Priorities
 

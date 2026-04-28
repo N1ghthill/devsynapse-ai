@@ -6,6 +6,7 @@ DevSynapse AI includes controlled command execution, authentication and project-
 
 Current security-related controls include:
 - JWT-based authentication
+- first-run setup for admin password, DeepSeek API key and repository workspace
 - persisted users and password hashing
 - route protection for sensitive operations
 - command validation and command allowlists
@@ -46,6 +47,7 @@ When discussing security in PRs or issues:
 
 For local deployments:
 - replace default seeded passwords
+- complete the first-run setup when prompted
 - keep `.env` out of version control
 - keep the API bound to localhost unless network access is intentional
 - keep CORS restricted to local or explicitly trusted browser origins

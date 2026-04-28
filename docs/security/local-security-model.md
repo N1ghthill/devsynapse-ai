@@ -12,7 +12,11 @@ The main goal is to reduce local development risk while keeping the app useful:
 - bind the API to localhost by default
 - restrict browser origins to local frontend origins by default
 - require authentication for chat, settings, admin and command execution routes
+- force first-run setup for admin password, DeepSeek API key and repository workspace
+  when any of those runtime values are missing
 - require admin authorization for global runtime settings updates
+- require admin authorization for global saved knowledge writes
+- require project mutation permission for non-admin project memory writes
 - validate command format before execution
 - restrict command types and non-admin bash commands through allowlists
 - require explicit project scope for mutating commands
@@ -62,6 +66,7 @@ Before normal use:
 
 - keep `API_HOST=127.0.0.1` unless network access is intentional
 - keep `CORS_ALLOWED_ORIGINS` limited to known browser origins
+- complete first-run setup before using the app normally
 - configure `DEEPSEEK_API_KEY` only in runtime config or environment
 - replace default local passwords
 - use the admin role only when unrestricted local agent execution is intended

@@ -1511,11 +1511,98 @@ body {
   gap: 16px;
 }
 
+.knowledge-page {
+  padding: 24px;
+}
+
+.knowledge-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.knowledge-select,
+.knowledge-search {
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+  font-size: 13px;
+  outline: none;
+}
+
+.knowledge-search {
+  min-width: 220px;
+}
+
+.knowledge-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.knowledge-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.knowledge-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-tertiary);
+  padding: 12px;
+}
+
+.knowledge-item-header,
+.knowledge-item-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.knowledge-item-header span,
+.knowledge-item-footer {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.knowledge-item p {
+  margin: 8px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.knowledge-fieldset {
+  border: none;
+}
+
+.knowledge-fieldset:disabled {
+  opacity: 0.55;
+}
+
+.knowledge-note {
+  margin-top: 10px;
+}
+
 .settings-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 20px;
+}
+
+.setup-card {
+  max-width: 720px;
 }
 
 .settings-card h3 {
@@ -1714,7 +1801,7 @@ body {
   border-radius: var(--radius-lg);
   padding: 40px;
   width: 100%;
-  max-width: 400px;
+  max-width: 520px;
 }
 
 .login-header {
@@ -1750,6 +1837,10 @@ body {
   border-radius: var(--radius);
   color: var(--danger);
   font-size: 13px;
+}
+
+.setup-error {
+  margin-top: 16px;
 }
 
 .form-field {
@@ -1885,6 +1976,14 @@ body {
   }
 
   .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .knowledge-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .knowledge-form-row {
     grid-template-columns: 1fr;
   }
 

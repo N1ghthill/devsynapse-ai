@@ -235,6 +235,9 @@ class DevSynapseBrain:
         projects_info = self.memory.get_projects_context()
         agent_learning = self._get_agent_learning_context()
         active_project_name = context.get("project_name")
+        current_request = context.get("current_user_message") or ""
+        procedural_memory = self._get_project_memory_context(active_project_name, current_request)
+        skills_context = self._get_skills_context(current_request, active_project_name)
         active_project_section = (
             f"\n## PROJETO ATIVO\n{active_project_name}\n"
             if active_project_name
@@ -253,6 +256,12 @@ Blend deep technical skills with natural conversational communication.
 
 ## AGENT LEARNING
 {agent_learning}
+
+## PROCEDURAL MEMORY
+{procedural_memory}
+
+## SKILLS
+{skills_context}
 
 ## CURRENT PROJECTS
 {projects_info}
@@ -288,6 +297,9 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
 ## IMPORTANT
 - Always consider the current project context
 - Learn from Irving's feedback
+- Reuse relevant procedural memory and loaded skills before inventing a workflow
+- After a complex task, command success, or hard-won fix, allow the learning nudge to save
+  reusable memory or skills for future turns
 - Prioritize solutions aligned with his known preferences
 """
         
@@ -429,7 +441,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             persisted_command = autoexecuted_command["command"]
 
         # Salvar na memória
-        await self.memory.save_interaction(
+        persisted_project_name = await self.memory.save_interaction(
             conversation_id=conversation_id,
             user_message=user_message,
             ai_response=response_text,
@@ -437,6 +449,8 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             llm_usage=aggregated_usage,
             project_name=effective_project_name,
         )
+        if isinstance(persisted_project_name, str) or persisted_project_name is None:
+            effective_project_name = persisted_project_name or effective_project_name
 
         if autoexecuted_command is not None and persisted_command == autoexecuted_command["command"]:
             await self.memory.save_command_execution(
@@ -456,6 +470,15 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             usage=aggregated_usage,
             project_name=effective_project_name,
             opencode_command=persisted_command,
+        )
+        self._review_completed_task(
+            conversation_id=conversation_id,
+            user_message=user_message,
+            ai_response=response_text,
+            project_name=effective_project_name,
+            opencode_command=persisted_command,
+            route=route,
+            tool_iterations=max(0, round_count - 1) + (1 if persisted_command else 0),
         )
 
         await plugin_manager.emit_event("memory:after_save", {
@@ -477,7 +500,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
     
     def _prepare_messages(self, user_message: str, context: Dict) -> List[Dict]:
         """Prepara mensagens no formato para API"""
-        
+        context = {**context, "current_user_message": user_message}
         system_prompt = self.generate_system_prompt(context)
         
         messages = [
@@ -551,6 +574,57 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         except Exception:
             logger.debug("Could not load agent learning context", exc_info=True)
             return "Nenhum padrão de agente aprendido ainda."
+
+    def _get_project_memory_context(
+        self,
+        project_name: Optional[str],
+        user_message: str,
+    ) -> str:
+        if not hasattr(self.memory, "get_project_memory_context"):
+            return "Nenhuma memória procedural relevante encontrada."
+        try:
+            return self.memory.get_project_memory_context(project_name, user_message)
+        except Exception:
+            logger.debug("Could not load procedural memory context", exc_info=True)
+            return "Nenhuma memória procedural relevante encontrada."
+
+    def _get_skills_context(
+        self,
+        user_message: str,
+        project_name: Optional[str],
+    ) -> str:
+        if not hasattr(self.memory, "get_skills_context"):
+            return "Nenhuma skill registrada ainda."
+        try:
+            return self.memory.get_skills_context(user_message, project_name=project_name)
+        except Exception:
+            logger.debug("Could not load skills context", exc_info=True)
+            return "Nenhuma skill registrada ainda."
+
+    def _review_completed_task(
+        self,
+        conversation_id: Optional[str],
+        user_message: str,
+        ai_response: str,
+        project_name: Optional[str],
+        opencode_command: Optional[str],
+        route: ModelRoute,
+        tool_iterations: int,
+    ) -> None:
+        if not hasattr(self.memory, "review_completed_task"):
+            return
+        try:
+            self.memory.review_completed_task(
+                conversation_id=conversation_id,
+                user_message=user_message,
+                ai_response=ai_response,
+                project_name=project_name,
+                opencode_command=opencode_command,
+                route=route,
+                tool_iterations=tool_iterations,
+            )
+        except Exception:
+            logger.debug("Could not run learning nudge", exc_info=True)
 
     def _record_agent_route_decision(
         self,
@@ -747,6 +821,16 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             usage=usage,
             project_name=persisted_project_name,
             opencode_command=opencode_command,
+        )
+        review_project_name = persisted_project_name if isinstance(persisted_project_name, str) else None
+        self._review_completed_task(
+            conversation_id=conversation_id,
+            user_message=user_message,
+            ai_response=full_response,
+            project_name=review_project_name,
+            opencode_command=opencode_command,
+            route=route,
+            tool_iterations=1 if opencode_command else 0,
         )
 
         yield {"type": "done", "usage": usage, "project_name": persisted_project_name}

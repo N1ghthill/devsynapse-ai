@@ -31,6 +31,10 @@ DeepSeek API key and repositories directory interactively), runs database migrat
 user, builds the frontend, and registers the `devsynapse`, `update-devsynapse`
 and `uninstall-devsynapse` shell aliases.
 
+Packaged desktop installs do not run the shell installer. They use the in-app
+Setup flow on first launch to collect the local admin password, DeepSeek API key
+and default repository folder.
+
 After install, reload your shell and launch:
 
 ```bash
@@ -53,7 +57,8 @@ update-devsynapse
 ```
 
 The updater preserves runtime config, creates a backup of existing runtime files
-when present, applies migrations and rebuilds the frontend.
+when present, applies migrations, ensures missing seeded users without
+overwriting existing passwords and rebuilds the frontend.
 
 ### Manual alternative
 

@@ -3,7 +3,7 @@
 This document is the source of truth for desktop artifacts that can be linked
 from a public landing page.
 
-## Status As Of 2026-04-27
+## Status As Of 2026-04-28
 
 Validated on the current Linux development environment and GitHub Actions:
 
@@ -16,8 +16,8 @@ Generated artifacts:
 
 | Platform | Artifact | Status |
 | --- | --- | --- |
-| Linux x86_64 | `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.1_amd64.deb` | validated locally |
-| Linux x86_64 | `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.5.1-1.x86_64.rpm` | validated locally |
+| Linux x86_64 | `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.2_amd64.deb` | validated locally |
+| Linux x86_64 | `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.5.2-1.x86_64.rpm` | validated locally |
 | Linux x86_64 | AppImage | opt-in only; not part of the default build because `linuxdeploy` is environment-sensitive |
 | macOS | `.dmg` / `.app` bundle | configured but not validated in this repository yet |
 | Windows x86_64 | NSIS installer | validated in GitHub Actions |
@@ -77,10 +77,10 @@ the static manifest:
 
 ```bash
 python3 scripts/generate-tauri-update-manifest.py \
-  --version 0.5.1 \
+  --version 0.5.2 \
   --platform linux-x86_64 \
-  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.5.1/DevSynapse_AI_0.5.1_amd64.deb" \
-  --signature-file "frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.1_amd64.deb.sig" \
+  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.5.2/DevSynapse_AI_0.5.2_amd64.deb" \
+  --signature-file "frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.2_amd64.deb.sig" \
   --notes "Release notes" \
   --output latest.json
 ```

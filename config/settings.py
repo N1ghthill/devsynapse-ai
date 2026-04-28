@@ -77,6 +77,84 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+DEFAULT_RUNTIME_CONFIG_TEMPLATE = """# DevSynapse AI runtime config
+API_HOST=127.0.0.1
+API_PORT=8000
+API_DEBUG=true
+DEEPSEEK_API_KEY=
+JWT_SECRET_KEY=change-this-in-production
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+"""
+
+
+def _read_env_values(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        values[key.strip()] = value.strip()
+    return values
+
+
+def _set_env_values(path: Path, updates: dict[str, str | Path]) -> None:
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    pending = {key: str(value).strip() for key, value in updates.items()}
+    output: list[str] = []
+
+    for line in lines:
+        if "=" not in line or line.lstrip().startswith("#"):
+            output.append(line)
+            continue
+        key, _, _ = line.partition("=")
+        stripped_key = key.strip()
+        if stripped_key in pending:
+            output.append(f"{stripped_key}={pending.pop(stripped_key)}")
+        else:
+            output.append(line)
+
+    for key, value in pending.items():
+        output.append(f"{key}={value}")
+
+    path.write_text("\n".join(output).rstrip() + "\n", encoding="utf-8")
+
+
+def _ensure_initial_runtime_config() -> None:
+    if not CONFIG_FILE.exists():
+        source_env = BASE_DIR / ".env"
+        template = source_env if source_env.exists() else BASE_DIR / ".env.example"
+        template_text = (
+            template.read_text(encoding="utf-8")
+            if template.exists()
+            else DEFAULT_RUNTIME_CONFIG_TEMPLATE
+        )
+        CONFIG_FILE.write_text(template_text, encoding="utf-8")
+
+    values = _read_env_values(CONFIG_FILE)
+    updates: dict[str, str | Path] = {
+        "MEMORY_DB_PATH": DATA_DIR / "devsynapse_memory.db",
+        "MONITORING_DB_PATH": DATA_DIR / "devsynapse_monitoring.db",
+        "LOG_FILE": LOGS_DIR / "devsynapse.log",
+    }
+    current_secret = values.get("JWT_SECRET_KEY", "")
+    if (
+        not current_secret
+        or current_secret == "change-this-in-production"
+        or len(current_secret) < 32
+    ):
+        updates["JWT_SECRET_KEY"] = secrets.token_urlsafe(48)
+
+    _set_env_values(CONFIG_FILE, updates)
+
+
+_ensure_initial_runtime_config()
+
+
 def _default_workspace_root() -> Path:
     return Path.home()
 
@@ -104,7 +182,7 @@ class AppSettings(BaseSettings):
     )
 
     app_name: str = "DevSynapse AI"
-    app_version: str = "0.5.1"
+    app_version: str = "0.5.2"
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     api_debug: bool = True

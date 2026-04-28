@@ -44,6 +44,10 @@ class TestMemorySystem:
         assert 'decisions' in tables
         assert 'agent_learning' in tables
         assert 'agent_route_decisions' in tables
+        assert 'project_memories' in tables
+        assert 'skills' in tables
+        assert 'skill_activations' in tables
+        assert 'learning_nudge_events' in tables
 
     def test_get_user_preferences(self, tmp_path):
         db_path = tmp_path / "test_prefs.db"
@@ -395,6 +399,70 @@ class TestMemorySystem:
         assert breakdown[0]["project_name"] == "devsynapse-ai"
         assert breakdown[0]["total_tokens"] == 220
         assert breakdown[0]["estimated_cost_usd"] == pytest.approx(0.0000336)
+
+    def test_project_memory_confidence_decay_and_feedback(self, tmp_path):
+        db_path = tmp_path / "test_project_memory.db"
+        memory = _create_memory(db_path)
+
+        saved = memory.upsert_project_memory(
+            content="Use pytest -q for the fast local test loop.",
+            project_name="devsynapse-ai",
+            memory_type="procedure",
+            confidence_score=0.7,
+            memory_decay_score=0.01,
+            tags=["pytest"],
+        )
+        reinforced = memory.upsert_project_memory(
+            content="Use pytest -q for the fast local test loop.",
+            project_name="devsynapse-ai",
+            memory_type="procedure",
+            confidence_score=0.7,
+            memory_decay_score=0.01,
+            tags=["tests"],
+        )
+        listed = memory.list_project_memories(
+            project_name="devsynapse-ai",
+            query="pytest tests",
+        )
+        adjusted = memory.adjust_project_memory_confidence(saved["id"], -0.1)
+
+        assert reinforced["id"] == saved["id"]
+        assert reinforced["evidence_count"] == 2
+        assert listed[0]["effective_confidence"] > 0.0
+        assert "tests" in reinforced["tags"]
+        assert adjusted["confidence_score"] < reinforced["confidence_score"]
+
+    @pytest.mark.asyncio
+    async def test_command_success_nudge_creates_memory_and_skill(self, tmp_path):
+        db_path = tmp_path / "test_learning_nudge.db"
+        memory = _create_memory(db_path)
+        command = 'bash "pytest -q"'
+
+        await memory.save_interaction(
+            conversation_id="conv_nudge",
+            user_message="Rode os testes pytest e explique o resultado",
+            ai_response=f"Vou executar {command}",
+            opencode_command=command,
+            project_name="devsynapse-ai",
+        )
+        await memory.save_command_execution(
+            conversation_id="conv_nudge",
+            command=command,
+            success=True,
+            result="Comando executado com sucesso",
+            output="3 passed",
+            status="success",
+            project_name="devsynapse-ai",
+        )
+
+        memories = memory.list_project_memories(project_name="devsynapse-ai", query="pytest")
+        skills = memory.list_skills()
+        stats = memory.get_knowledge_stats()
+
+        assert any(item["memory_type"] == "procedure" for item in memories)
+        assert any(skill["slug"] == "test-pytest-workflow" for skill in skills)
+        assert stats["nudges"]["total_events"] >= 1
+        assert stats["skills"]["active_skills"] >= 1
 
     def test_get_llm_budget_status(self, tmp_path):
         db_path = tmp_path / "test_budget_status.db"
