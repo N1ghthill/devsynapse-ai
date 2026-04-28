@@ -15,6 +15,8 @@ import jwt
 from config.settings import get_settings
 from core.memory import MemorySystem
 
+DEFAULT_BOOTSTRAP_PASSWORD = "admin"
+
 
 class AuthService:
     """Handle user lifecycle and JWT tokens."""
@@ -29,11 +31,39 @@ class AuthService:
         return f"{salt.hex()}:{key.hex()}"
 
     def verify_password(self, password: str, stored_hash: str) -> bool:
-        salt_hex, key_hex = stored_hash.split(":")
-        salt = bytes.fromhex(salt_hex)
-        expected_key = bytes.fromhex(key_hex)
+        try:
+            salt_hex, key_hex = stored_hash.split(":")
+            salt = bytes.fromhex(salt_hex)
+            expected_key = bytes.fromhex(key_hex)
+        except ValueError:
+            return False
+
         computed_key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
         return hmac.compare_digest(expected_key, computed_key)
+
+    def admin_requires_password_setup(self) -> bool:
+        """Return true when the seeded admin account still uses the public default password."""
+
+        username = self.settings.default_admin_username
+        user = self.memory.get_user(username)
+        if user is None:
+            return True
+        return self.verify_password(DEFAULT_BOOTSTRAP_PASSWORD, user["password_hash"])
+
+    def bootstrap_admin_password(self, password: str) -> Dict:
+        """Create or update the default admin with a first-run password."""
+
+        username = self.settings.default_admin_username
+        self.memory.upsert_user(
+            username=username,
+            password_hash=self.hash_password(password),
+            role="admin",
+            is_active=True,
+        )
+        return {
+            "username": username,
+            "role": "admin",
+        }
 
     def ensure_default_users(self):
         defaults = [

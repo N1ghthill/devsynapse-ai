@@ -146,6 +146,7 @@ export interface DashboardStats {
       avg_confidence: number;
       by_model: Array<{ selected_model: string; count: number }>;
     };
+    knowledge?: KnowledgeStats;
     timeframe_hours: number;
   };
   system_health: {
@@ -180,6 +181,44 @@ export interface AuthState {
   user: { username: string; role: string } | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+}
+
+export interface BootstrapStatus {
+  requires_setup: boolean;
+  reasons: string[];
+  admin_password_required: boolean;
+  deepseek_api_key_configured: boolean;
+  workspace_configured: boolean;
+  default_admin_username: string;
+  suggested_workspace_root: string;
+  suggested_repos_root: string;
+  workspace_root?: string | null;
+  repos_root?: string | null;
+  config_path: string;
+  data_dir: string;
+  logs_dir: string;
+  discovered_project_count: number;
+}
+
+export interface BootstrapCompleteRequest {
+  admin_password?: string | null;
+  deepseek_api_key?: string | null;
+  repos_root: string;
+  workspace_root?: string | null;
+  register_discovered_projects: boolean;
+}
+
+export interface BootstrapCompleteResponse {
+  access_token?: string | null;
+  token?: string | null;
+  user?: { username: string; role: string } | null;
+  status: BootstrapStatus;
+  registered_projects: Array<{
+    name: string;
+    path: string;
+    type: string;
+    priority: string;
+  }>;
 }
 
 export interface SettingsData {
@@ -223,4 +262,86 @@ export interface ProjectCreateRequest {
   path: string;
   type?: string;
   priority?: string;
+}
+
+export interface ProjectMemory {
+  id: number;
+  project_name?: string | null;
+  memory_type: string;
+  content: string;
+  source: string;
+  confidence_score: number;
+  memory_decay_score: number;
+  effective_confidence: number;
+  evidence_count: number;
+  access_count: number;
+  created_at: string;
+  updated_at: string;
+  last_accessed_at?: string | null;
+  tags: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface ProjectMemoryCreateRequest {
+  content: string;
+  project_name?: string | null;
+  memory_type?: string;
+  source?: string;
+  confidence_score?: number;
+  memory_decay_score?: number;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface SkillSummary {
+  id: number;
+  name: string;
+  slug: string;
+  category: string;
+  description: string;
+  project_name?: string | null;
+  scope: string;
+  path: string;
+  is_active: boolean;
+  use_count: number;
+  created_at: string;
+  updated_at: string;
+  last_used_at?: string | null;
+  tags: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface SkillDetail extends SkillSummary {
+  content: string;
+  body: string;
+}
+
+export interface SkillCreateRequest {
+  name: string;
+  description: string;
+  body: string;
+  category?: string;
+  project_name?: string | null;
+  tags?: string[];
+  replace?: boolean;
+}
+
+export interface KnowledgeStats {
+  memories: {
+    total_memories: number;
+    avg_confidence: number;
+    evidence_count: number;
+    access_count: number;
+    by_type: Array<{ memory_type: string; count: number }>;
+  };
+  skills: {
+    total_skills: number;
+    active_skills: number;
+    use_count: number;
+    by_category: Array<{ category: string; count: number }>;
+  };
+  nudges: {
+    total_events: number;
+    by_status: Array<{ nudge_type: string; status: string; count: number }>;
+  };
 }

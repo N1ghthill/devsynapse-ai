@@ -6,6 +6,28 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+## [v0.5.2] - 2026-04-28
+
+### Added
+- Added first-run desktop onboarding for local admin password, DeepSeek API key
+  and default repository workspace configuration.
+- Added `/bootstrap/status` and `/bootstrap/complete` so desktop and shell
+  delivery can share one runtime setup contract.
+- Added SQLite migration `10` for project memories, Markdown-backed skills and
+  learning nudge events.
+
+### Changed
+- Runtime config is now ensured before application settings are instantiated,
+  keeping packaged desktop startup aligned with shell installs.
+- The shell updater now ensures missing seeded users without overwriting an
+  existing admin password.
+- Settings updates now persist a new DeepSeek API key to the per-user runtime
+  config instead of only updating the in-memory client.
+
+### Security
+- Project memory writes now require admin role for global memories or project
+  mutation permission for project-scoped memories.
+
 ## [v0.5.1] - 2026-04-27
 
 ### Added

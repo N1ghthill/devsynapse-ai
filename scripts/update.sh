@@ -284,18 +284,9 @@ refresh_runtime() {
     python3 "$ROOT_DIR/scripts/ensure_runtime_config.py"
     python3 "$ROOT_DIR/scripts/migrate.py" apply
 
-    local admin_username
-    local admin_password
-    admin_username="$(get_config_value "DEFAULT_ADMIN_USERNAME" "admin")"
-    admin_password="$(get_config_value "DEFAULT_ADMIN_PASSWORD" "admin")"
-
-    python3 "$ROOT_DIR/scripts/manage_users.py" create \
-        --username "$admin_username" \
-        --password "$admin_password" \
-        --role admin
     python3 "$ROOT_DIR/scripts/manage_users.py" seed-defaults
 
-    ok "Runtime Python, config, migrações e usuários atualizados"
+    ok "Runtime Python, config, migrações e usuários padrão conferidos"
 }
 
 refresh_frontend() {

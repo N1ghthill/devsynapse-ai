@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicholasio/tauri-docs/v2/src/config-schema.json",
   "productName": "DevSynapse AI",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "identifier": "ai.devsynapse.desktop",
   "build": {
     "frontendDist": "../dist",

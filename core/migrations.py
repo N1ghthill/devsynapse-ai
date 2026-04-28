@@ -221,6 +221,89 @@ MEMORY_MIGRATIONS = (
             """,
         ),
     ),
+    Migration(
+        version=10,
+        description="Project memories, skills, and learning nudge events",
+        statements=(
+            """
+            CREATE TABLE IF NOT EXISTS project_memories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_name TEXT,
+                memory_type TEXT NOT NULL DEFAULT 'fact',
+                content TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'manual',
+                confidence_score REAL NOT NULL DEFAULT 0.6,
+                memory_decay_score REAL NOT NULL DEFAULT 0.02,
+                evidence_count INTEGER NOT NULL DEFAULT 1,
+                access_count INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_accessed_at TEXT,
+                tags TEXT,
+                metadata TEXT,
+                UNIQUE(project_name, memory_type, content)
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_project_memories_scope
+            ON project_memories(project_name, memory_type, confidence_score)
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS skills (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                slug TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'general',
+                description TEXT NOT NULL,
+                project_name TEXT,
+                scope TEXT NOT NULL DEFAULT 'global',
+                path TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                use_count INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_used_at TEXT,
+                metadata TEXT,
+                UNIQUE(scope, project_name, slug)
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_skills_lookup
+            ON skills(scope, project_name, category, is_active)
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS skill_activations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                skill_slug TEXT NOT NULL,
+                project_name TEXT,
+                conversation_id TEXT,
+                reason TEXT,
+                activated_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_skill_activations_slug
+            ON skill_activations(skill_slug, activated_at)
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS learning_nudge_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT,
+                project_name TEXT,
+                nudge_type TEXT NOT NULL,
+                trigger_reason TEXT NOT NULL,
+                status TEXT NOT NULL,
+                details TEXT,
+                created_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_learning_nudge_events_scope
+            ON learning_nudge_events(project_name, nudge_type, created_at)
+            """,
+        ),
+    ),
 )
 
 

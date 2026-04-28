@@ -7,10 +7,11 @@ import {
   type ReactNode,
 } from 'react';
 import { authApi } from '../api/client';
-import type { AuthState } from '../types';
+import type { AuthState, BootstrapCompleteRequest } from '../types';
 
 type AuthContextValue = {
   auth: AuthState;
+  completeBootstrap: (data: BootstrapCompleteRequest) => Promise<unknown>;
   login: (username: string, password: string) => Promise<unknown>;
   logout: () => void;
 };
@@ -68,12 +69,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data;
   };
 
+  const completeBootstrap = async (payload: BootstrapCompleteRequest) => {
+    const data = await authApi.completeBootstrap(payload);
+    const token = data.token || data.access_token;
+    if (token && data.user) {
+      setAuth({
+        token,
+        user: data.user,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+    }
+    return data;
+  };
+
   const logout = () => {
     authApi.logout();
     setAuth({ token: null, user: null, isAuthenticated: false, isLoading: false });
   };
 
-  return createElement(AuthContext.Provider, { value: { auth, login, logout } }, children);
+  return createElement(
+    AuthContext.Provider,
+    { value: { auth, completeBootstrap, login, logout } },
+    children
+  );
 }
 
 export function useAuth() {

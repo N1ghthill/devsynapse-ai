@@ -66,6 +66,13 @@ The installer creates or updates that runtime config, migrates values from a leg
 repo-local `.env` only when the runtime config does not exist, and then writes
 absolute `MEMORY_DB_PATH`, `MONITORING_DB_PATH` and `LOG_FILE` values.
 
+Packaged desktop installs use the same runtime locations, but move interactive
+configuration into the app. On first launch, the app checks `/bootstrap/status`
+and blocks normal use until the local admin password, `DEEPSEEK_API_KEY` and
+default repository folder are configured through `/bootstrap/complete`.
+If an update finds an existing admin password but missing API key or workspace
+metadata, only an authenticated admin can complete those missing values.
+
 Supported overrides:
 
 - `DEVSYNAPSE_HOME`: base directory for `config/`, `data/` and `logs/`
@@ -98,13 +105,13 @@ The updater:
 - updates the Git checkout from the current branch, a requested branch or a requested tag;
 - preserves the runtime config values for API key, admin password and project roots;
 - refreshes Python and frontend dependencies;
-- applies migrations and updates seeded users;
+- applies migrations and ensures missing seeded users without overwriting existing user passwords;
 - rebuilds the frontend production bundle.
 
 For a pinned release:
 
 ```bash
-devsynapse update --version v0.5.1
+devsynapse update --version v0.5.2
 ```
 
 ## LLM Budget Controls

@@ -24,6 +24,47 @@ class TokenVerifyResponse(BaseModel):
     user: Optional[Dict] = None
 
 
+class BootstrapStatusResponse(BaseModel):
+    requires_setup: bool
+    reasons: List[str] = Field(default_factory=list)
+    admin_password_required: bool
+    deepseek_api_key_configured: bool
+    workspace_configured: bool
+    default_admin_username: str
+    suggested_workspace_root: str
+    suggested_repos_root: str
+    workspace_root: Optional[str] = None
+    repos_root: Optional[str] = None
+    config_path: str
+    data_dir: str
+    logs_dir: str
+    discovered_project_count: int = 0
+
+
+class BootstrapAdminRequest(BaseModel):
+    admin_password: Optional[str] = Field(default=None, min_length=8, max_length=100)
+    deepseek_api_key: Optional[str] = Field(default=None, min_length=1, max_length=300)
+    repos_root: str = Field(..., min_length=1, max_length=500)
+    workspace_root: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    register_discovered_projects: bool = True
+
+
+class BootstrapProjectResponse(BaseModel):
+    name: str
+    path: str
+    type: str
+    priority: str
+
+
+class BootstrapCompleteResponse(BaseModel):
+    access_token: Optional[str] = None
+    token: Optional[str] = None
+    token_type: str = "bearer"
+    user: Optional[Dict] = None
+    status: BootstrapStatusResponse
+    registered_projects: List[BootstrapProjectResponse] = Field(default_factory=list)
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     conversation_id: Optional[str] = None
@@ -103,6 +144,99 @@ class FeedbackRequest(BaseModel):
 class FeedbackResponse(BaseModel):
     success: bool
     message: str
+
+
+class ProjectMemoryCreateRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000)
+    project_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    memory_type: str = Field(default="fact", min_length=1, max_length=40)
+    source: str = Field(default="manual", min_length=1, max_length=80)
+    confidence_score: float = Field(default=0.6, ge=0, le=1)
+    memory_decay_score: float = Field(default=0.02, ge=0, le=1)
+    tags: List[str] = Field(default_factory=list)
+    metadata: Dict = Field(default_factory=dict)
+
+
+class ProjectMemoryFeedbackRequest(BaseModel):
+    delta: float = Field(..., ge=-1, le=1)
+    source: str = Field(default="feedback", min_length=1, max_length=80)
+
+
+class ProjectMemoryResponse(BaseModel):
+    id: int
+    project_name: Optional[str] = None
+    memory_type: str
+    content: str
+    source: str
+    confidence_score: float
+    memory_decay_score: float
+    effective_confidence: float
+    evidence_count: int
+    access_count: int
+    created_at: str
+    updated_at: str
+    last_accessed_at: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    metadata: Dict = Field(default_factory=dict)
+
+
+class ProjectMemoryListResponse(BaseModel):
+    memories: List[ProjectMemoryResponse]
+
+
+class SkillCreateRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=120)
+    description: str = Field(..., min_length=1, max_length=1024)
+    body: str = Field(..., min_length=1, max_length=20000)
+    category: str = Field(default="general", min_length=1, max_length=80)
+    project_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    tags: List[str] = Field(default_factory=list)
+    replace: bool = False
+
+
+class SkillUpdateRequest(BaseModel):
+    description: Optional[str] = Field(default=None, min_length=1, max_length=1024)
+    body: Optional[str] = Field(default=None, min_length=1, max_length=20000)
+    project_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+
+
+class SkillActivateRequest(BaseModel):
+    project_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    conversation_id: Optional[str] = None
+    reason: str = Field(default="manual", min_length=1, max_length=120)
+
+
+class SkillSummaryResponse(BaseModel):
+    id: int
+    name: str
+    slug: str
+    category: str
+    description: str
+    project_name: Optional[str] = None
+    scope: str
+    path: str
+    is_active: bool
+    use_count: int
+    created_at: str
+    updated_at: str
+    last_used_at: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    metadata: Dict = Field(default_factory=dict)
+
+
+class SkillDetailResponse(SkillSummaryResponse):
+    content: str
+    body: str
+
+
+class SkillListResponse(BaseModel):
+    skills: List[SkillSummaryResponse]
+
+
+class KnowledgeStatsResponse(BaseModel):
+    memories: Dict
+    skills: Dict
+    nudges: Dict
 
 
 class HealthResponse(BaseModel):

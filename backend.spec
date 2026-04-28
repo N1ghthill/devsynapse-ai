@@ -13,11 +13,11 @@
 # before running `npm run tauri build`.
 
 import os
+import sys
 from pathlib import Path
 
 # PyInstaller runs specs via exec(), so __file__ is not available.
 _PROJECT_ROOT = Path(os.getcwd())
-import sys
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
@@ -32,6 +32,7 @@ a = Analysis(
         ("api", "api"),
         ("core", "core"),
         ("config", "config"),
+        (".env.example", "."),
     ],
     hiddenimports=[
         # FastAPI internals
@@ -69,20 +70,26 @@ a = Analysis(
         "core.memory",
         "core.memory.system",
         "core.memory.conversations",
+        "core.memory.procedural",
         "core.memory.projects",
         "core.memory.settings",
         "core.deepseek",
         "core.brain",
+        "core.bootstrap",
         "core.opencode_bridge",
         "core.migrations",
         "core.monitoring",
         "core.auth",
         "core.plugin_system",
+        "core.runtime_config",
+        "core.skills",
         "api.app",
         "api.models",
         "api.dependencies",
         "api.routes",
+        "api.routes.bootstrap",
         "api.routes.chat",
+        "api.routes.knowledge",
         "api.routes.settings",
         "api.routes.admin",
         "api.routes.auth",

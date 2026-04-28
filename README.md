@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.5.1-blue)
+![Version](https://img.shields.io/badge/version-0.5.2-blue)
 
 **A local-first DeepSeek coding agent with safe command execution, project memory, and cost visibility.**
 
@@ -96,13 +96,13 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Verified Baseline
 
-Release validation completed on `2026-04-27` (v0.5.1 repository baseline):
+Release validation completed on `2026-04-28` (v0.5.2 repository baseline):
 - full repository verification: `make verify`
 - desktop build verification: `make desktop-build`
 - browser smoke validation: `make ui-smoke`
 - dependency consistency: `pip check`
 - frontend dependency audit: `npm audit --audit-level=high`
-- backend test suite: `201 passed`
+- backend test suite: `207 passed`
 - Python/Ruff checks, shell syntax checks, Python script compilation and frontend ESLint: passed
 - frontend production build: passed
 - GitHub Actions CI: passed on `main`
@@ -117,6 +117,7 @@ DevSynapse AI provides:
 - a React/Vite frontend with chat, project selector, dashboard, settings and admin interfaces;
 - SQLite-backed persistence for runtime state and migration-controlled schema evolution;
 - a DeepSeek API orchestration layer with native tool calling (strict function definitions, thinking mode), Flash/Pro routing, local agent learning, streaming token delivery, and execution result interpretation;
+- procedural memory with confidence/decay scoring, learning nudges after complex turns or command outcomes, and Markdown-backed reusable skills;
 - a constrained execution bridge for `bash`, `read`, `glob`, `grep`, `edit` and `write` with per-project working directories;
 - workflow templates for common local coding tasks such as test runs, failing-test analysis, TODO search, repository summaries, changelog drafts and Docker inspection;
 - visible project attribution in conversation summaries, chat messages, command execution and usage reporting;
@@ -184,11 +185,16 @@ Runtime state is intentionally outside the source checkout by default:
 - SQLite data: `~/.local/share/devsynapse-ai/data`
 - logs: `~/.local/state/devsynapse-ai/logs`
 
+Packaged desktop installs complete interactive setup inside the app on first
+launch. The onboarding flow configures the local admin password, DeepSeek API key
+and default repository folder before the chat workspace is available.
+
 Local security checklist:
 
 - keep the backend bound to `127.0.0.1` unless network access is intentional;
 - keep CORS limited to local or explicitly trusted browser origins;
 - store `DEEPSEEK_API_KEY` only in runtime config or environment;
+- complete first-run admin password setup when prompted;
 - use the admin role only when unrestricted local agent execution is intended;
 - review proposed commands before confirming mutations;
 - grant project mutation permissions only where writes are expected.
@@ -237,7 +243,7 @@ update-devsynapse
 To pin a specific published release:
 
 ```bash
-devsynapse update --version v0.5.1
+devsynapse update --version v0.5.2
 ```
 
 ### Manual Backend
@@ -302,7 +308,7 @@ Technical guides:
 - development roadmap: [docs/development/roadmap.md](docs/development/roadmap.md)
 - runtime and delivery notes: [docs/deployment/runtime.md](docs/deployment/runtime.md)
 - local security model: [docs/security/local-security-model.md](docs/security/local-security-model.md)
-- latest release notes: [docs/releases/v0.5.1.md](docs/releases/v0.5.1.md)
+- latest release notes: [docs/releases/v0.5.2.md](docs/releases/v0.5.2.md)
 
 Supplementary references:
 - engineering guide: [README_PROFESSIONAL.md](README_PROFESSIONAL.md)

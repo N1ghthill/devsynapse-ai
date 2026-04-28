@@ -17,7 +17,9 @@ from fastapi.staticfiles import StaticFiles
 from api.dependencies import auth_service, get_monitoring_system, get_plugin_manager, settings
 from api.routes.admin import router as admin_router
 from api.routes.auth import router as auth_router
+from api.routes.bootstrap import router as bootstrap_router
 from api.routes.chat import router as chat_router
+from api.routes.knowledge import router as knowledge_router
 from api.routes.monitoring import router as monitoring_router
 from api.routes.settings import router as settings_router
 
@@ -149,15 +151,19 @@ def create_app() -> FastAPI:
                 "chat": "/chat",
                 "execute": "/execute",
                 "feedback": "/feedback",
+                "bootstrap": "/bootstrap/status",
                 "health": "/health",
+                "knowledge": "/knowledge/stats",
                 "dashboard": "/monitoring/stats",
                 "docs": "/docs",
             },
         }
 
     app.include_router(auth_router)
+    app.include_router(bootstrap_router)
     app.include_router(admin_router)
     app.include_router(chat_router)
+    app.include_router(knowledge_router)
     app.include_router(monitoring_router)
     app.include_router(settings_router)
 
@@ -167,7 +173,7 @@ def create_app() -> FastAPI:
         if assets_dir.exists():
             app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
-        @app.api_route("/{full_path:path}", methods=["GET", "HEAD"])
+        @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
         async def serve_frontend(full_path: str):
             file_path = frontend_dir / full_path
             if file_path.exists() and file_path.is_file() and full_path != "index.html":

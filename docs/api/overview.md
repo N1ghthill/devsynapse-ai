@@ -24,6 +24,16 @@ Purpose:
 Purpose:
 - obtain and validate JWT credentials
 
+### Bootstrap
+
+- `GET /bootstrap/status`
+- `POST /bootstrap/complete`
+
+Purpose:
+- report whether first-run setup is still required
+- configure the initial admin password, DeepSeek API key and repository workspace
+- allow authenticated admins to complete missing runtime setup after an update
+
 ### Chat
 
 - `POST /chat`
@@ -56,6 +66,24 @@ Purpose:
 - API and command telemetry
 - LLM usage and cost reporting
 - alert lifecycle
+
+### Knowledge
+
+- `GET /knowledge/stats`
+- `GET /memories`
+- `POST /memories`
+- `POST /memories/{memory_id}/feedback`
+- `GET /skills`
+- `POST /skills`
+- `GET /skills/{skill_name}`
+- `POST /skills/{skill_name}/activate`
+- `PATCH /skills/{skill_name}`
+- `DELETE /skills/{skill_name}`
+
+Purpose:
+- store project-scoped procedural memories with confidence and decay metadata
+- list, create and activate Markdown-backed skills
+- expose learning nudge, memory and skill counts for the dashboard
 
 ### Settings
 
@@ -93,6 +121,10 @@ Purpose:
 - `/execute` returns structured execution status, reason code and project context
 - `/chat/history`, `/conversations` and `/conversations/{conversation_id}` include persisted `project_name` when available
 - `/monitoring/stats` includes `llm_usage` aggregates, cache hit-rate telemetry, project-level breakdown, agent learning stats and budget status snapshots
+- `/monitoring/stats` also includes `llm_usage.knowledge` with memory, skill and nudge aggregates
+- `/memories` returns both base `confidence_score` and computed `effective_confidence`; the effective score applies `memory_decay_score`, evidence and access signals
+- skill writes create `SKILL.md` files under the local DevSynapse data directory by default; explicit project skills use `.devsynapse/skills` inside the registered project
+- skill write/delete routes require an admin role, while listing and activation require an authenticated user
 - `llm_model_routing_enabled` lets the backend route simple and medium work to Flash while keeping complex work on Pro
 - `llm_auto_economy_enabled` forces Flash routing when budget status is critical
 - `/feedback` updates conversation feedback and can create agent-learning signals used by future routing decisions
@@ -105,8 +137,11 @@ Purpose:
 
 - routes using `require_user` or `require_admin` require a valid bearer token
 - chat, conversation, feedback, settings reads, project, monitoring stats/alerts, execution and usage export routes require an authenticated user
+- `/bootstrap/status` is public so the desktop app can decide whether to show onboarding
+- `/bootstrap/complete` is public only while the seeded admin still requires first-run password setup; after that it requires an authenticated admin
 - `/health` and `/monitoring/health` remain public readiness endpoints
 - `PUT /settings` requires an admin role because it changes global runtime behavior
+- project memory writes require admin role for global memories or project mutation permission for project-scoped memories
 - admin routes require an admin role
 - admin users are trusted local operators: they can execute supported OpenCode tools without per-user project allowlists, and admin `bash` supports shell syntax
 - non-admin users keep project-scoped mutation permissions and conservative chat auto-execution

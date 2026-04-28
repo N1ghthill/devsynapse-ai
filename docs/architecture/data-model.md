@@ -81,6 +81,48 @@ This lets the agent use prior local outcomes when choosing Flash or Pro, instead
 of treating every request as a stateless prompt. Learned patterns are local
 SQLite state and are surfaced in monitoring stats.
 
+### Procedural memories
+
+Stores:
+- project name, memory type and content
+- source, tags and structured metadata
+- `confidence_score` as the base trust value
+- `memory_decay_score` as the daily decay coefficient
+- evidence and access counts
+- computed effective confidence at read time
+
+Effective confidence decays with age, then receives bounded boosts from evidence
+and access counts. This keeps stale one-off memories from dominating prompts
+while allowing repeated successful evidence to stay visible. Relevant memories
+are injected into the assistant prompt by project scope and lexical task match.
+
+### Skills
+
+Stores:
+- skill name, slug, category and description
+- scope (`global` or `project`) and optional project name
+- `SKILL.md` path, content hash and activation metadata
+- usage count and last-used timestamp
+
+Global skills are stored under the local DevSynapse data directory. Explicit
+project skills live under `.devsynapse/skills` inside a registered project and
+are admin-managed because they write to the project tree. Skills are loaded into
+the prompt when their metadata matches the current task, and activation events
+are persisted for observability.
+
+### Learning nudges
+
+Stores:
+- conversation and project scope
+- nudge type, trigger reason and status
+- structured details for created memory ids or skill slugs
+- timestamp
+
+The backend runs a deterministic review after complex turns and command
+completion. Successful command outcomes can create or reinforce a procedural
+memory and a global Markdown skill; complex non-command turns create lower
+confidence insight memories.
+
 ### Project permissions
 
 Stores:
@@ -134,6 +176,8 @@ Contributors should add a new migration when:
   `done` event when attribution is available
 - agent learning is advisory: it can influence model routing, but budget-critical
   economy mode still wins over learned Pro preferences
+- skill activation is advisory prompt context; shell/file effects still go through
+  the existing command execution and authorization flow
 
 ## Current Tradeoff
 

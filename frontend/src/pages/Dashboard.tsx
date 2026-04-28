@@ -3,9 +3,11 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  Brain,
   CheckCircle,
   Cpu,
   DollarSign,
+  Library,
   XCircle,
 } from 'lucide-react';
 import { dashboardApi } from '../api/client';
@@ -77,6 +79,7 @@ export function Dashboard() {
   const projectSeries = stats?.llm_usage?.by_project || [];
   const budget = stats?.llm_usage?.budget;
   const agentLearning = stats?.llm_usage?.agent_learning;
+  const knowledge = stats?.llm_usage?.knowledge;
   const maxDailyCost = Math.max(...costSeries.map((item) => item.estimated_cost_usd), 0.000001);
   const maxProjectCost = Math.max(
     ...projectSeries.map((item) => item.estimated_cost_usd),
@@ -146,6 +149,26 @@ export function Dashboard() {
           <div className="stat-info">
             <span className="stat-value">{stats?.api_stats?.totals?.total_requests || 0}</span>
             <span className="stat-label">API Requests</span>
+          </div>
+        </div>
+
+        <div className="stat-card info">
+          <div className="stat-icon">
+            <Brain size={24} />
+          </div>
+          <div className="stat-info">
+            <span className="stat-value">{knowledge?.memories.total_memories || 0}</span>
+            <span className="stat-label">Memories</span>
+          </div>
+        </div>
+
+        <div className="stat-card info">
+          <div className="stat-icon">
+            <Library size={24} />
+          </div>
+          <div className="stat-info">
+            <span className="stat-value">{knowledge?.skills.active_skills || 0}</span>
+            <span className="stat-label">Skills</span>
           </div>
         </div>
 
@@ -277,6 +300,18 @@ export function Dashboard() {
               <span className="health-value">
                 {(agentLearning?.success_signals || 0).toLocaleString()} /{' '}
                 {(agentLearning?.failure_signals || 0).toLocaleString()}
+              </span>
+            </div>
+            <div className="health-item">
+              <span>Nudge Events</span>
+              <span className="health-value">
+                {knowledge?.nudges.total_events || 0}
+              </span>
+            </div>
+            <div className="health-item">
+              <span>Memory Confidence</span>
+              <span className="health-value">
+                {((knowledge?.memories.avg_confidence || 0) * 100).toFixed(0)}%
               </span>
             </div>
           </div>
