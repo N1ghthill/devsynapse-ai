@@ -5,6 +5,7 @@ Project registry extracted from memory system.
 import logging
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from config.settings import KNOWN_PROJECTS
@@ -44,7 +45,18 @@ class ProjectRegistry:
         conn.commit()
         conn.close()
 
-    def get_project(self, name: str) -> Optional[Dict[str, Any]]:
+    @staticmethod
+    def _project_path_exists(path: str | None) -> bool:
+        if not path:
+            return False
+        return Path(path).expanduser().is_dir()
+
+    def _project_from_row(self, row: sqlite3.Row) -> Dict[str, Any]:
+        project = dict(row)
+        project["path_exists"] = self._project_path_exists(project.get("path"))
+        return project
+
+    def get_project(self, name: str, include_missing: bool = False) -> Optional[Dict[str, Any]]:
         """Return a registered project by exact name."""
 
         conn = self.get_db_connection()
@@ -59,10 +71,16 @@ class ProjectRegistry:
         )
         row = cursor.fetchone()
         conn.close()
-        return dict(row) if row else None
+        if row is None:
+            return None
 
-    def list_projects(self) -> list[Dict[str, Any]]:
-        """Return all registered projects."""
+        project = self._project_from_row(row)
+        if not include_missing and not project["path_exists"]:
+            return None
+        return project
+
+    def list_projects(self, include_missing: bool = False) -> list[Dict[str, Any]]:
+        """Return registered projects, hiding missing filesystem paths by default."""
 
         conn = self.get_db_connection()
         cursor = conn.cursor()
@@ -73,14 +91,28 @@ class ProjectRegistry:
             ORDER BY priority DESC, access_count DESC, name
             """
         )
-        projects = [dict(row) for row in cursor.fetchall()]
+        projects = [self._project_from_row(row) for row in cursor.fetchall()]
         conn.close()
+        if not include_missing:
+            projects = [project for project in projects if project["path_exists"]]
         return projects
 
     def list_project_names(self) -> list[str]:
-        """Return registered project names in stable order."""
+        """Return active registered project names in stable order."""
 
         return [project["name"] for project in self.list_projects()]
+
+    def delete_project(self, name: str) -> bool:
+        """Delete a project registry row and related mutation permissions."""
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM project_permissions WHERE project_name = ?", (name,))
+        cursor.execute("DELETE FROM projects WHERE name = ?", (name,))
+        deleted = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        return deleted
 
     def get_project_lookup(self) -> Dict[str, Dict[str, str]]:
         """Return configured and persisted projects keyed by project name."""
@@ -96,14 +128,15 @@ class ProjectRegistry:
 
         cursor.execute(
             """
-            SELECT name, type, priority, last_accessed, access_count
+            SELECT name, path, type, priority, last_accessed, access_count
             FROM projects
             ORDER BY priority DESC, access_count DESC
         """
         )
 
-        rows = cursor.fetchall()
+        rows = [self._project_from_row(row) for row in cursor.fetchall()]
         conn.close()
+        rows = [row for row in rows if row["path_exists"]]
 
         if not rows:
             return "Nenhum projeto registrado."
@@ -128,8 +161,12 @@ class ProjectRegistry:
         if project_name:
             projects = [project_name]
         else:
-            cursor.execute("SELECT name FROM projects")
-            projects = [row[0] for row in cursor.fetchall()]
+            cursor.execute("SELECT name, path FROM projects")
+            projects = [
+                row[0]
+                for row in cursor.fetchall()
+                if self._project_path_exists(row[1])
+            ]
 
         for project in projects:
             if project_name or project.lower() in message.lower():
@@ -150,7 +187,11 @@ class ProjectRegistry:
     def _get_project_lookup(self) -> Dict[str, Dict[str, str]]:
         """Return configured projects plus projects persisted in this memory database."""
 
-        projects = {name: dict(info) for name, info in KNOWN_PROJECTS.items()}
+        projects = {
+            name: dict(info)
+            for name, info in KNOWN_PROJECTS.items()
+            if self._project_path_exists(info.get("path"))
+        }
         conn = None
         try:
             conn = sqlite3.connect(self.db_path)
@@ -163,6 +204,8 @@ class ProjectRegistry:
                 """
             )
             for row in cursor.fetchall():
+                if not self._project_path_exists(row["path"]):
+                    continue
                 projects[row["name"]] = {
                     "path": row["path"],
                     "type": row["type"],

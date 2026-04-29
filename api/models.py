@@ -301,6 +301,7 @@ class ProjectSummaryResponse(BaseModel):
 
 class ProjectResponse(ProjectSummaryResponse):
     path: str
+    path_exists: bool = True
 
 
 class ProjectListResponse(BaseModel):
@@ -311,6 +312,11 @@ class ProjectListResponse(BaseModel):
 class AdminProjectListResponse(BaseModel):
     projects: List[ProjectResponse]
     count: int
+
+
+class ProjectDeleteResponse(BaseModel):
+    success: bool
+    project_name: str
 
 
 class ProjectCreateRequest(BaseModel):

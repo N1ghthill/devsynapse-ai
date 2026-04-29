@@ -65,7 +65,10 @@ Stores:
 
 This context supports assistant prompt construction and project-aware reporting.
 Administrators can register additional existing local project directories at runtime; these rows are persisted and are loaded into command attribution and project working-directory resolution.
-User-facing project lists expose project identity and usage metadata only; local paths are reserved for administrative project management.
+User-facing project lists expose only active registered projects whose local
+directory still exists. Administrative project management lists both active and
+stale registry rows, includes the local path and `path_exists` status, and can
+remove a registry entry without deleting files from disk.
 
 ### Agent learning
 

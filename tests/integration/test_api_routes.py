@@ -706,6 +706,45 @@ async def test_admin_can_create_project(route_services, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_admin_project_list_marks_missing_paths(route_services, tmp_path):
+    from api.routes.admin import list_admin_projects
+
+    missing_path = tmp_path / "deleted-project"
+    route_services.memory.add_project("deleted-project", str(missing_path), "test", "medium")
+
+    response = await list_admin_projects(
+        admin=route_services.admin,
+        memory_system=route_services.memory,
+    )
+
+    projects = {project.name: project for project in response.projects}
+    assert projects["deleted-project"].path_exists is False
+
+
+@pytest.mark.asyncio
+async def test_admin_can_delete_project_registry_entry(route_services, tmp_path):
+    from api.routes.admin import delete_project
+
+    project_dir = tmp_path / "remove-me"
+    project_dir.mkdir()
+    route_services.memory.add_project("remove-me", str(project_dir), "test", "medium")
+    route_services.bridge.register_project("remove-me", str(project_dir), "test", "medium")
+    route_services.memory.replace_project_permissions("irving", ["remove-me", "devsynapse-ai"])
+
+    response = await delete_project(
+        project_name="remove-me",
+        admin=route_services.admin,
+        memory_system=route_services.memory,
+        bridge=route_services.bridge,
+    )
+
+    assert response.success is True
+    assert route_services.memory.get_project("remove-me", include_missing=True) is None
+    assert "remove-me" not in route_services.bridge.known_projects
+    assert "remove-me" not in route_services.memory.get_project_permissions("irving")
+
+
+@pytest.mark.asyncio
 async def test_admin_can_create_project_directory_from_name(
     route_services, tmp_path, monkeypatch
 ):
@@ -756,6 +795,35 @@ async def test_admin_create_project_rejects_duplicate_names(route_services):
         )
 
     assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_admin_create_project_replaces_stale_registry_entry(route_services, tmp_path):
+    from api.models import ProjectCreateRequest
+    from api.routes.admin import create_project
+
+    stale_path = tmp_path / "stale-project"
+    replacement_path = tmp_path / "replacement-project"
+    replacement_path.mkdir()
+    route_services.memory.add_project("stale-project", str(stale_path), "test", "medium")
+
+    response = await create_project(
+        payload=ProjectCreateRequest(
+            name="stale-project",
+            path=str(replacement_path),
+            type="test",
+            priority="high",
+        ),
+        admin=route_services.admin,
+        memory_system=route_services.memory,
+        bridge=route_services.bridge,
+    )
+
+    assert response.path == str(replacement_path.resolve())
+    assert response.path_exists is True
+    assert route_services.memory.get_project("stale-project")["path"] == str(
+        replacement_path.resolve()
+    )
 
 
 @pytest.mark.asyncio

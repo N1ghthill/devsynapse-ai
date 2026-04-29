@@ -13,6 +13,7 @@ from api.models import (
     AdminUsersResponse,
     AdminUserSummary,
     ProjectCreateRequest,
+    ProjectDeleteResponse,
     ProjectResponse,
 )
 from config.settings import get_settings
@@ -36,6 +37,7 @@ def _project_response(project: dict) -> ProjectResponse:
         priority=project["priority"],
         last_accessed=project["last_accessed"],
         access_count=int(project["access_count"] or 0),
+        path_exists=bool(project.get("path_exists", True)),
     )
 
 
@@ -103,7 +105,10 @@ async def list_admin_projects(
     memory_system: MemorySystem = Depends(get_memory_system),
 ):
     del admin
-    projects = [_project_response(project) for project in memory_system.list_projects()]
+    projects = [
+        _project_response(project)
+        for project in memory_system.list_projects(include_missing=True)
+    ]
     return AdminProjectListResponse(projects=projects, count=len(projects))
 
 
@@ -183,16 +188,24 @@ async def create_project(
         project_path.mkdir(parents=True, exist_ok=True)
     if not project_path.exists() or not project_path.is_dir():
         raise HTTPException(status_code=400, detail="Caminho do projeto deve ser um diretório existente")
-    if memory_system.get_project(project_name) is not None:
+    existing_project = memory_system.get_project(project_name, include_missing=True)
+    if existing_project is not None and existing_project["path_exists"]:
         raise HTTPException(status_code=409, detail="Projeto já registrado")
 
     project_type = (payload.type or "").strip() or "project"
     priority = (payload.priority or "").strip() or "medium"
-    memory_system.add_project(project_name, str(project_path), project_type, priority, replace=False)
+    memory_system.add_project(
+        project_name,
+        str(project_path),
+        project_type,
+        priority,
+        replace=existing_project is not None,
+    )
     bridge.register_project(project_name, str(project_path), project_type, priority)
+    action = "restore_project" if existing_project is not None else "create_project"
     memory_system.log_admin_action(
         actor_username=admin["username"],
-        action="create_project",
+        action=action,
         details={
             "project_name": project_name,
             "path": str(project_path),
@@ -206,3 +219,30 @@ async def create_project(
             return _project_response(project)
 
     raise HTTPException(status_code=500, detail="Projeto criado, mas não encontrado")
+
+
+@router.delete("/projects/{project_name}", response_model=ProjectDeleteResponse)
+async def delete_project(
+    project_name: str,
+    admin=Depends(require_admin),
+    memory_system: MemorySystem = Depends(get_memory_system),
+    bridge: OpenCodeBridge = Depends(get_opencode_bridge),
+):
+    existing_project = memory_system.get_project(project_name, include_missing=True)
+    if existing_project is None:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado")
+
+    deleted = memory_system.delete_project(project_name)
+    if deleted:
+        bridge.known_projects.pop(project_name, None)
+        memory_system.log_admin_action(
+            actor_username=admin["username"],
+            action="delete_project",
+            details={
+                "project_name": project_name,
+                "path": existing_project["path"],
+                "path_exists": existing_project["path_exists"],
+            },
+        )
+
+    return ProjectDeleteResponse(success=deleted, project_name=project_name)

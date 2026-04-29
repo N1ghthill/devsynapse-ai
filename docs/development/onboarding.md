@@ -35,6 +35,12 @@ Packaged desktop installs do not run the shell installer. They use the in-app
 Setup flow on first launch to collect the local admin password, DeepSeek API key
 and default repository folder.
 
+The project list is a registry in the local SQLite database. Setup registers
+Git repositories discovered under the selected repository folder, but normal
+chat/project pickers hide entries whose directories no longer exist. Admins can
+open Admin > Projects to see stale entries marked as missing and remove only the
+registry row; this does not delete any project files.
+
 After install, reload your shell and launch:
 
 ```bash
@@ -59,6 +65,13 @@ update-devsynapse
 The updater preserves runtime config, creates a backup of existing runtime files
 when present, applies migrations, ensures missing seeded users without
 overwriting existing passwords and rebuilds the frontend.
+
+For packaged desktop builds, uninstall through the operating system package
+manager, for example `sudo apt remove devsynapse-ai` for the `.deb` package or
+the Windows Apps settings entry for the NSIS install. Linux desktop packages run
+a pre-remove hook that stops the tray app and backend sidecar before package
+files are removed. Runtime config, databases and logs are user data and remain
+until manually deleted.
 
 ### Manual alternative
 

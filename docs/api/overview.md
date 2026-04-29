@@ -103,12 +103,14 @@ Purpose:
 - `PUT /admin/users/{username}/permissions`
 - `GET /admin/projects`
 - `POST /admin/projects`
+- `DELETE /admin/projects/{project_name}`
 - `GET /admin/audit-logs`
 
 Purpose:
 - inspect users
 - manage project-scoped mutation permissions
 - register known projects for project context and command working-directory resolution
+- remove stale project registry entries without deleting files
 - review administrative changes
 
 ## Contract Notes
@@ -134,12 +136,13 @@ Purpose:
 - `llm_model_routing_enabled` lets the backend route simple and medium work to Flash while keeping complex work on Pro
 - `llm_auto_economy_enabled` forces Flash routing when budget status is critical
 - `/feedback` updates conversation feedback and can create agent-learning signals used by future routing decisions
-- `/projects` returns registered project `name`, `type`, `priority`, `last_accessed` and `access_count`
-- `/admin/projects` returns registered projects with local `path` for administrative management
+- `/projects` returns active registered project `name`, `type`, `priority`, `last_accessed` and `access_count`; entries whose local path no longer exists are hidden from user-facing selection
+- `/admin/projects` returns active and stale registered projects with local `path` and `path_exists` for administrative management
 - `POST /admin/projects` registers an existing local project directory; with
   `create_directory=true`, admins can create the directory first, defaulting to
   `DEV_REPOS_ROOT/<project-slug>` when `path` is omitted
-- `POST /admin/projects` rejects duplicate project names; updates should be explicit future behavior
+- `POST /admin/projects` rejects duplicate active project names, but reuses a stale registry name when its previous path no longer exists
+- `DELETE /admin/projects/{project_name}` removes only the registry row and related project permissions; it never deletes files from disk
 
 ## Authentication Behavior
 

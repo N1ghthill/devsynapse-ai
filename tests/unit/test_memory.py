@@ -78,6 +78,44 @@ class TestMemorySystem:
         assert lookup["docs-project"]["path"] == str(project_path)
         assert lookup["docs-project"]["type"] == "docs"
 
+    def test_project_lists_hide_missing_paths_but_admin_can_inspect_them(self, tmp_path):
+        db_path = tmp_path / "test_missing_project_registry.db"
+        memory = _create_memory(db_path)
+        active_path = tmp_path / "active-project"
+        missing_path = tmp_path / "deleted-project"
+        active_path.mkdir()
+
+        memory.add_project("active-project", str(active_path), "test", "medium")
+        memory.add_project("deleted-project", str(missing_path), "test", "medium")
+
+        public_projects = {project["name"]: project for project in memory.list_projects()}
+        admin_projects = {
+            project["name"]: project
+            for project in memory.list_projects(include_missing=True)
+        }
+        lookup = memory.get_project_lookup()
+        context = memory.get_projects_context()
+
+        assert "active-project" in public_projects
+        assert public_projects["active-project"]["path_exists"] is True
+        assert "deleted-project" not in public_projects
+        assert admin_projects["deleted-project"]["path_exists"] is False
+        assert "deleted-project" not in lookup
+        assert "deleted-project" not in context
+
+    def test_delete_project_removes_registry_and_permissions(self, tmp_path):
+        db_path = tmp_path / "test_delete_project_registry.db"
+        memory = _create_memory(db_path)
+        project_path = tmp_path / "removable-project"
+        project_path.mkdir()
+        memory.add_project("removable-project", str(project_path), "test", "medium")
+        memory.replace_project_permissions("irving", ["removable-project", "devsynapse-ai"])
+
+        assert memory.delete_project("removable-project") is True
+
+        assert memory.get_project("removable-project", include_missing=True) is None
+        assert "removable-project" not in memory.get_project_permissions("irving")
+
     @pytest.mark.asyncio
     async def test_save_and_get_conversation_context(self, tmp_path):
         db_path = tmp_path / "test_conv.db"

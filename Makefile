@@ -71,10 +71,11 @@ script-check:
 	bash -n scripts/ui_smoke.sh
 	bash -n scripts/build-backend.sh
 	bash -n scripts/update_locks.sh
+	sh -n frontend/src-tauri/scripts/linux-preremove.sh
 	bash -n devsynapse.sh
 	$(PYTHON) -m py_compile scripts/dev.py scripts/ensure_runtime_config.py scripts/generate-tauri-update-manifest.py scripts/migrate.py scripts/manage_users.py
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh scripts/ui_smoke.sh scripts/build-backend.sh scripts/update_locks.sh devsynapse.sh; \
+		shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh scripts/ui_smoke.sh scripts/build-backend.sh scripts/update_locks.sh frontend/src-tauri/scripts/linux-preremove.sh devsynapse.sh; \
 	else \
 		echo "shellcheck not installed; skipping shell script lint"; \
 	fi

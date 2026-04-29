@@ -8,6 +8,7 @@ export type CommandExecutionStatus =
 export interface ProjectInfo {
   name: string;
   path?: string;
+  path_exists?: boolean;
   type: string;
   priority: string;
   last_accessed: string;
