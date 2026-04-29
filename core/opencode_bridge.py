@@ -744,6 +744,28 @@ class OpenCodeBridge:
         best_score: int = -1
 
         text_lower = text.lower()
+        looks_like_path = self._looks_like_path_reference(text)
+
+        if looks_like_path:
+            try:
+                path = Path(text).resolve()
+            except Exception:
+                path = None
+
+            if path is not None:
+                for project_name, project_info in self.known_projects.items():
+                    project_path = Path(project_info["path"]).resolve()
+                    try:
+                        if path.is_relative_to(project_path):
+                            score = len(str(project_path))
+                            if score > best_score:
+                                best_score = score
+                                best_match = project_name
+                    except ValueError:
+                        continue
+
+            if best_match:
+                return best_match
 
         for project_name, project_info in self.known_projects.items():
             project_path = str(Path(project_info["path"]).resolve())
@@ -752,28 +774,6 @@ class OpenCodeBridge:
                 if score > best_score:
                     best_score = score
                     best_match = project_name
-
-        if best_match:
-            return best_match
-
-        if not self._looks_like_path_reference(text):
-            return None
-
-        try:
-            path = Path(text).resolve()
-        except Exception:
-            return None
-
-        for project_name, project_info in self.known_projects.items():
-            project_path = Path(project_info["path"]).resolve()
-            try:
-                if path.is_relative_to(project_path):
-                    score = len(project_name)
-                    if score > best_score:
-                        best_score = score
-                        best_match = project_name
-            except ValueError:
-                continue
 
         return best_match
     
