@@ -145,7 +145,7 @@ jobs:
           test -f "$release_dir/DevSynapse_AI_${RELEASE_VERSION}_amd64.deb.sig"
 
       - name: Upload Linux release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-assets-linux
           path: dist/release/linux/*
@@ -257,7 +257,7 @@ jobs:
           test -f "${windows_updater}.sig"
 
       - name: Upload Windows release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-assets-windows
           path: dist/release/windows/*
