@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, FolderPlus, RefreshCw, Save, Shield } from 'lucide-react';
+import { AlertCircle, FolderPlus, RefreshCw, Save, Shield, Trash2 } from 'lucide-react';
 import { adminApi } from '../api/client';
 import type { AdminAuditLog, AdminUser, ProjectInfo } from '../types';
 
@@ -29,6 +29,7 @@ export function Admin() {
   const [loading, setLoading] = useState(true);
   const [savingUser, setSavingUser] = useState<string | null>(null);
   const [creatingProject, setCreatingProject] = useState(false);
+  const [deletingProject, setDeletingProject] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [projectForm, setProjectForm] = useState({
     name: '',
@@ -125,6 +126,29 @@ export function Admin() {
     setCreatingProject(false);
   };
 
+  const deleteProject = async (project: ProjectInfo) => {
+    const confirmed = window.confirm(
+      `Remove "${project.name}" from DevSynapse? This only removes the registry entry.`
+    );
+    if (!confirmed) return;
+
+    setDeletingProject(project.name);
+    try {
+      await adminApi.deleteProject(project.name);
+      const [usersData, logsData] = await Promise.all([
+        adminApi.listUsers(),
+        adminApi.listAuditLogs(),
+      ]);
+      setProjects((prev) => prev.filter((entry) => entry.name !== project.name));
+      setUsers(usersData.users);
+      setLogs(logsData.logs);
+      setError(null);
+    } catch {
+      setError(`Failed to remove project ${project.name}`);
+    }
+    setDeletingProject(null);
+  };
+
   if (loading) {
     return (
       <div className="page-loading">
@@ -189,15 +213,36 @@ export function Admin() {
           <div className="admin-card-header">
             <div>
               <h3>Projects</h3>
-              <p className="admin-subtitle">{projects.length} registered</p>
+              <p className="admin-subtitle">
+                {projects.filter((project) => project.path_exists !== false).length} active ·{' '}
+                {projects.filter((project) => project.path_exists === false).length} stale
+              </p>
             </div>
             <FolderPlus size={18} />
           </div>
           <div className="admin-project-list">
             {projects.map((project) => (
               <div className="admin-project-item" key={project.name}>
-                <strong>{project.name}</strong>
-                <span>{project.path || 'Path available to admins only'}</span>
+                <div>
+                  <strong>{project.name}</strong>
+                  <span>{project.path || 'Path available to admins only'}</span>
+                  {project.path_exists === false && (
+                    <span className="admin-project-status stale">Missing on disk</span>
+                  )}
+                </div>
+                <button
+                  className="icon-btn danger"
+                  onClick={() => void deleteProject(project)}
+                  disabled={deletingProject === project.name}
+                  type="button"
+                  title="Remove project registry entry"
+                >
+                  {deletingProject === project.name ? (
+                    <RefreshCw size={16} className="spinner" />
+                  ) : (
+                    <Trash2 size={16} />
+                  )}
+                </button>
               </div>
             ))}
           </div>
@@ -276,8 +321,10 @@ export function Admin() {
                 const projectName =
                   typeof log.details.project_name === 'string' ? log.details.project_name : null;
                 const actionLabel =
-                  log.action === 'create_project'
+                  log.action === 'create_project' || log.action === 'restore_project'
                     ? 'Registered project'
+                    : log.action === 'delete_project'
+                      ? 'Removed project'
                     : 'Updated mutation scope for';
 
                 return (

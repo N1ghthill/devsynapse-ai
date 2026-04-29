@@ -96,14 +96,17 @@ class MemorySystem:
     def add_project(self, name, path, project_type="project", priority="medium", replace=True):
         return self.projects.add_project(name, path, project_type, priority, replace)
 
-    def get_project(self, name: str) -> Optional[Dict[str, Any]]:
-        return self.projects.get_project(name)
+    def get_project(self, name: str, include_missing: bool = False) -> Optional[Dict[str, Any]]:
+        return self.projects.get_project(name, include_missing=include_missing)
 
-    def list_projects(self) -> list[Dict[str, Any]]:
-        return self.projects.list_projects()
+    def list_projects(self, include_missing: bool = False) -> list[Dict[str, Any]]:
+        return self.projects.list_projects(include_missing=include_missing)
 
     def list_project_names(self) -> list[str]:
         return self.projects.list_project_names()
+
+    def delete_project(self, name: str) -> bool:
+        return self.projects.delete_project(name)
 
     def get_project_lookup(self) -> Dict[str, Dict[str, str]]:
         return self.projects.get_project_lookup()

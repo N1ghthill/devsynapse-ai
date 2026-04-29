@@ -16,8 +16,8 @@ Generated artifacts:
 
 | Platform | Artifact | Status |
 | --- | --- | --- |
-| Linux x86_64 | `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.6.0_amd64.deb` | validated by release workflow |
-| Linux x86_64 | `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.6.0-1.x86_64.rpm` | validated by release workflow |
+| Linux x86_64 | `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.6.1_amd64.deb` | pending release workflow |
+| Linux x86_64 | `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.6.1-1.x86_64.rpm` | pending release workflow |
 | Linux x86_64 | AppImage | opt-in only; not part of the default build because `linuxdeploy` is environment-sensitive |
 | macOS | `.dmg` / `.app` bundle | configured but not validated in this repository yet |
 | Windows x86_64 | NSIS installer | validated in GitHub Actions |
@@ -45,6 +45,12 @@ frontend/src-tauri/binaries/devsynapse-backend-{target-triple}
 ```
 
 Tauri then packages the React frontend, Rust shell and sidecar together.
+
+Linux `.deb` and `.rpm` bundles include `frontend/src-tauri/scripts/linux-preremove.sh`
+as a package pre-remove script. The hook stops the tray process and Python
+backend sidecar before package files are removed, which avoids leaving a
+running desktop build after uninstall. It intentionally does not delete runtime
+config, databases, logs or repository files.
 
 ## Desktop Updater
 
@@ -78,13 +84,13 @@ per supported platform:
 
 ```bash
 python3 scripts/generate-tauri-update-manifest.py \
-  --version 0.6.0 \
+  --version 0.6.1 \
   --platform linux-x86_64 \
-  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.6.0/DevSynapse_AI_0.6.0_amd64.deb" \
-  --signature-file "frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.6.0_amd64.deb.sig" \
+  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.6.1/DevSynapse_AI_0.6.1_amd64.deb" \
+  --signature-file "frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.6.1_amd64.deb.sig" \
   --platform windows-x86_64 \
-  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.6.0/DevSynapse_AI_0.6.0_x64-setup.exe" \
-  --signature-file "frontend/src-tauri/target/release/bundle/nsis/DevSynapse AI_0.6.0_x64-setup.exe.sig" \
+  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.6.1/DevSynapse_AI_0.6.1_x64-setup.exe" \
+  --signature-file "frontend/src-tauri/target/release/bundle/nsis/DevSynapse AI_0.6.1_x64-setup.exe.sig" \
   --notes "Release notes" \
   --output latest.json
 ```

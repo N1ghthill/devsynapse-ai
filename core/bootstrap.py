@@ -159,13 +159,14 @@ def apply_bootstrap(
     registered_projects: list[dict[str, str]] = []
     if register_discovered_projects:
         for project in discovered_projects:
-            if memory_system.get_project(project["name"]) is None:
+            existing_project = memory_system.get_project(project["name"], include_missing=True)
+            if existing_project is None or not existing_project["path_exists"]:
                 memory_system.add_project(
                     project["name"],
                     project["path"],
                     project["type"],
                     project["priority"],
-                    replace=False,
+                    replace=existing_project is not None,
                 )
             registered_projects.append(project)
 

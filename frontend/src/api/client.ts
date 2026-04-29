@@ -455,6 +455,13 @@ export const adminApi = {
     const response = await api.post<ProjectInfo>('/admin/projects', data);
     return response.data;
   },
+
+  deleteProject: async (projectName: string): Promise<{ success: boolean; project_name: string }> => {
+    const response = await api.delete<{ success: boolean; project_name: string }>(
+      `/admin/projects/${encodeURIComponent(projectName)}`
+    );
+    return response.data;
+  },
 };
 
 export const authApi = {
