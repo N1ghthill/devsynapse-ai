@@ -315,9 +315,10 @@ class AdminProjectListResponse(BaseModel):
 
 class ProjectCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
-    path: str = Field(..., min_length=1, max_length=500)
+    path: Optional[str] = Field(default=None, min_length=1, max_length=500)
     type: Optional[str] = Field(default=None, max_length=80)
     priority: Optional[str] = Field(default=None, max_length=40)
+    create_directory: bool = False
 
 
 class AdminUserSummary(BaseModel):

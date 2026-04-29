@@ -34,6 +34,7 @@ export interface Message {
   command?: string;
   commandStatus?: CommandExecutionStatus;
   commandResult?: string;
+  toolRuns?: ToolRun[];
   reasonCode?: string | null;
   commandNote?: string;
   commandInterpretation?: string | null;
@@ -41,6 +42,16 @@ export interface Message {
   projectName?: string | null;
   tokenUsage?: TokenUsage | null;
   metadata?: Record<string, unknown>;
+}
+
+export interface ToolRun {
+  id: string;
+  command: string;
+  status: CommandExecutionStatus;
+  result?: string;
+  message?: string;
+  reasonCode?: string | null;
+  projectName?: string | null;
 }
 
 export interface Conversation {
@@ -65,6 +76,7 @@ export interface ChatRequest {
   message: string;
   conversation_id?: string;
   project_name?: string;
+  execute_command?: boolean;
 }
 
 export interface ChatResponse {
@@ -259,9 +271,10 @@ export interface AdminAuditLog {
 
 export interface ProjectCreateRequest {
   name: string;
-  path: string;
+  path?: string | null;
   type?: string;
   priority?: string;
+  create_directory?: boolean;
 }
 
 export interface ProjectMemory {

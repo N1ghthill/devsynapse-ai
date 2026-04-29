@@ -39,6 +39,30 @@ async def _log_api_request_background(monitoring_system, **kwargs):
     monitoring_system.log_api_request(**kwargs)
 
 
+def _resolve_locked_project(
+    memory_system: MemorySystem,
+    conversation_id: str,
+    requested_project_name: str | None,
+) -> str | None:
+    persisted_project = memory_system.get_conversation_project_name(conversation_id)
+    if persisted_project and requested_project_name and requested_project_name != persisted_project:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Esta conversa está travada no projeto '{persisted_project}'. "
+                "Abra uma nova conversa para trabalhar em outro projeto."
+            ),
+        )
+
+    effective_project = persisted_project or requested_project_name
+    if effective_project and memory_system.get_project(effective_project) is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Projeto não registrado: {effective_project}",
+        )
+    return effective_project
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(
     request: ChatRequest,
@@ -48,6 +72,11 @@ async def chat_endpoint(
     monitoring_system=Depends(get_monitoring_system),
 ):
     conversation_id = request.conversation_id or str(uuid.uuid4())
+    effective_project_name = _resolve_locked_project(
+        memory_system,
+        conversation_id,
+        request.project_name,
+    )
     project_permissions = memory_system.get_project_permissions(user["username"])
     user_id = user["username"]
     user_role = user["role"]
@@ -57,10 +86,11 @@ async def chat_endpoint(
         response_text, opencode_command, llm_usage = await brain.process_message(
             user_message=request.message,
             conversation_id=conversation_id,
-            project_name=request.project_name,
+            project_name=effective_project_name,
             user_id=user_id,
             user_role=user_role,
             project_mutation_allowlist=project_permissions,
+            auto_execute=request.execute_command,
         )
     except Exception as exc:
         logger.error("Erro processando chat: %s", exc)
@@ -71,7 +101,7 @@ async def chat_endpoint(
 
     requires_confirmation = opencode_command is not None and not request.execute_command
     monitoring_system.sync_llm_budget_alerts(memory_system.get_llm_budget_status())
-    response_project_name = request.project_name
+    response_project_name = effective_project_name
     if response_project_name is None:
         context = await memory_system.get_conversation_context(conversation_id)
         response_project_name = context.get("project_name")
@@ -92,16 +122,26 @@ async def chat_stream_endpoint(
     request: ChatRequest,
     user=Depends(require_user),
     brain: DevSynapseBrain = Depends(get_brain),
+    memory_system: MemorySystem = Depends(get_memory_system),
 ):
-    del user
+    conversation_id = request.conversation_id or str(uuid.uuid4())
+    effective_project_name = _resolve_locked_project(
+        memory_system,
+        conversation_id,
+        request.project_name,
+    )
 
     async def event_generator():
-        conversation_id = request.conversation_id or str(uuid.uuid4())
+        project_permissions = memory_system.get_project_permissions(user["username"])
         try:
             async for chunk in brain.process_message_streaming(
                 user_message=request.message,
                 conversation_id=conversation_id,
-                project_name=request.project_name,
+                project_name=effective_project_name,
+                user_id=user["username"],
+                user_role=user["role"],
+                project_mutation_allowlist=project_permissions,
+                auto_execute=request.execute_command,
             ):
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
         except Exception as exc:
@@ -219,13 +259,19 @@ async def execute_command(
 
     start_time = time.time()
 
+    effective_project_name = _resolve_locked_project(
+        memory_system,
+        request.conversation_id,
+        request.project_name,
+    )
+
     try:
         project_mutation_allowlist = memory_system.get_project_permissions(user["username"])
 
         success, message, output, status, reason_code, project_name = await bridge.execute_command(
             request.command,
             user_id=user["username"],
-            project_name=request.project_name,
+            project_name=effective_project_name,
             user_role=user["role"],
             project_mutation_allowlist=project_mutation_allowlist,
         )
@@ -260,7 +306,7 @@ async def execute_command(
                     conversation_id=request.conversation_id,
                     command=request.command,
                     output=output,
-                    project_name=request.project_name,
+                    project_name=project_name or effective_project_name,
                 )
             except Exception:
                 logger.debug("Failed to get execution interpretation", exc_info=True)
@@ -274,6 +320,8 @@ async def execute_command(
             project_name=project_name,
             interpretation=interpretation,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Erro executando comando: %s", exc)
         response_time = time.time() - start_time

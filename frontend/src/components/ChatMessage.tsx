@@ -21,7 +21,7 @@ import type { Message } from '../types';
 
 interface ChatMessageProps {
   message: Message;
-  onExecute: (messageId: string) => void;
+  onExecute: (messageId: string, toolRunId?: string) => void;
 }
 
 const statusLabels = {
@@ -48,24 +48,24 @@ function getCommandType(command: string): string {
 
 function getCommandReview(command: string, projectName?: string | null): CommandReview {
   const commandType = getCommandType(command);
-  const projectScope = projectName ? `Project root: ${projectName}` : 'Default execution scope';
+  const projectScope = projectName ? `Projeto: ${projectName}` : 'Escopo padrão';
 
   if (commandType === 'read') {
     return {
       commandType,
-      expectedEffect: 'Read file contents',
+      expectedEffect: 'Ler conteúdo de arquivo',
       risk: 'low',
-      riskLabel: 'Read-only',
-      workingDirectory: projectName ? projectScope : 'Resolved from file path',
+      riskLabel: 'Somente leitura',
+      workingDirectory: projectName ? projectScope : 'Resolvido pelo caminho',
     };
   }
 
   if (commandType === 'glob') {
     return {
       commandType,
-      expectedEffect: 'Find files by pattern',
+      expectedEffect: 'Encontrar arquivos por padrão',
       risk: 'low',
-      riskLabel: 'Read-only',
+      riskLabel: 'Somente leitura',
       workingDirectory: projectScope,
     };
   }
@@ -73,9 +73,9 @@ function getCommandReview(command: string, projectName?: string | null): Command
   if (commandType === 'grep') {
     return {
       commandType,
-      expectedEffect: 'Search file contents',
+      expectedEffect: 'Buscar em conteúdo de arquivos',
       risk: 'low',
-      riskLabel: 'Read-only',
+      riskLabel: 'Somente leitura',
       workingDirectory: projectScope,
     };
   }
@@ -83,28 +83,28 @@ function getCommandReview(command: string, projectName?: string | null): Command
   if (commandType === 'edit' || commandType === 'write') {
     return {
       commandType,
-      expectedEffect: commandType === 'edit' ? 'Modify an existing file' : 'Write file contents',
+      expectedEffect: commandType === 'edit' ? 'Modificar arquivo existente' : 'Escrever arquivo',
       risk: 'high',
-      riskLabel: 'File mutation',
-      workingDirectory: projectName ? projectScope : 'Resolved from target path',
+      riskLabel: 'Muda arquivos',
+      workingDirectory: projectName ? projectScope : 'Resolvido pelo destino',
     };
   }
 
   if (commandType === 'bash') {
     return {
       commandType,
-      expectedEffect: 'Run a shell command',
+      expectedEffect: 'Executar comando shell',
       risk: 'medium',
-      riskLabel: 'Shell execution',
+      riskLabel: 'Shell',
       workingDirectory: projectScope,
     };
   }
 
   return {
     commandType,
-    expectedEffect: 'Run an allowed tool command',
+    expectedEffect: 'Executar ferramenta autorizada',
     risk: 'medium',
-    riskLabel: 'Review required',
+    riskLabel: 'Revisar',
     workingDirectory: projectScope,
   };
 }
@@ -125,6 +125,47 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
   };
 
   const canExecute = Boolean(message.command) && commandStatus !== 'running' && commandStatus !== 'success';
+  const toolRuns = message.toolRuns || [];
+
+  const renderCommandReview = (command: string, projectName?: string | null) => {
+    const review = getCommandReview(command, projectName);
+    return (
+      <div className="command-review-grid">
+        <div className="command-review-item">
+          <AlertTriangle size={13} />
+          <span className="command-review-label">Risco</span>
+          <span className={`command-review-value risk-${review.risk}`}>
+            {review.riskLabel}
+          </span>
+        </div>
+        <div className="command-review-item">
+          <Folder size={13} />
+          <span className="command-review-label">Diretório</span>
+          <span className="command-review-value">{review.workingDirectory}</span>
+        </div>
+        <div className="command-review-item">
+          <FileText size={13} />
+          <span className="command-review-label">Efeito</span>
+          <span className="command-review-value">{review.expectedEffect}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCommandResult = (
+    status: Message['commandStatus'],
+    result?: string,
+    messageText?: string
+  ) => {
+    const resultText = result || messageText;
+    if (!resultText) return null;
+
+    return (
+      <div className={`command-result result-${status || 'proposed'}`}>
+        <pre>{resultText}</pre>
+      </div>
+    );
+  };
 
   return (
     <div className={`message ${isUser ? 'message-user' : 'message-ai'}`}>
@@ -134,7 +175,7 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
 
       <div className="message-content">
         <div className="message-header">
-          <span className="message-role">{isUser ? 'You' : 'DevSynapse'}</span>
+          <span className="message-role">{isUser ? 'Você' : 'DevSynapse'}</span>
           <span className="message-time">
             {new Date(message.timestamp).toLocaleTimeString()}
           </span>
@@ -182,7 +223,7 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
               onClick={() => setReasoningOpen((prev) => !prev)}
             >
               <Brain size={13} />
-              <span>Chain of thought</span>
+              <span>Raciocínio</span>
               {reasoningOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
             </button>
             {reasoningOpen && (
@@ -193,13 +234,53 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
           </div>
         )}
 
-        {message.command && (
+        {toolRuns.map((toolRun) => {
+          const status = toolRun.status || 'proposed';
+          const canRunTool = status !== 'running' && status !== 'success';
+
+          return (
+            <div key={toolRun.id} className={`message-command command-${status}`}>
+              <div className="message-command-header">
+                <div className="message-command-main">
+                  <Terminal size={14} />
+                  <div className="message-command-text">
+                    <span className="command-label">Comando</span>
+                    <code>{toolRun.command}</code>
+                  </div>
+                </div>
+                <span className={`command-status-badge status-${status}`}>
+                  {status === 'running' && <Loader2 size={12} className="spinner" />}
+                  {status === 'success' && <CheckCircle2 size={12} />}
+                  {status === 'blocked' && <ShieldAlert size={12} />}
+                  {statusLabels[status]}
+                </span>
+                <button
+                  className="execute-btn"
+                  onClick={() => onExecute(message.id, toolRun.id)}
+                  disabled={!canRunTool}
+                  aria-label="Executar comando"
+                >
+                  {status === 'running' ? (
+                    <Loader2 size={14} className="spinner" />
+                  ) : (
+                    <Play size={14} />
+                  )}
+                  {status === 'running' ? 'Executando...' : 'Executar'}
+                </button>
+              </div>
+              {renderCommandReview(toolRun.command, toolRun.projectName || message.projectName)}
+              {renderCommandResult(status, toolRun.result, toolRun.message)}
+            </div>
+          );
+        })}
+
+        {message.command && toolRuns.length === 0 && (
           <div className={`message-command command-${commandStatus}`}>
             <div className="message-command-header">
               <div className="message-command-main">
                 <Terminal size={14} />
                 <div className="message-command-text">
-                  <span className="command-label">Command</span>
+                  <span className="command-label">Comando</span>
                   <code>{message.command}</code>
                 </div>
               </div>
@@ -213,35 +294,18 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
                 className="execute-btn"
                 onClick={() => onExecute(message.id)}
                 disabled={!canExecute}
+                aria-label="Executar comando"
               >
                 {commandStatus === 'running' ? (
                   <Loader2 size={14} className="spinner" />
                 ) : (
                   <Play size={14} />
                 )}
-                {commandStatus === 'running' ? 'Running...' : 'Run'}
+                {commandStatus === 'running' ? 'Executando...' : 'Executar'}
               </button>
             </div>
             {commandReview && (
-              <div className="command-review-grid">
-                <div className="command-review-item">
-                  <AlertTriangle size={13} />
-                  <span className="command-review-label">Risk</span>
-                  <span className={`command-review-value risk-${commandReview.risk}`}>
-                    {commandReview.riskLabel}
-                  </span>
-                </div>
-                <div className="command-review-item">
-                  <Folder size={13} />
-                  <span className="command-review-label">Directory</span>
-                  <span className="command-review-value">{commandReview.workingDirectory}</span>
-                </div>
-                <div className="command-review-item">
-                  <FileText size={13} />
-                  <span className="command-review-label">Effect</span>
-                  <span className="command-review-value">{commandReview.expectedEffect}</span>
-                </div>
-              </div>
+              renderCommandReview(message.command, message.projectName)
             )}
           </div>
         )}
@@ -259,7 +323,7 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
         )}
 
         <div className="message-actions">
-          <button className="action-btn" onClick={handleCopy}>
+          <button className="action-btn" onClick={handleCopy} aria-label="Copiar mensagem">
             {copied ? <Check size={14} /> : <Copy size={14} />}
           </button>
         </div>

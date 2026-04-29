@@ -487,6 +487,47 @@ class TestOpenCodeBridge:
         assert bridge.get_project_context("docs-project")["path"] == str(docs_path)
         assert bridge._resolve_project_cwd("docs-project") == str(docs_path)
 
+    @pytest.mark.asyncio
+    async def test_execute_write_blocks_placeholder_path_that_switches_selected_project(self):
+        bridge = _bridge()
+        bridge._execute_write = AsyncMock(return_value=(True, "created", "ok"))
+
+        success, message, output, status, reason_code, project_name = await bridge.execute_command(
+            'write "/home/user/projects/calculadora/calculadora.py" --content="print(1)"',
+            user_role="admin",
+            project_name=PROJECT_NAME,
+        )
+
+        assert success is False
+        assert "travada no projeto" in message
+        assert output is None
+        assert status == "blocked"
+        assert reason_code == "project_scope_mismatch"
+        assert project_name == PROJECT_NAME
+        bridge._execute_write.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_execute_read_allows_cross_project_reference_with_selected_project(self):
+        bridge = _bridge()
+        other_project = PROJECT_ROOT.parent / "reference-app"
+        bridge.register_project("reference-app", str(other_project), "project", "medium")
+        bridge._execute_read = AsyncMock(return_value=(True, "read", "content"))
+
+        reference_file = other_project / "README.md"
+        success, message, output, status, reason_code, project_name = await bridge.execute_command(
+            f'read "{reference_file}"',
+            user_role="user",
+            project_name=PROJECT_NAME,
+        )
+
+        assert success is True
+        assert message == "read"
+        assert output == "content"
+        assert status == "success"
+        assert reason_code is None
+        assert project_name == PROJECT_NAME
+        bridge._execute_read.assert_awaited_once_with([str(reference_file), ""])
+
     def test_infer_project_name_from_file_path(self):
         bridge = _bridge()
 
@@ -508,6 +549,19 @@ class TestOpenCodeBridge:
         )
 
         assert project_name == "devsynapse-ai"
+
+    def test_infer_project_name_from_bash_command_ignores_flags_before_path(self):
+        bridge = _bridge()
+        project_root = PROJECT_ROOT.parent / "calculadora"
+        bridge.register_project("calculadora", str(project_root), "project", "medium")
+
+        project_name = bridge._infer_project_name(
+            "bash",
+            [f"ls -la {project_root / 'calculator.py'} && python3 -m py_compile", ""],
+            None,
+        )
+
+        assert project_name == "calculadora"
 
     @pytest.mark.asyncio
     async def test_execute_command_authorization_failure(self):
@@ -556,6 +610,7 @@ class TestOpenCodeBridge:
             success, message, output, status, reason_code, project_name = await bridge.execute_command(
                 'bash "python -c \\"print(1)\\" | cat"',
                 user_role="admin",
+                project_name=PROJECT_NAME,
             )
 
         mock_bash.assert_awaited_once_with(

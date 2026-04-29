@@ -41,6 +41,31 @@ Admin file tools are not constrained to registered project roots or the normal
 allowed-directory list. The bridge still rejects configured blacklist patterns and
 records command telemetry, but this is not a sandbox boundary.
 
+The chat UI can enable an "Aprovar tudo" fast path. This sends
+`execute_command=true` on streaming chat turns so authorized tool calls run
+without another confirmation click and emit audit events back to the chat. It
+does not bypass backend role checks, project mutation allowlists, blacklist
+checks, command telemetry or command execution records.
+
+For admin users, "Aprovar tudo" is an operator mode rather than a project
+allowlist mode. Supported OpenCode tools run directly, admin `bash` uses shell
+syntax, and ordinary command failures are replayed to the model so it can keep
+fixing and validating. When a conversation is scoped to a registered project,
+that project remains the mutation boundary: write/edit and mutating bash actions
+that point outside it are blocked with `project_scope_mismatch`. Read-only
+reference commands can still inspect other allowed or registered repositories so
+the agent can compare code and gather context without switching the working
+project. Global admin sessions without a selected project remain trusted
+local-operator sessions. To constrain what a person or agent can mutate more
+narrowly, create a non-admin user and grant only the intended project allowlist.
+
+LLMs sometimes produce placeholder filesystem paths such as `/home/user/projects`,
+`~/projects` or `/workspace`. Before validation and execution, the command bridge
+normalizes those placeholders to the configured local repository/workspace roots.
+For example, `/home/user/projects/calculadora` maps to
+`DEV_REPOS_ROOT/calculadora`. If a chat is already scoped to another project, a
+normalized mutating command is blocked instead of silently switching projects.
+
 Non-admin auto-execution is intentionally conservative. It is limited to low-risk
 inspection through allowlisted bash commands. File-content tools such as `read`,
 `grep` and `glob` are proposed for explicit confirmation instead of being sent to

@@ -207,7 +207,9 @@ export const chatApi = {
   sendMessageStreaming: (
     data: ChatRequest,
     onToken: (token: string) => void,
-    onCommand: (command: string) => void,
+    onCommand: (command: string, autoExecute?: boolean) => void,
+    onCommandStatus: (command: string, status: CommandResult['status'] | 'running') => void,
+    onCommandResult: (command: string, result: CommandResult) => void,
     onReasoning: (reasoning: string) => void,
     onDone: (usage: TokenUsage | null, projectName?: string | null) => void,
     onError: (error: string) => void,
@@ -246,6 +248,42 @@ export const chatApi = {
       }
       const decoder = new TextDecoder();
       let buffer = '';
+      let streamCompleted = false;
+
+      const processLine = (line: string) => {
+        if (!line.startsWith('data: ')) return;
+        const dataStr = line.slice(6);
+        try {
+          const event = JSON.parse(dataStr);
+          if (event.type === 'text') {
+            onToken(event.content);
+          } else if (event.type === 'reasoning') {
+            onReasoning(event.content);
+          } else if (event.type === 'command') {
+            onCommand(event.command, Boolean(event.auto_execute));
+          } else if (event.type === 'command_status') {
+            onCommandStatus(event.command, event.status);
+          } else if (event.type === 'command_result') {
+            onCommandResult(event.command, {
+              success: Boolean(event.success),
+              message: event.message || '',
+              output: event.output || undefined,
+              status: event.status,
+              reason_code: event.reason_code,
+              project_name: event.project_name,
+              interpretation: null,
+            });
+          } else if (event.type === 'done') {
+            streamCompleted = true;
+            onDone(event.usage || null, event.project_name || null);
+          } else if (event.type === 'error') {
+            streamCompleted = true;
+            onError(event.message || 'Stream error');
+          }
+        } catch {
+          // Skip unparseable lines
+        }
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -256,25 +294,15 @@ export const chatApi = {
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const dataStr = line.slice(6);
-          try {
-            const event = JSON.parse(dataStr);
-            if (event.type === 'text') {
-              onToken(event.content);
-            } else if (event.type === 'reasoning') {
-              onReasoning(event.content);
-            } else if (event.type === 'command') {
-              onCommand(event.command);
-            } else if (event.type === 'done') {
-              onDone(event.usage || null, event.project_name || null);
-            } else if (event.type === 'error') {
-              onError(event.message || 'Stream error');
-            }
-          } catch {
-            // Skip unparseable lines
-          }
+          processLine(line);
         }
+      }
+
+      if (buffer.trim()) {
+        processLine(buffer.trim());
+      }
+      if (!streamCompleted) {
+        onError('A conexão encerrou antes da confirmação final do backend.');
       }
     })().catch((err) => {
       if (err.name !== 'AbortError') {

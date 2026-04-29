@@ -1,12 +1,21 @@
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
-import { Send, Loader2, Sparkles } from 'lucide-react';
+import { Send, Loader2, Sparkles, ShieldCheck } from 'lucide-react';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
   isLoading: boolean;
+  autoApprove: boolean;
+  isAdmin: boolean;
+  onAutoApproveChange: (enabled: boolean) => void;
 }
 
-export function ChatInput({ onSend, isLoading }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  isLoading,
+  autoApprove,
+  isAdmin,
+  onAutoApproveChange,
+}: ChatInputProps) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -46,6 +55,35 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
 
   return (
     <div className="chat-input-container">
+      <div className="chat-run-controls">
+        <button
+          type="button"
+          className={`auto-approve-toggle ${autoApprove ? 'active' : ''}`}
+          onClick={() => onAutoApproveChange(!autoApprove)}
+          aria-pressed={autoApprove}
+          title={
+            isAdmin
+              ? 'Admin: executar comandos suportados automaticamente e registrar auditoria'
+              : 'Executar comandos autorizados automaticamente e registrar auditoria'
+          }
+        >
+          <ShieldCheck size={15} />
+          <span>
+            {autoApprove
+              ? isAdmin
+                ? 'Admin automático'
+                : 'Execução automática'
+              : 'Revisão manual'}
+          </span>
+        </button>
+        <span className="auto-approve-note">
+          {autoApprove
+            ? isAdmin
+              ? 'Comandos suportados rodam direto; tudo fica auditado'
+              : 'Comandos permitidos entram na fila automaticamente'
+            : 'Você aprova cada execução'}
+        </span>
+      </div>
       <div className="chat-input-wrapper">
         <Sparkles size={18} className="input-icon" />
         <textarea
@@ -54,7 +92,7 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask DevSynapse to help with your code..."
+          placeholder="Peça uma análise, refatoração, teste ou comando local..."
           rows={1}
           disabled={isLoading}
         />
@@ -62,6 +100,7 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
           className="send-btn"
           onClick={handleSubmit}
           disabled={!input.trim() || isLoading}
+          title="Enviar mensagem"
         >
           {isLoading ? (
             <Loader2 size={20} className="spinner" />
