@@ -72,8 +72,9 @@ cd frontend
 npm run tauri signer generate -- -w ~/.tauri/devsynapse-updater.key
 ```
 
-After uploading the updater bundle and its `.sig` file to a release, generate
-the static manifest:
+After uploading updater bundles and their `.sig` files to a release, generate
+the static manifest. Repeat `--platform`, `--url` and `--signature-file` once
+per supported platform:
 
 ```bash
 python3 scripts/generate-tauri-update-manifest.py \
@@ -81,6 +82,9 @@ python3 scripts/generate-tauri-update-manifest.py \
   --platform linux-x86_64 \
   --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.5.2/DevSynapse_AI_0.5.2_amd64.deb" \
   --signature-file "frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.2_amd64.deb.sig" \
+  --platform windows-x86_64 \
+  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.5.2/DevSynapse_AI_0.5.2_x64-setup.exe" \
+  --signature-file "frontend/src-tauri/target/release/bundle/nsis/DevSynapse AI_0.5.2_x64-setup.exe.sig" \
   --notes "Release notes" \
   --output latest.json
 ```
