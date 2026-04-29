@@ -43,13 +43,13 @@ async function runSmoke() {
       page.waitForURL(/\/chat$/, { timeout }),
       page.getByRole('button', { name: 'Sign In' }).click(),
     ]);
-    await expectVisible(page.getByRole('heading', { name: 'DevSynapse Chat' }), 'chat heading');
+    await expectVisible(page.getByText('Workspace local'), 'chat workspace header');
 
-    await page.getByRole('link', { name: 'Dashboard' }).click();
+    await page.getByRole('link', { name: 'Painel' }).click();
     await expectVisible(page.getByRole('heading', { name: 'Dashboard' }), 'dashboard heading');
     await expectVisible(page.getByText('Total Commands'), 'dashboard totals');
 
-    await page.getByRole('link', { name: 'Settings' }).click();
+    await page.getByRole('link', { name: 'Ajustes' }).click();
     await expectVisible(page.getByRole('heading', { name: 'Settings' }), 'settings heading');
     await page.getByRole('button', { name: 'Save Changes' }).click();
     await expectVisible(page.getByText('Settings saved successfully'), 'settings save confirmation');

@@ -240,6 +240,7 @@ async def test_chat_route_forwards_and_returns_explicit_project_name(route_servi
         user_id="irving",
         user_role="user",
         project_mutation_allowlist=[],
+        auto_execute=False,
     )
     assert response.project_name == "devsynapse-ai"
 
@@ -270,7 +271,51 @@ async def test_chat_route_returns_persisted_project_name(route_services):
         monitoring_system=route_services.monitoring,
     )
 
+    route_services.brain.process_message.assert_awaited_once_with(
+        user_message="Continue",
+        conversation_id="conv_chat_existing_project",
+        project_name="devsynapse-ai",
+        user_id="irving",
+        user_role="user",
+        project_mutation_allowlist=[],
+        auto_execute=False,
+    )
     assert response.project_name == "devsynapse-ai"
+
+
+@pytest.mark.asyncio
+async def test_chat_route_rejects_project_switch_inside_existing_conversation(route_services, tmp_path):
+    from api.models import ChatRequest
+    from api.routes.chat import chat_endpoint
+
+    other_project = tmp_path / "other-project"
+    other_project.mkdir()
+    route_services.memory.add_project("other-project", str(other_project), "project", "medium")
+    await route_services.memory.save_interaction(
+        conversation_id="conv_locked_project",
+        user_message="Contexto inicial",
+        ai_response="Resposta inicial",
+        project_name="devsynapse-ai",
+    )
+    route_services.brain.process_message = AsyncMock(
+        return_value=("Resposta indevida", None, None)
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await chat_endpoint(
+            request=ChatRequest(
+                message="Troque de projeto",
+                conversation_id="conv_locked_project",
+                project_name="other-project",
+            ),
+            user=route_services.user,
+            brain=route_services.brain,
+            memory_system=route_services.memory,
+            monitoring_system=route_services.monitoring,
+        )
+
+    assert exc_info.value.status_code == 409
+    route_services.brain.process_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -658,6 +703,38 @@ async def test_admin_can_create_project(route_services, tmp_path):
         project_dir.resolve()
     )
     assert "new-project" in route_services.memory.list_project_names()
+
+
+@pytest.mark.asyncio
+async def test_admin_can_create_project_directory_from_name(
+    route_services, tmp_path, monkeypatch
+):
+    from api.models import ProjectCreateRequest
+    from api.routes import admin as admin_routes
+
+    repos_root = tmp_path / "repos"
+    repos_root.mkdir()
+    route_services.bridge.allowed_directories = [repos_root]
+    monkeypatch.setattr(
+        admin_routes,
+        "get_settings",
+        lambda: SimpleNamespace(dev_repos_root=repos_root),
+    )
+
+    response = await admin_routes.create_project(
+        payload=ProjectCreateRequest(
+            name="Meu Projeto Novo",
+            create_directory=True,
+        ),
+        admin=route_services.admin,
+        memory_system=route_services.memory,
+        bridge=route_services.bridge,
+    )
+
+    assert response.name == "Meu Projeto Novo"
+    assert response.path == str((repos_root / "meu-projeto-novo").resolve())
+    assert (repos_root / "meu-projeto-novo").is_dir()
+    assert route_services.bridge.get_project_context("Meu Projeto Novo")["path"] == response.path
 
 
 @pytest.mark.asyncio

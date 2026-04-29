@@ -138,6 +138,9 @@ class MemorySystem:
     def get_project_usage_breakdown(self, hours: int = 24) -> list[Dict[str, Any]]:
         return self.conversations.get_project_usage_breakdown(hours)
 
+    def get_conversation_project_name(self, conversation_id: Optional[str]) -> Optional[str]:
+        return self.conversations.get_conversation_project_name(conversation_id)
+
     def export_llm_usage_csv(self) -> str:
         return self.conversations.export_llm_usage_csv()
 

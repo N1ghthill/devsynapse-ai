@@ -77,6 +77,8 @@ class TestDevSynapseBrain:
 
         assert "PROJETO ATIVO" in prompt
         assert "devsynapse-ai" in prompt
+        assert "Repositories root" in prompt
+        assert "/home/user" in prompt
 
     @pytest.mark.asyncio
     async def test_process_message_calls_api(self, mock_memory, mock_bridge):
@@ -204,7 +206,7 @@ class TestDevSynapseBrain:
             assert cmd == 'bash "ls -la"'
 
     @pytest.mark.asyncio
-    async def test_process_message_replays_only_executed_tool_call(
+    async def test_process_message_replays_command_output_as_text(
         self, mock_memory, mock_bridge
     ):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
@@ -251,27 +253,20 @@ class TestDevSynapseBrain:
 
         replay_messages = mock_call.await_args_list[1].args[0]
         assistant_replay = replay_messages[-2]
-        tool_replay = replay_messages[-1]
+        output_replay = replay_messages[-1]
 
         assert response == "Final answer"
         assert cmd is None
         assert usage is None
-        assert assistant_replay["tool_calls"] == [
-            {
-                "id": "call_pwd",
-                "type": "function",
-                "function": {
-                    "name": "bash",
-                    "arguments": '{"command": "pwd"}',
-                },
-            }
-        ]
-        assert assistant_replay["reasoning_content"] == "I should inspect the repo."
-        assert tool_replay == {
-            "role": "tool",
-            "tool_call_id": "call_pwd",
-            "content": "tool output",
+        assert assistant_replay == {
+            "role": "assistant",
+            "content": 'Executed `bash "pwd"`.',
         }
+        assert output_replay["role"] == "user"
+        assert 'Command `bash "pwd"` finished with status `success`.' in output_replay["content"]
+        assert "tool output" in output_replay["content"]
+        assert "tool_calls" not in assistant_replay
+        assert output_replay["role"] != "tool"
 
     @pytest.mark.asyncio
     async def test_process_message_autoexecutes_admin_mutation_tool(
@@ -340,6 +335,374 @@ class TestDevSynapseBrain:
         assert persistence_events[1][1]["command"] == (
             'write "/tmp/admin.txt" --content="hello"'
         )
+
+    @pytest.mark.asyncio
+    async def test_process_message_streaming_autoexecutes_when_requested(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        brain.api_key = "test-key"
+        mock_bridge.execute_command = AsyncMock(
+            return_value=(True, "ok", "tool output", "success", None, "devsynapse-ai")
+        )
+
+        async def stream_once(*args, **kwargs):
+            del args, kwargs
+            yield {"type": "text", "content": "Vou ler."}
+            yield {
+                "type": "done",
+                "content": "Vou ler.",
+                "usage": None,
+                "tool_calls": [
+                    {
+                        "id": "call_read",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": '{"path": "/tmp/file.txt"}',
+                        },
+                    }
+                ],
+            }
+
+        async def stream_final(*args, **kwargs):
+            del args, kwargs
+            yield {"type": "text", "content": "Conteudo analisado."}
+            yield {
+                "type": "done",
+                "content": "Conteudo analisado.",
+                "usage": None,
+                "tool_calls": None,
+            }
+
+        with patch.object(
+            brain.deepseek,
+            "chat_completion_streaming",
+            side_effect=[stream_once(), stream_final()],
+        ):
+            events = [
+                event
+                async for event in brain.process_message_streaming(
+                    "Leia o arquivo",
+                    "test_session",
+                    user_id="irving",
+                    user_role="admin",
+                    auto_execute=True,
+                )
+            ]
+
+        assert [event["type"] for event in events] == [
+            "text",
+            "command",
+            "command_status",
+            "command_result",
+            "text",
+            "done",
+        ]
+        assert events[1]["command"] == 'read "/tmp/file.txt"'
+        assert events[2]["status"] == "running"
+        assert events[3]["status"] == "success"
+        mock_bridge.execute_command.assert_awaited_once_with(
+            'read "/tmp/file.txt"',
+            user_id="irving",
+            project_name=None,
+            user_role="admin",
+            project_mutation_allowlist=[],
+        )
+        mock_memory.save_command_execution.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_streaming_recovers_when_model_promises_action_without_tool(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        brain.api_key = "test-key"
+        mock_bridge.execute_command = AsyncMock(
+            return_value=(True, "created", "write output", "success", None, "calculadora")
+        )
+
+        async def stream_stalled_intent(*args, **kwargs):
+            del args, kwargs
+            yield {"type": "text", "content": "Vou criar o código principal agora."}
+            yield {
+                "type": "done",
+                "content": "Vou criar o código principal agora.",
+                "usage": None,
+                "tool_calls": None,
+            }
+
+        async def stream_retry_tool(*args, **kwargs):
+            del args, kwargs
+            yield {
+                "type": "done",
+                "content": "",
+                "usage": None,
+                "tool_calls": [
+                    {
+                        "id": "call_write",
+                        "type": "function",
+                        "function": {
+                            "name": "write",
+                            "arguments": json.dumps({
+                                "path": "/tmp/calculadora/main.py",
+                                "content": "print('ok')",
+                            }),
+                        },
+                    }
+                ],
+            }
+
+        async def stream_final(*args, **kwargs):
+            del args, kwargs
+            yield {"type": "text", "content": "Projeto criado."}
+            yield {
+                "type": "done",
+                "content": "Projeto criado.",
+                "usage": None,
+                "tool_calls": None,
+            }
+
+        with patch.object(
+            brain.deepseek,
+            "chat_completion_streaming",
+            side_effect=[stream_stalled_intent(), stream_retry_tool(), stream_final()],
+        ):
+            events = [
+                event
+                async for event in brain.process_message_streaming(
+                    "Pode continuar",
+                    "test_session",
+                    user_id="irving",
+                    user_role="admin",
+                    auto_execute=True,
+                )
+            ]
+
+        assert [event["type"] for event in events] == [
+            "text",
+            "command",
+            "command_status",
+            "command_result",
+            "text",
+            "done",
+        ]
+        assert events[1]["command"] == (
+            'write "/tmp/calculadora/main.py" --content="print(\'ok\')"'
+        )
+        mock_bridge.execute_command.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_streaming_admin_auto_mode_replays_execution_failure(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        brain.api_key = "test-key"
+        mock_bridge.execute_command = AsyncMock(
+            side_effect=[
+                (False, "tests failed", "AssertionError", "failed", "execution_failed", "app"),
+                (True, "fixed", "ok", "success", None, "app"),
+            ]
+        )
+
+        async def stream_failing_command(*args, **kwargs):
+            del args, kwargs
+            yield {
+                "type": "done",
+                "content": "",
+                "usage": None,
+                "tool_calls": [
+                    {
+                        "id": "call_test",
+                        "type": "function",
+                        "function": {
+                            "name": "bash",
+                            "arguments": '{"command": "pytest -q"}',
+                        },
+                    }
+                ],
+            }
+
+        async def stream_fix_command(*args, **kwargs):
+            del args, kwargs
+            yield {
+                "type": "done",
+                "content": "",
+                "usage": None,
+                "tool_calls": [
+                    {
+                        "id": "call_fix",
+                        "type": "function",
+                        "function": {
+                            "name": "write",
+                            "arguments": json.dumps({
+                                "path": "/tmp/app.py",
+                                "content": "print('fixed')",
+                            }),
+                        },
+                    }
+                ],
+            }
+
+        async def stream_final(*args, **kwargs):
+            del args, kwargs
+            yield {"type": "text", "content": "Corrigido e validado."}
+            yield {
+                "type": "done",
+                "content": "Corrigido e validado.",
+                "usage": None,
+                "tool_calls": None,
+            }
+
+        with patch.object(
+            brain.deepseek,
+            "chat_completion_streaming",
+            side_effect=[stream_failing_command(), stream_fix_command(), stream_final()],
+        ) as mock_stream:
+            events = [
+                event
+                async for event in brain.process_message_streaming(
+                    "Rode os testes e corrija se falhar",
+                    "test_session",
+                    user_id="irving",
+                    user_role="admin",
+                    auto_execute=True,
+                )
+            ]
+
+        event_types = [event["type"] for event in events]
+        assert event_types == [
+            "command",
+            "command_status",
+            "command_result",
+            "command",
+            "command_status",
+            "command_result",
+            "text",
+            "done",
+        ]
+        assert events[2]["status"] == "failed"
+        assert events[2]["reason_code"] == "execution_failed"
+        assert events[3]["command"] == 'write "/tmp/app.py" --content="print(\'fixed\')"'
+        replay_messages = mock_stream.call_args_list[1].args[0]
+        assert any("AssertionError" in message["content"] for message in replay_messages)
+        assert mock_bridge.execute_command.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_streaming_recovers_when_action_request_gets_empty_response(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        brain.api_key = "test-key"
+        mock_bridge.execute_command = AsyncMock(
+            return_value=(True, "created", "write output", "success", None, "calculadora")
+        )
+
+        async def stream_empty_done(*args, **kwargs):
+            del args, kwargs
+            yield {
+                "type": "done",
+                "content": "",
+                "usage": {"total_tokens": 10},
+                "tool_calls": None,
+            }
+
+        async def stream_retry_tool(*args, **kwargs):
+            del args, kwargs
+            yield {
+                "type": "done",
+                "content": "",
+                "usage": {"total_tokens": 5},
+                "tool_calls": [
+                    {
+                        "id": "call_write",
+                        "type": "function",
+                        "function": {
+                            "name": "write",
+                            "arguments": json.dumps({
+                                "path": "/tmp/calculadora/main.py",
+                                "content": "print('ok')",
+                            }),
+                        },
+                    }
+                ],
+            }
+
+        async def stream_final(*args, **kwargs):
+            del args, kwargs
+            yield {"type": "text", "content": "Projeto criado."}
+            yield {
+                "type": "done",
+                "content": "Projeto criado.",
+                "usage": None,
+                "tool_calls": None,
+            }
+
+        with patch.object(
+            brain.deepseek,
+            "chat_completion_streaming",
+            side_effect=[stream_empty_done(), stream_retry_tool(), stream_final()],
+        ) as mock_stream:
+            events = [
+                event
+                async for event in brain.process_message_streaming(
+                    "Crie uma calculadora gráfica em Python",
+                    "test_session",
+                    user_id="irving",
+                    user_role="admin",
+                    auto_execute=True,
+                )
+            ]
+
+        assert [event["type"] for event in events] == [
+            "command",
+            "command_status",
+            "command_result",
+            "text",
+            "done",
+        ]
+        assert events[0]["command"] == (
+            'write "/tmp/calculadora/main.py" --content="print(\'ok\')"'
+        )
+        repair_messages = mock_stream.call_args_list[1].args[0]
+        assert "CRITICAL TOOL REPAIR" in repair_messages[0]["content"]
+        mock_bridge.execute_command.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_streaming_filters_provider_reasoning_from_client(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        brain.api_key = "test-key"
+
+        async def stream_with_reasoning(*args, **kwargs):
+            del args, kwargs
+            yield {"type": "reasoning", "content": "internal chain of thought"}
+            yield {"type": "text", "content": "Resposta final."}
+            yield {
+                "type": "done",
+                "content": "Resposta final.",
+                "usage": None,
+                "tool_calls": None,
+            }
+
+        with patch.object(
+            brain.deepseek,
+            "chat_completion_streaming",
+            side_effect=[stream_with_reasoning()],
+        ):
+            events = [
+                event
+                async for event in brain.process_message_streaming(
+                    "Olá",
+                    "test_session",
+                    user_id="irving",
+                    user_role="admin",
+                    auto_execute=True,
+                )
+            ]
+
+        assert [event["type"] for event in events] == ["text", "done"]
+        assert all(event.get("content") != "internal chain of thought" for event in events)
 
     @pytest.mark.asyncio
     async def test_process_message_error_handling(self, mock_memory, mock_bridge):
@@ -741,6 +1104,13 @@ class TestDevSynapseBrain:
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
         assert brain._can_autoexecute_command('bash "rm -rf /"', user_role="admin") is False
+
+    def test_admin_auto_mode_gets_larger_iteration_budget(self, mock_memory, mock_bridge):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        assert brain._max_autoexec_rounds(auto_execute=True, user_role="admin") == 20
+        assert brain._max_autoexec_rounds(auto_execute=True, user_role="user") == 8
+        assert brain._max_autoexec_rounds(auto_execute=False, user_role="admin") == 5
 
     def test_prepare_messages_with_history(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)

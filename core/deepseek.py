@@ -54,6 +54,7 @@ class DeepSeekClient:
         tools: List[Dict],
         stream: bool,
         model: Optional[str] = None,
+        tool_choice: Any = "auto",
     ) -> Dict:
         thinking_config = {"type": "enabled" if self.thinking_enabled else "disabled"}
         payload: Dict[str, Any] = {
@@ -62,10 +63,11 @@ class DeepSeekClient:
             "max_tokens": self.max_tokens,
             "stream": stream,
             "tools": tools,
-            "tool_choice": "auto",
             "reasoning_effort": self.reasoning_effort,
             "thinking": thinking_config,
         }
+        if tools:
+            payload["tool_choice"] = tool_choice
         if not self.thinking_enabled:
             payload["temperature"] = self.temperature
         return payload
@@ -77,11 +79,18 @@ class DeepSeekClient:
         max_tokens: Optional[int] = None,
         thinking: Optional[Dict] = None,
         model: Optional[str] = None,
+        tool_choice: Any = "auto",
     ) -> Dict[str, Any]:
         """Non-streaming chat completion call."""
         url = f"{self.base_url}/chat/completions"
         request_model = model or self.model
-        payload = self._build_payload(messages, tools or [], stream=False, model=request_model)
+        payload = self._build_payload(
+            messages,
+            tools or [],
+            stream=False,
+            model=request_model,
+            tool_choice=tool_choice,
+        )
 
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
@@ -116,14 +125,24 @@ class DeepSeekClient:
         }
 
     async def chat_completion_streaming(
-        self, messages: List[Dict], tools: List[Dict], model: Optional[str] = None
+        self,
+        messages: List[Dict],
+        tools: List[Dict],
+        model: Optional[str] = None,
+        tool_choice: Any = "auto",
     ) -> AsyncIterator[Dict]:
         """Streaming chat completion, yielding delta chunks."""
         import httpx
 
         url = f"{self.base_url}/chat/completions"
         request_model = model or self.model
-        payload = self._build_payload(messages, tools, stream=True, model=request_model)
+        payload = self._build_payload(
+            messages,
+            tools,
+            stream=True,
+            model=request_model,
+            tool_choice=tool_choice,
+        )
 
         collected_content = ""
         collected_reasoning = ""

@@ -152,6 +152,8 @@ def apply_bootstrap(
             "LOG_FILE": LOGS_DIR / "devsynapse.log",
         }
     )
+    get_settings.cache_clear()
+    settings = get_settings()
 
     discovered_projects = _discover_git_projects(resolved_repos_root)
     registered_projects: list[dict[str, str]] = []

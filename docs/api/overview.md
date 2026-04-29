@@ -114,11 +114,17 @@ Purpose:
 ## Contract Notes
 
 - the frontend should not invent payload shapes
-- `ChatRequest.project_name` can carry explicit project context for a conversation turn
+- `ChatRequest.project_name` can carry explicit project context for a conversation turn;
+  once a conversation has a persisted project, later chat and execution requests for
+  that conversation must use the same project or omit the field
 - `ChatResponse.project_name` returns explicit or persisted conversation project context when available
 - `ChatResponse` carries `llm_usage` when DeepSeek usage metadata is available
-- `/chat/stream` returns SSE events: `text` chunks, `command` when extracted, `done` with usage metadata and resolved `project_name` when available
+- `/chat/stream` returns SSE events: `text` chunks, `command` when extracted, `command_status` and `command_result` when `ChatRequest.execute_command` enables automatic execution, and `done` with usage metadata and resolved `project_name` when available
+- `/chat/stream` does not expose provider reasoning content to clients; internal reasoning may still be used by the model provider but is not part of the UI contract
+- when `ChatRequest.execute_command` is enabled and an action-oriented request gets either an empty model response or intent text without a tool call, the backend retries that turn with a strict "emit one tool call or final answer" instruction before ending the stream
+- admin automatic streaming runs supported OpenCode commands without project allowlist confirmation and can continue after ordinary command execution failures by feeding the failure output back to the model; selected conversation project scope, validation, blacklist, plugin and authorization blocks still end the run
 - `/execute` returns structured execution status, reason code and project context
+- `/execute` normalizes common LLM placeholder paths such as `/home/user/projects`, `~/projects` and `/workspace` to the configured local repository/workspace roots before validation and execution; if a mutating command points outside the selected conversation project, execution is blocked with `project_scope_mismatch`, while read-only reference commands can inspect other allowed or registered repositories
 - `/chat/history`, `/conversations` and `/conversations/{conversation_id}` include persisted `project_name` when available
 - `/monitoring/stats` includes `llm_usage` aggregates, cache hit-rate telemetry, project-level breakdown, agent learning stats and budget status snapshots
 - `/monitoring/stats` also includes `llm_usage.knowledge` with memory, skill and nudge aggregates
@@ -130,7 +136,9 @@ Purpose:
 - `/feedback` updates conversation feedback and can create agent-learning signals used by future routing decisions
 - `/projects` returns registered project `name`, `type`, `priority`, `last_accessed` and `access_count`
 - `/admin/projects` returns registered projects with local `path` for administrative management
-- `POST /admin/projects` registers an existing local project directory; it does not scaffold files
+- `POST /admin/projects` registers an existing local project directory; with
+  `create_directory=true`, admins can create the directory first, defaulting to
+  `DEV_REPOS_ROOT/<project-slug>` when `path` is omitted
 - `POST /admin/projects` rejects duplicate project names; updates should be explicit future behavior
 
 ## Authentication Behavior
@@ -144,7 +152,7 @@ Purpose:
 - project memory writes require admin role for global memories or project mutation permission for project-scoped memories
 - admin routes require an admin role
 - admin users are trusted local operators: they can execute supported OpenCode tools without per-user project allowlists, and admin `bash` supports shell syntax
-- non-admin users keep project-scoped mutation permissions and conservative chat auto-execution
+- non-admin users keep project-scoped mutation permissions and conservative chat auto-execution; the frontend "Aprovar tudo" mode removes repeated confirmation clicks only for commands the backend still authorizes
 - frontend currently redirects to `/login` on `401`
 
 ## Contributor Rule

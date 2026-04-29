@@ -26,6 +26,30 @@ class ConversationStore:
         conn.row_factory = sqlite3.Row
         return conn
 
+    def get_conversation_project_name(self, conversation_id: Optional[str]) -> Optional[str]:
+        """Return the persisted project scope for a conversation, when one exists."""
+
+        if not conversation_id:
+            return None
+
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT conversation_project_name
+            FROM conversations
+            WHERE conversation_id = ?
+              AND conversation_project_name IS NOT NULL
+              AND TRIM(conversation_project_name) != ''
+            ORDER BY timestamp DESC
+            LIMIT 1
+            """,
+            (conversation_id,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return row["conversation_project_name"] if row else None
+
     async def get_conversation_context(self, conversation_id: Optional[str] = None) -> Dict:
         """Obtém contexto para uma conversa"""
 

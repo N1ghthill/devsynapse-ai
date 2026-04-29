@@ -1,26 +1,42 @@
 import { useState, useRef, useEffect } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
   BookOpenText,
   ClipboardList,
   Container,
   Download,
   FileSearch,
   FlaskConical,
+  FolderOpen,
+  FolderPlus,
   GitPullRequestArrow,
   ListTodo,
   Loader2,
+  LockKeyhole,
   MessageSquarePlus,
   Pencil,
   Search,
+  ShieldCheck,
   Trash2,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { ChatMessage } from '../components/ChatMessage';
 import { ChatInput } from '../components/ChatInput';
-import { chatApi, dashboardApi, settingsApi } from '../api/client';
-import type { BudgetWindowStatus, ConversationSummary, Message, ProjectInfo, TokenUsage } from '../types';
+import { adminApi, chatApi, dashboardApi, settingsApi } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
+import type {
+  BudgetWindowStatus,
+  ConversationSummary,
+  Message,
+  ProjectInfo,
+  TokenUsage,
+  ToolRun,
+} from '../types';
 
 const CONVERSATION_STORAGE_KEY = 'devsynapse_conversation_id';
+const AUTO_APPROVE_STORAGE_KEY = 'devsynapse_auto_approve_commands';
 
 const workflowTemplates: Array<{
   title: string;
@@ -29,38 +45,38 @@ const workflowTemplates: Array<{
   icon: LucideIcon;
 }> = [
   {
-    title: 'Rodar testes',
-    description: 'Encontra o comando de teste do projeto e propõe execução.',
+    title: 'Suite de testes',
+    description: 'Detecta o comando correto e prepara a execução.',
     prompt: 'Analise o projeto selecionado e proponha o comando mais seguro para executar a suite de testes.',
     icon: FlaskConical,
   },
   {
-    title: 'Explicar teste falho',
-    description: 'Inspeciona a saída de falha e aponta a provável correção.',
+    title: 'Falha de teste',
+    description: 'Organiza causa provável, evidências e próxima correção.',
     prompt: 'Revise a última falha de teste ou me peça a saída; explique a causa provável e a próxima correção.',
     icon: ClipboardList,
   },
   {
-    title: 'Buscar TODOs',
-    description: 'Lista comentários TODO e FIXME com prioridades de limpeza.',
+    title: 'TODOs críticos',
+    description: 'Lista débitos comentados por prioridade.',
     prompt: 'Busque comentários TODO e FIXME neste projeto e resuma os itens de limpeza mais prioritários.',
     icon: ListTodo,
   },
   {
-    title: 'Resumir repositório',
-    description: 'Mapeia stack, estrutura e principais pontos de entrada.',
+    title: 'Mapa do repo',
+    description: 'Resume stack, estrutura e pontos de entrada.',
     prompt: 'Resuma a estrutura, stack tecnológica e pontos de entrada mais importantes do repositório selecionado.',
     icon: BookOpenText,
   },
   {
-    title: 'Criar changelog',
-    description: 'Gera rascunho de release notes do histórico recente.',
+    title: 'Changelog',
+    description: 'Gera release notes do histórico recente.',
     prompt: 'Crie um rascunho de changelog conciso a partir do histórico git recente deste projeto.',
     icon: GitPullRequestArrow,
   },
   {
-    title: 'Inspecionar Docker',
-    description: 'Revisa arquivos de container e comandos de execução local.',
+    title: 'Docker',
+    description: 'Revisa containers e comandos locais.',
     prompt: 'Inspecione a configuração Docker deste projeto e explique como executá-lo localmente.',
     icon: Container,
   },
@@ -71,9 +87,12 @@ const reasonLabels: Record<string, string> = {
   authorization_failed: 'Bloqueado por permissão ou escopo de projeto.',
   execution_failed: 'O comando foi aceito, mas falhou durante a execução.',
   plugin_cancelled: 'A execução foi cancelada por uma regra interna do sistema.',
+  project_scope_mismatch: 'Bloqueado porque o comando tentou sair do projeto da conversa.',
 };
 
 export function Chat() {
+  const { auth } = useAuth();
+  const isAdmin = auth.user?.role === 'admin';
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationQuery, setConversationQuery] = useState('');
@@ -88,16 +107,35 @@ export function Chat() {
   );
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
+  const [showProjectMenu, setShowProjectMenu] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [projectDraftName, setProjectDraftName] = useState('');
+  const [projectDraftPath, setProjectDraftPath] = useState('');
+  const [projectError, setProjectError] = useState<string | null>(null);
+  const [autoApprove, setAutoApprove] = useState(
+    () => localStorage.getItem(AUTO_APPROVE_STORAGE_KEY) === 'true'
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const pinnedToLatestRef = useRef(true);
   const messageIdSequenceRef = useRef(0);
+  const toolRunSequenceRef = useRef(0);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (pinnedToLatestRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [messages, isLoading]);
 
   useEffect(() => {
     localStorage.setItem(CONVERSATION_STORAGE_KEY, conversationId);
   }, [conversationId]);
+
+  useEffect(() => {
+    localStorage.setItem(AUTO_APPROVE_STORAGE_KEY, String(autoApprove));
+  }, [autoApprove]);
 
   const loadConversationList = async () => {
     try {
@@ -167,7 +205,7 @@ export function Chat() {
 
     const loadProjects = async () => {
       try {
-        const list = await settingsApi.listProjects();
+        const list = isAdmin ? await adminApi.listProjects() : await settingsApi.listProjects();
         if (!cancelled) {
           setProjects(list);
         }
@@ -182,7 +220,7 @@ export function Chat() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAdmin]);
 
   const updateMessage = (messageId: string, updates: Partial<Message>) => {
     setMessages((prev) =>
@@ -190,9 +228,61 @@ export function Chat() {
     );
   };
 
+  const syncScrollState = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const distanceToBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    const isNearBottom = distanceToBottom < 140;
+
+    pinnedToLatestRef.current = isNearBottom;
+    setShowScrollTop(container.scrollTop > 280);
+    setShowJumpToLatest(!isNearBottom);
+  };
+
+  const scrollToLatest = () => {
+    pinnedToLatestRef.current = true;
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    setShowJumpToLatest(false);
+  };
+
+  const scrollToStart = () => {
+    pinnedToLatestRef.current = false;
+    messagesContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const createMessageId = () => {
     messageIdSequenceRef.current += 1;
     return `msg_${conversationId}_${messageIdSequenceRef.current}`;
+  };
+
+  const createToolRunId = () => {
+    toolRunSequenceRef.current += 1;
+    return `tool_${conversationId}_${toolRunSequenceRef.current}`;
+  };
+
+  const updateToolRun = (
+    messageId: string,
+    command: string,
+    updates: Partial<ToolRun>
+  ) => {
+    setMessages((prev) =>
+      prev.map((message) => {
+        if (message.id !== messageId) return message;
+        const existingRuns = message.toolRuns || [];
+        const index = [...existingRuns]
+          .reverse()
+          .findIndex((run) => run.command === command && run.status !== 'success');
+        const actualIndex = index === -1 ? -1 : existingRuns.length - 1 - index;
+        if (actualIndex === -1) {
+          return message;
+        }
+        const nextRuns = [...existingRuns];
+        nextRuns[actualIndex] = { ...nextRuns[actualIndex], ...updates };
+        return { ...message, toolRuns: nextRuns };
+      })
+    );
   };
 
   const summarizeUsage = (items: Message[]): TokenUsage | null => {
@@ -251,16 +341,33 @@ export function Chat() {
     return {
       severity: highest.level,
       text: `${
-        highest.window === 'daily' ? 'Daily' : 'Monthly'
-      } budget at ${highest.usage_pct.toFixed(1)}% (${formatUsd(
+        highest.window === 'daily' ? 'Diário' : 'Mensal'
+      } em ${highest.usage_pct.toFixed(1)}% (${formatUsd(
         highest.actual_cost_usd
       )} / ${formatUsd(highest.budget_usd)}).`,
     };
   })();
 
-  const currentConversation = conversations.find((conversation) => conversation.id === conversationId);
-  const currentScopeProject = selectedProject || null;
+  const currentConversation = conversations.find(
+    (conversation) => conversation.id === conversationId
+  );
+  const messageProject = messages.find((message) => message.projectName)?.projectName || null;
+  const lockedProject = currentConversation?.project_name || messageProject || null;
+  const currentScopeProject = lockedProject || selectedProject || null;
+  const projectScopeLocked = Boolean(lockedProject);
   const conversationUsage = summarizeUsage(messages);
+  const toolRunTotal = messages.reduce(
+    (total, message) =>
+      total + (message.toolRuns?.length || 0) + (message.command ? 1 : 0),
+    0
+  );
+  const activeToolRunTotal = messages.reduce(
+    (total, message) =>
+      total +
+      (message.toolRuns?.filter((toolRun) => toolRun.status === 'running').length || 0) +
+      (message.commandStatus === 'running' ? 1 : 0),
+    0
+  );
 
   const downloadUsageCsv = async () => {
     const csv = await chatApi.exportUsageCsv();
@@ -273,6 +380,74 @@ export function Chat() {
     anchor.click();
     document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
+  };
+
+  const startConversationForProject = (projectName: string) => {
+    pinnedToLatestRef.current = true;
+    setMessages([]);
+    setSelectedProject(projectName);
+    const nextConversationId = `session_${Date.now()}`;
+    setConversationId(nextConversationId);
+    localStorage.setItem(CONVERSATION_STORAGE_KEY, nextConversationId);
+  };
+
+  const handleProjectSelection = (projectName: string) => {
+    setProjectError(null);
+    setShowProjectMenu(false);
+    if (projectScopeLocked && projectName !== lockedProject) {
+      startConversationForProject(projectName);
+      return;
+    }
+    setSelectedProject(projectName);
+  };
+
+  const getRequestError = (error: unknown, fallback: string) => {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'response' in error &&
+      typeof error.response === 'object' &&
+      error.response !== null &&
+      'data' in error.response &&
+      typeof error.response.data === 'object' &&
+      error.response.data !== null &&
+      'detail' in error.response.data &&
+      typeof error.response.data.detail === 'string'
+    ) {
+      return error.response.data.detail;
+    }
+
+    return fallback;
+  };
+
+  const handleCreateProject = async () => {
+    const name = projectDraftName.trim();
+    if (!name || creatingProject || !isAdmin) return;
+
+    setCreatingProject(true);
+    setProjectError(null);
+    try {
+      const created = await adminApi.createProject({
+        name,
+        ...(projectDraftPath.trim() ? { path: projectDraftPath.trim() } : {}),
+        type: 'project',
+        priority: 'medium',
+        create_directory: true,
+      });
+      setProjects((prev) => {
+        const withoutDuplicate = prev.filter((project) => project.name !== created.name);
+        return [...withoutDuplicate, created].sort((a, b) => a.name.localeCompare(b.name));
+      });
+      setProjectDraftName('');
+      setProjectDraftPath('');
+      setShowProjectMenu(false);
+      startConversationForProject(created.name);
+      void loadConversationList();
+    } catch (error) {
+      setProjectError(getRequestError(error, 'Falha ao criar projeto'));
+    } finally {
+      setCreatingProject(false);
+    }
   };
 
   const describeExecution = (
@@ -308,7 +483,7 @@ export function Chat() {
       role: 'user',
       content: prompt,
       timestamp: new Date().toISOString(),
-      projectName: selectedProject || null,
+      projectName: currentScopeProject,
     };
 
     const assistantMessage: Message = {
@@ -316,7 +491,7 @@ export function Chat() {
       role: 'assistant',
       content: '',
       timestamp: new Date().toISOString(),
-      projectName: selectedProject || null,
+      projectName: currentScopeProject,
     };
 
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
@@ -327,7 +502,8 @@ export function Chat() {
         {
           message: prompt,
           conversation_id: conversationId,
-          project_name: selectedProject || undefined,
+          project_name: currentScopeProject || undefined,
+          execute_command: autoApprove,
         },
         (token) => {
           setMessages((prev) =>
@@ -338,14 +514,52 @@ export function Chat() {
             )
           );
         },
-        (command) => {
+        (command, autoExecute) => {
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantMessageId
-                ? { ...msg, command, commandStatus: 'proposed' }
+                ? autoExecute
+                  ? {
+                      ...msg,
+                      command: undefined,
+                      commandStatus: undefined,
+                      toolRuns: [
+                        ...(msg.toolRuns || []),
+                        {
+                          id: createToolRunId(),
+                          command,
+                          status: 'proposed',
+                          projectName: msg.projectName,
+                        },
+                      ],
+                    }
+                  : { ...msg, command, commandStatus: 'proposed' }
                 : msg
             )
           );
+        },
+        (command, status) => {
+          updateToolRun(assistantMessageId, command, {
+            status,
+            result: status === 'running' ? 'Aguardando retorno do backend...' : undefined,
+          });
+        },
+        (command, result) => {
+          updateToolRun(assistantMessageId, command, {
+            status: result.status,
+            result: result.output || result.message,
+            message: describeExecution(
+              result.status,
+              result.reason_code,
+              result.message,
+              result.project_name
+            ),
+            reasonCode: result.reason_code,
+            projectName: result.project_name,
+          });
+          if (result.project_name && !projectScopeLocked) {
+            setSelectedProject(result.project_name);
+          }
         },
         (reasoning) => {
           setMessages((prev) =>
@@ -366,7 +580,7 @@ export function Chat() {
                   : msg
             )
           );
-          if (projectName) {
+          if (projectName && !projectScopeLocked) {
             setSelectedProject(projectName);
           }
           setIsLoading(false);
@@ -396,40 +610,95 @@ export function Chat() {
     }
   };
 
-  const handleExecute = async (messageId: string) => {
+  const handleExecute = async (messageId: string, toolRunId?: string) => {
     const targetMessage = messages.find((message) => message.id === messageId);
-    if (!targetMessage?.command) return;
+    const targetToolRun = toolRunId
+      ? targetMessage?.toolRuns?.find((toolRun) => toolRun.id === toolRunId)
+      : undefined;
+    const command = targetToolRun?.command || targetMessage?.command;
+    if (!targetMessage || !command) return;
 
-    updateMessage(messageId, {
-      commandStatus: 'running',
-      commandResult: 'Aguardando retorno do backend...',
-    });
+    if (targetToolRun) {
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                toolRuns: (message.toolRuns || []).map((toolRun) =>
+                  toolRun.id === toolRunId
+                    ? {
+                        ...toolRun,
+                        status: 'running',
+                        result: 'Aguardando retorno do backend...',
+                      }
+                    : toolRun
+                ),
+              }
+            : message
+        )
+      );
+    } else {
+      updateMessage(messageId, {
+        commandStatus: 'running',
+        commandResult: 'Aguardando retorno do backend...',
+      });
+    }
 
     try {
       const response = await chatApi.executeCommand({
         conversation_id: conversationId,
-        command: targetMessage.command,
+        command,
         confirm: true,
         project_name:
+          targetToolRun?.projectName ||
           targetMessage.projectName ||
-          selectedProject ||
+          currentScopeProject ||
           currentConversation?.project_name ||
           undefined,
       });
 
-      updateMessage(messageId, {
-        commandStatus: response.status,
-        commandResult: response.output || response.message,
-        reasonCode: response.reason_code,
-        projectName: response.project_name,
-        commandInterpretation: response.interpretation,
-        commandNote: describeExecution(
-          response.status,
-          response.reason_code,
-          response.message,
-          response.project_name
-        ),
-      });
+      if (targetToolRun) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === messageId
+              ? {
+                  ...message,
+                  toolRuns: (message.toolRuns || []).map((toolRun) =>
+                    toolRun.id === toolRunId
+                      ? {
+                          ...toolRun,
+                          status: response.status,
+                          result: response.output || response.message,
+                          message: describeExecution(
+                            response.status,
+                            response.reason_code,
+                            response.message,
+                            response.project_name
+                          ),
+                          reasonCode: response.reason_code,
+                          projectName: response.project_name,
+                        }
+                      : toolRun
+                  ),
+                }
+              : message
+          )
+        );
+      } else {
+        updateMessage(messageId, {
+          commandStatus: response.status,
+          commandResult: response.output || response.message,
+          reasonCode: response.reason_code,
+          projectName: response.project_name,
+          commandInterpretation: response.interpretation,
+          commandNote: describeExecution(
+            response.status,
+            response.reason_code,
+            response.message,
+            response.project_name
+          ),
+        });
+      }
     } catch (error) {
       const detail =
         typeof error === 'object' &&
@@ -445,15 +714,38 @@ export function Chat() {
           ? error.response.data.detail
           : 'Falha ao executar comando';
 
-      updateMessage(messageId, {
-        commandStatus: 'failed',
-        commandResult: detail,
-        commandNote: describeExecution('failed', undefined, detail),
-      });
+      if (targetToolRun) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === messageId
+              ? {
+                  ...message,
+                  toolRuns: (message.toolRuns || []).map((toolRun) =>
+                    toolRun.id === toolRunId
+                      ? {
+                          ...toolRun,
+                          status: 'failed',
+                          result: detail,
+                          message: describeExecution('failed', undefined, detail),
+                        }
+                      : toolRun
+                  ),
+                }
+              : message
+          )
+        );
+      } else {
+        updateMessage(messageId, {
+          commandStatus: 'failed',
+          commandResult: detail,
+          commandNote: describeExecution('failed', undefined, detail),
+        });
+      }
     }
   };
 
   const handleClear = () => {
+    pinnedToLatestRef.current = true;
     setMessages([]);
     const nextConversationId = `session_${Date.now()}`;
     setConversationId(nextConversationId);
@@ -464,6 +756,7 @@ export function Chat() {
     const nextConversation = conversations.find(
       (conversation) => conversation.id === nextConversationId
     );
+    pinnedToLatestRef.current = true;
     setSelectedProject(nextConversation?.project_name || '');
     setConversationId(nextConversationId);
   };
@@ -583,16 +876,22 @@ export function Chat() {
       <div className="chat-rail-header">
         <div>
           <h2>Conversas</h2>
-          <p>Histórico recente da sessão local.</p>
+          <p>{conversations.length} sessões locais</p>
         </div>
-        <button className="new-chat-btn" onClick={handleClear} type="button">
-          <MessageSquarePlus size={16} />
-          <span>Nova</span>
-        </button>
-        <button className="new-chat-btn secondary" onClick={() => void downloadUsageCsv()} type="button">
-          <Download size={16} />
-          <span>CSV</span>
-        </button>
+        <div className="rail-actions">
+          <button className="new-chat-btn" onClick={handleClear} type="button">
+            <MessageSquarePlus size={16} />
+            <span>Nova</span>
+          </button>
+          <button
+            className="new-chat-btn secondary"
+            onClick={() => void downloadUsageCsv()}
+            type="button"
+          >
+            <Download size={16} />
+            <span>CSV</span>
+          </button>
+        </div>
       </div>
 
       <div className="conversation-search">
@@ -632,79 +931,193 @@ export function Chat() {
   const renderChatPanel = () => (
     <>
       <div className="chat-header">
-        <div>
-          <h1>DevSynapse Chat</h1>
-          <p className="chat-subtitle">
-            {currentConversation?.title || 'Sessão atual'}
-          </p>
-          {projects.length > 0 && (
-            <div className="chat-project-selector">
-              <select
-                value={selectedProject}
-                onChange={(e) => setSelectedProject(e.target.value)}
-                aria-label="Selecionar projeto"
-              >
-                <option value="">Todos os projetos</option>
-                {projects.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="chat-scope-line">
-            <span className={currentScopeProject ? 'scope-chip active' : 'scope-chip'}>
-              {currentScopeProject ? `Project: ${currentScopeProject}` : 'Scope: all projects'}
-            </span>
+        <div className="chat-header-main">
+          <div className="workspace-title-row">
+            <span className="workspace-kicker">Workspace local</span>
+            <span className="workspace-live-dot">Pronto</span>
           </div>
-          {budgetSummary && (
-            <div className={`chat-budget-banner banner-${budgetSummary.severity}`}>
-              {budgetSummary.text}
-            </div>
-          )}
-          {conversationUsage && (
-            <div className="chat-usage-summary">
-              <span className="usage-pill">
-                {conversationUsage.model || conversationUsage.provider || 'LLM'}
-              </span>
-              <span className="usage-pill">
-                In: {conversationUsage.prompt_tokens.toLocaleString()}
-              </span>
-              <span className="usage-pill">
-                Out: {conversationUsage.completion_tokens.toLocaleString()}
-              </span>
-              <span className="usage-pill">
-                Total: {conversationUsage.total_tokens.toLocaleString()}
-              </span>
-              <span className="usage-pill usage-pill-cost">
-                Custo: {formatUsd(conversationUsage.estimated_cost_usd)}
-              </span>
-            </div>
-          )}
+          <h1>DevSynapse</h1>
+          <p className="chat-subtitle">
+            {currentConversation?.title || 'Nova sessão de desenvolvimento'}
+          </p>
         </div>
         <div className="chat-header-actions">
-          <span className="session-id">
-            Session: {conversationId.slice(0, 20)}...
-          </span>
-          <button className="clear-btn" onClick={handleClear}>
-            <Trash2 size={16} />
-            Clear
+          <button
+            className={`header-auto-approve ${autoApprove ? 'active' : ''}`}
+            onClick={() => setAutoApprove((enabled) => !enabled)}
+            type="button"
+            aria-pressed={autoApprove}
+            title={
+              isAdmin
+                ? 'Admin: executar comandos suportados sem confirmação por etapa'
+                : 'Executar comandos autorizados automaticamente'
+            }
+          >
+            <ShieldCheck size={15} />
+            <span>
+              {autoApprove
+                ? isAdmin
+                  ? 'Admin automático'
+                  : 'Execução automática'
+                : 'Revisão manual'}
+            </span>
           </button>
+          <span className="session-id">
+            {conversationId.slice(0, 20)}...
+          </span>
+          <button className="clear-btn" onClick={handleClear} type="button">
+            <Trash2 size={16} />
+            Limpar
+          </button>
+        </div>
+
+        <div className="chat-context-strip">
+          <div className="context-project-control">
+            <span className="context-label">Projeto</span>
+            <div className="project-menu-wrap">
+              <button
+                className="project-menu-trigger"
+                type="button"
+                onClick={() => setShowProjectMenu((visible) => !visible)}
+                aria-expanded={showProjectMenu}
+              >
+                {projectScopeLocked ? <LockKeyhole size={15} /> : <FolderOpen size={15} />}
+                <span>{currentScopeProject || 'Selecionar projeto'}</span>
+              </button>
+
+              {showProjectMenu && (
+                <div className="project-menu">
+                  <div className="project-menu-head">
+                    <strong>Projeto da conversa</strong>
+                    <button
+                      type="button"
+                      className="project-menu-close"
+                      onClick={() => setShowProjectMenu(false)}
+                      aria-label="Fechar menu de projetos"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+
+                  {projectScopeLocked && (
+                    <div className="project-lock-note">
+                      <LockKeyhole size={14} />
+                      <span>Esta conversa está travada em {lockedProject}.</span>
+                    </div>
+                  )}
+
+                  <div className="project-menu-list">
+                    {projects.map((project) => (
+                      <button
+                        key={project.name}
+                        type="button"
+                        className={`project-menu-item ${
+                          project.name === currentScopeProject ? 'active' : ''
+                        }`}
+                        onClick={() => handleProjectSelection(project.name)}
+                      >
+                        <span>{project.name}</span>
+                        {project.path && <small>{project.path}</small>}
+                      </button>
+                    ))}
+                    {projects.length === 0 && (
+                      <span className="project-menu-empty">Nenhum projeto registrado.</span>
+                    )}
+                  </div>
+
+                  {isAdmin && (
+                    <div className="project-create-panel">
+                      <label htmlFor="project-name-input">Novo projeto</label>
+                      <div className="project-create-row">
+                        <input
+                          id="project-name-input"
+                          type="text"
+                          value={projectDraftName}
+                          onChange={(event) => setProjectDraftName(event.target.value)}
+                          placeholder="nome-do-projeto"
+                        />
+                        <button
+                          type="button"
+                          className="project-create-btn"
+                          onClick={() => void handleCreateProject()}
+                          disabled={creatingProject || !projectDraftName.trim()}
+                        >
+                          <FolderPlus size={15} />
+                          <span>{creatingProject ? 'Criando' : 'Criar'}</span>
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={projectDraftPath}
+                        onChange={(event) => setProjectDraftPath(event.target.value)}
+                        placeholder="caminho opcional; vazio usa a pasta de repositórios"
+                      />
+                      {projectError && <p className="project-menu-error">{projectError}</p>}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            {projectScopeLocked && (
+              <span className="scope-chip locked">
+                <LockKeyhole size={13} />
+                Travado
+              </span>
+            )}
+            {!projectScopeLocked && projects.length === 0 && (
+              <span className="scope-chip">Sem projetos</span>
+            )}
+            <span className={currentScopeProject ? 'scope-chip active' : 'scope-chip'}>
+              {currentScopeProject ? currentScopeProject : 'Escopo global'}
+            </span>
+            {projectScopeLocked && selectedProject && selectedProject !== lockedProject && (
+              <div className="project-lock-note inline">
+                Abra uma nova conversa para trocar de projeto.
+              </div>
+            )}
+          </div>
+
+          <div className="context-metrics" aria-label="Resumo da sessão">
+            <span className="context-pill">
+              <strong>{messages.length.toLocaleString()}</strong>
+              <span>mensagens</span>
+            </span>
+            <span className="context-pill">
+              <strong>{(conversationUsage?.total_tokens || 0).toLocaleString()}</strong>
+              <span>tokens</span>
+            </span>
+            <span className="context-pill">
+              <strong>{formatUsd(conversationUsage?.estimated_cost_usd || 0)}</strong>
+              <span>custo</span>
+            </span>
+            <span className={activeToolRunTotal > 0 ? 'context-pill active' : 'context-pill'}>
+              <strong>{toolRunTotal.toLocaleString()}</strong>
+              <span>{activeToolRunTotal > 0 ? 'rodando' : 'execuções'}</span>
+            </span>
+            {budgetSummary && (
+              <div className={`chat-budget-banner banner-${budgetSummary.severity}`}>
+                {budgetSummary.text}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="messages-container">
+      <div
+        className="messages-container"
+        ref={messagesContainerRef}
+        onScroll={syncScrollState}
+      >
         {!hasMessages && !isLoading && (
           <div className="empty-state">
             <div className="empty-icon">
               <FileSearch size={44} />
             </div>
-            <h2>Start with a local workflow</h2>
+            <h2>Escolha um fluxo</h2>
             <p>
-              {selectedProject
-                ? `Selected project: ${selectedProject}`
-                : 'Choose a project or start with read-only repository discovery.'}
+              {currentScopeProject
+                ? `Projeto ativo: ${currentScopeProject}`
+                : 'Escopo global ativo para descoberta inicial.'}
             </p>
             <div className="workflow-templates">
               {workflowTemplates.map((template) => {
@@ -755,7 +1168,40 @@ export function Chat() {
         <div ref={messagesEndRef} />
       </div>
 
-      <ChatInput onSend={handleSend} isLoading={isLoading} />
+      {(showScrollTop || showJumpToLatest) && (
+        <div className="chat-scroll-controls" aria-label="Navegação da conversa">
+          {showScrollTop && (
+            <button
+              type="button"
+              className="chat-scroll-btn"
+              onClick={scrollToStart}
+              aria-label="Voltar ao topo da conversa"
+            >
+              <ArrowUp size={15} />
+              <span>Topo</span>
+            </button>
+          )}
+          {showJumpToLatest && (
+            <button
+              type="button"
+              className="chat-scroll-btn primary"
+              onClick={scrollToLatest}
+              aria-label="Ir para as mensagens recentes"
+            >
+              <ArrowDown size={15} />
+              <span>Recente</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      <ChatInput
+        onSend={handleSend}
+        isLoading={isLoading}
+        autoApprove={autoApprove}
+        isAdmin={isAdmin}
+        onAutoApproveChange={setAutoApprove}
+      />
     </>
   );
 

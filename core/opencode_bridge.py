@@ -128,9 +128,65 @@ class OpenCodeBridge:
             return False, error_msg, None, "blocked", "validation_failed", project_name
         
         command_type, args = validation_result[2], validation_result[3]
+        if project_name and project_name not in self.known_projects:
+            error_msg = f"Projeto selecionado não está registrado: {project_name}"
+            execution_time = time.time() - start_time
+            self.monitoring_system.log_command_execution(
+                command_type="authorization_failed",
+                command_text=command[:200],
+                success=False,
+                execution_time=execution_time,
+                user_id=user_id,
+                project_name=project_name,
+                error_message=error_msg,
+            )
+            return False, error_msg, None, "blocked", "authorization_failed", project_name
+
+        args = self._normalize_placeholder_command_args(command_type, args)
         resolved_project_name = self._infer_project_name(command_type, args, project_name)
+        if (
+            project_name
+            and resolved_project_name
+            and resolved_project_name != project_name
+            and self._project_scope_path_operands(command_type, args)
+        ):
+            error_msg = (
+                f"Comando aponta para o projeto '{resolved_project_name}', mas esta conversa "
+                f"está travada no projeto '{project_name}'"
+            )
+            execution_time = time.time() - start_time
+            self.monitoring_system.log_command_execution(
+                command_type="project_scope_mismatch",
+                command_text=command[:200],
+                success=False,
+                execution_time=execution_time,
+                user_id=user_id,
+                project_name=project_name,
+                error_message=error_msg,
+            )
+            return False, error_msg, None, "blocked", "project_scope_mismatch", project_name
+
         effective_project_name = project_name or resolved_project_name
         args = self._normalize_file_command_args(command_type, args, effective_project_name)
+        if project_name:
+            scoped, scope_message = self._validate_command_paths_inside_project(
+                command_type,
+                args,
+                project_name,
+            )
+            if not scoped:
+                execution_time = time.time() - start_time
+                self.monitoring_system.log_command_execution(
+                    command_type="project_scope_mismatch",
+                    command_text=command[:200],
+                    success=False,
+                    execution_time=execution_time,
+                    user_id=user_id,
+                    project_name=project_name,
+                    error_message=scope_message,
+                )
+                return False, scope_message, None, "blocked", "project_scope_mismatch", project_name
+
         if (
             command_type in {"read", "edit", "write"}
             and not trusted_admin
@@ -233,6 +289,47 @@ class OpenCodeBridge:
         )
 
         return success, message, output, status, reason_code, effective_project_name
+
+    def _normalize_placeholder_command_args(
+        self,
+        command_type: Optional[str],
+        args: Optional[List],
+    ) -> Optional[List]:
+        """Map common LLM placeholder paths to this machine's configured roots."""
+
+        if not args:
+            return args
+
+        normalized = list(args)
+        if command_type in {"read", "edit", "write", "glob"} and normalized[0]:
+            normalized[0] = self._normalize_placeholder_path_text(str(normalized[0]))
+        elif command_type == "bash" and normalized[0]:
+            normalized[0] = self._normalize_placeholder_path_text(str(normalized[0]))
+
+        return normalized
+
+    @staticmethod
+    def _normalize_placeholder_path_text(text: str) -> str:
+        settings = get_settings()
+        repos_root = str(settings.dev_repos_root.expanduser().resolve())
+        workspace_root = str(settings.dev_workspace_root.expanduser().resolve())
+
+        replacements = [
+            (r"(?<![\w/])(?:/home/user|/home/coder|/Users/user)/projects(?P<rest>/[^\s\"']*)?", repos_root),
+            (r"(?<![\w/])(?:~|\$HOME)/projects(?P<rest>/[^\s\"']*)?", repos_root),
+            (r"(?<![\w/])/workspace/projects(?P<rest>/[^\s\"']*)?", repos_root),
+            (r"(?<![\w/])/workspace(?P<rest>/[^\s\"']*)?", repos_root),
+            (r"(?<![\w/])(?:/home/user|/home/coder|/Users/user)(?P<rest>/[^\s\"']*)?", workspace_root),
+        ]
+
+        normalized = text
+        for pattern, root in replacements:
+            normalized = re.sub(
+                pattern,
+                lambda match, target=root: str(Path(target) / (match.group("rest") or "").lstrip("/")),
+                normalized,
+            )
+        return normalized
     
     def _validate_command(
         self,
@@ -479,6 +576,64 @@ class OpenCodeBridge:
             path = project_root / path
         return path.resolve()
 
+    def _validate_command_paths_inside_project(
+        self,
+        command_type: Optional[str],
+        args: Optional[List],
+        project_name: str,
+    ) -> Tuple[bool, str]:
+        """Keep mutating actions inside the explicitly selected chat project."""
+
+        if project_name not in self.known_projects:
+            return False, f"Projeto selecionado não está registrado: {project_name}"
+
+        project_root = Path(self.known_projects[project_name]["path"]).expanduser().resolve()
+        for raw_path in self._project_scope_path_operands(command_type, args):
+            resolved_path = self._resolve_command_path(raw_path, project_root)
+            try:
+                if resolved_path.is_relative_to(project_root):
+                    continue
+            except ValueError:
+                pass
+
+            return (
+                False,
+                (
+                    f"Comando não pode acessar caminho fora do projeto '{project_name}': "
+                    f"{resolved_path}"
+                ),
+            )
+
+        return True, "Projeto respeitado"
+
+    def _project_scope_path_operands(
+        self,
+        command_type: Optional[str],
+        args: Optional[List],
+    ) -> List[str]:
+        if not args:
+            return []
+
+        if command_type in {"edit", "write"}:
+            return [str(args[0])] if args[0] else []
+
+        if command_type != "bash":
+            return []
+
+        try:
+            parts = shlex.split(str(args[0]))
+        except ValueError:
+            return []
+
+        if not parts:
+            return []
+
+        first_cmd = parts[0].lower()
+        if first_cmd not in self.admin_only_bash_commands:
+            return []
+
+        return self._mutation_path_operands(f"bash:{first_cmd}", args)
+
     def _normalize_file_command_args(
         self,
         command_type: Optional[str],
@@ -505,11 +660,8 @@ class OpenCodeBridge:
     ) -> Optional[str]:
         """Infer project context from an explicit project name or command arguments."""
 
-        if explicit_project_name and explicit_project_name in self.known_projects:
-            return explicit_project_name
-
         if command_type is None or not args:
-            return None
+            return explicit_project_name if explicit_project_name in self.known_projects else None
 
         candidates = []
         main_arg = args[0]
@@ -529,8 +681,58 @@ class OpenCodeBridge:
             resolved_project = self._resolve_project_from_text(candidate)
             if resolved_project:
                 return resolved_project
+            repos_project = self._resolve_project_from_repos_path(candidate)
+            if repos_project:
+                return repos_project
+
+        if explicit_project_name and explicit_project_name in self.known_projects:
+            return explicit_project_name
 
         return None
+
+    def _resolve_project_from_repos_path(self, text: str) -> Optional[str]:
+        if not text or not self._looks_like_path_reference(text):
+            return None
+
+        try:
+            path = Path(text).expanduser().resolve()
+        except Exception:
+            return None
+
+        repos_root = get_settings().dev_repos_root.expanduser().resolve()
+        try:
+            relative_path = path.relative_to(repos_root)
+        except ValueError:
+            return None
+
+        if not relative_path.parts:
+            return None
+        project_name = relative_path.parts[0]
+        return project_name if project_name and not project_name.startswith(".") else None
+
+    @staticmethod
+    def _looks_like_path_reference(text: str) -> bool:
+        stripped = str(text).strip()
+        if not stripped:
+            return False
+        return (
+            stripped.startswith(("/", "~", ".", "$HOME"))
+            or "/" in stripped
+            or "\\" in stripped
+        )
+
+    def _register_repos_project_if_needed(self, project_name: Optional[str]) -> None:
+        if not project_name or project_name in self.known_projects:
+            return
+
+        repos_root = get_settings().dev_repos_root.expanduser().resolve()
+        project_root = repos_root / project_name
+        try:
+            project_root.relative_to(repos_root)
+        except ValueError:
+            return
+
+        self.register_project(project_name, str(project_root), "project", "medium")
 
     def _resolve_project_from_text(self, text: str) -> Optional[str]:
         """Resolve a project name from a path or textual command fragment."""
@@ -553,6 +755,9 @@ class OpenCodeBridge:
 
         if best_match:
             return best_match
+
+        if not self._looks_like_path_reference(text):
+            return None
 
         try:
             path = Path(text).resolve()

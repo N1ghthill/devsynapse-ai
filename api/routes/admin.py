@@ -1,5 +1,6 @@
 """Administrative routes for user and permission management."""
 
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,6 +15,7 @@ from api.models import (
     ProjectCreateRequest,
     ProjectResponse,
 )
+from config.settings import get_settings
 from core.memory import MemorySystem
 from core.opencode_bridge import OpenCodeBridge
 
@@ -45,6 +47,11 @@ def _path_is_allowed(path: Path, allowed_directories: list[Path]) -> bool:
         except ValueError:
             continue
     return False
+
+
+def _project_slug(name: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", name.strip()).strip("-._").lower()
+    return slug or "project"
 
 
 @router.get("/users", response_model=AdminUsersResponse)
@@ -157,14 +164,25 @@ async def create_project(
     if not project_name:
         raise HTTPException(status_code=400, detail="Nome do projeto é obrigatório")
 
-    project_path = Path(payload.path).expanduser().resolve()
-    if not project_path.exists() or not project_path.is_dir():
-        raise HTTPException(status_code=400, detail="Caminho do projeto deve ser um diretório existente")
-    if not _path_is_allowed(project_path, bridge.allowed_directories):
+    if payload.path and payload.path.strip():
+        project_path = Path(payload.path).expanduser().resolve()
+    elif payload.create_directory:
+        project_path = (
+            get_settings().dev_repos_root.expanduser().resolve() / _project_slug(project_name)
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Caminho do projeto é obrigatório")
+
+    path_to_authorize = project_path if project_path.exists() else project_path.parent
+    if not _path_is_allowed(path_to_authorize.resolve(), bridge.allowed_directories):
         raise HTTPException(
             status_code=400,
             detail="Caminho do projeto deve estar dentro dos diretórios permitidos",
         )
+    if payload.create_directory:
+        project_path.mkdir(parents=True, exist_ok=True)
+    if not project_path.exists() or not project_path.is_dir():
+        raise HTTPException(status_code=400, detail="Caminho do projeto deve ser um diretório existente")
     if memory_system.get_project(project_name) is not None:
         raise HTTPException(status_code=409, detail="Projeto já registrado")
 

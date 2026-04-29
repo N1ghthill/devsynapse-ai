@@ -39,6 +39,12 @@ there is no PowerShell or `.bat` installer.
 
 Authenticated chat, conversation, feedback, settings, project, monitoring stats/alerts, execution and usage export routes require a valid bearer token.
 Public health endpoints are limited to readiness status.
+
+The frontend setup gate treats missing API/workspace configuration as blocking.
+An authenticated administrator can continue into the app when the only remaining
+setup warning is the default admin password; this keeps emergency local password
+resets usable while leaving the bootstrap status warning visible to operators.
+
 `/execute` applies role-aware authorization inside the command bridge:
 - low-risk inspection commands are available to regular users.
 - file-content tools such as `read`, `grep` and `glob` are not auto-executed for non-admin chat turns; they are proposed for explicit confirmation.

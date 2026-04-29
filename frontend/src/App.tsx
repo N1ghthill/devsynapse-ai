@@ -21,7 +21,7 @@ import { Setup } from './pages/Setup';
 function SetupGate() {
   const { auth } = useAuth();
   const location = useLocation();
-  const [setupRequired, setSetupRequired] = useState(false);
+  const [setupReasons, setSetupReasons] = useState<string[]>([]);
   const [checkingSetup, setCheckingSetup] = useState(true);
 
   useEffect(() => {
@@ -31,12 +31,12 @@ function SetupGate() {
       .bootstrapStatus()
       .then((status) => {
         if (!cancelled) {
-          setSetupRequired(status.requires_setup);
+          setSetupReasons(status.requires_setup ? status.reasons : []);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setSetupRequired(false);
+          setSetupReasons([]);
         }
       })
       .finally(() => {
@@ -58,7 +58,12 @@ function SetupGate() {
     );
   }
 
-  if (setupRequired && location.pathname !== '/setup') {
+  const blockingSetupReasons =
+    auth.user?.role === 'admin'
+      ? setupReasons.filter((reason) => reason !== 'admin_password')
+      : setupReasons;
+
+  if (blockingSetupReasons.length > 0 && location.pathname !== '/setup') {
     if (auth.user?.role !== 'admin') {
       return (
         <div className="page-error">

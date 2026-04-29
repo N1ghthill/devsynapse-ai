@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import AsyncIterator, Dict, List, Optional, Tuple
 
 import config.settings as app_settings
-from config.settings import BLACKLISTED_PATTERNS, READ_ONLY_COMMANDS
+from config.settings import ALLOWED_COMMANDS, BLACKLISTED_PATTERNS
 from core.deepseek import DeepSeekClient
 from core.llm_optimization import ModelRoute, ModelRouter, build_task_profile
 from core.plugin_system import plugin_manager
@@ -144,7 +144,11 @@ OPENCODE_TOOLS = [
         "function": {
             "name": "write",
             "strict": True,
-            "description": "Write content to a file (overwrites if it exists).",
+            "description": (
+                "Write content to a file (overwrites if it exists). "
+                "Parent directories are created automatically; use this as the first action "
+                "when creating a small new project instead of running mkdir separately."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -238,8 +242,20 @@ class DevSynapseBrain:
         current_request = context.get("current_user_message") or ""
         procedural_memory = self._get_project_memory_context(active_project_name, current_request)
         skills_context = self._get_skills_context(current_request, active_project_name)
+        settings = app_settings.get_settings()
+        active_project_path = None
+        if active_project_name and hasattr(self.memory, "get_project"):
+            try:
+                active_project = self.memory.get_project(active_project_name)
+                active_project_path = active_project.get("path") if active_project else None
+            except Exception:
+                active_project_path = None
         active_project_section = (
-            f"\n## PROJETO ATIVO\n{active_project_name}\n"
+            f"\n## PROJETO ATIVO\n- Nome: {active_project_name}\n"
+            f"- Diretório: {active_project_path or 'registrado no backend'}\n"
+            "- Esta conversa está travada neste projeto. Use caminhos relativos ao projeto ou "
+            "caminhos dentro desse diretório.\n"
+            "- Não escreva, edite, remova, instale ou gere arquivos fora do projeto ativo.\n"
             if active_project_name
             else ""
         )
@@ -267,6 +283,17 @@ Blend deep technical skills with natural conversational communication.
 {projects_info}
 {active_project_section}
 
+## LOCAL WORKSPACE PATHS
+- Workspace root: {settings.dev_workspace_root}
+- Repositories root: {settings.dev_repos_root}
+- Default command cwd: {settings.default_execution_cwd}
+- New standalone projects should be created through the project UI/registration flow first.
+- If no project is active, avoid durable filesystem writes unless the user explicitly asks
+  for a global workspace action and provides/chooses the target project.
+- Do not use placeholder paths such as `/home/user`, `/workspace`, `~/projects`, or `/tmp`
+  for durable project files unless the user explicitly asks for that exact location.
+- The active project is the working directory boundary for this chat.
+
 ## CAPABILITIES
 1. **Technical conversation** - Discuss architecture, design patterns, trade-offs
 2. **Code analysis** - Review, suggest improvements, detect issues
@@ -283,6 +310,12 @@ Blend deep technical skills with natural conversational communication.
 - Never claim you created, edited, deleted, or executed something before actual execution is confirmed
 - Never write raw shell constructs like `echo file > x.txt`; use your tools instead
 - Propose at most one tool call per response
+- When the user asks you to create, change, inspect, run, or continue implementation work,
+  do not stop at "I'll do it". Emit exactly one tool call in that same response.
+- For a small new project, use `write` for the first real file instead of `bash mkdir`;
+  the write tool creates parent directories automatically.
+- After a tool result succeeds, keep advancing the same task with the next needed tool call.
+  Stop only when the task is complete, a command is blocked, or you need missing information.
 
 ## EXAMPLES
 User: "Show me the BotAssist files"
@@ -313,13 +346,15 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         user_id: Optional[str] = None,
         user_role: Optional[str] = None,
         project_mutation_allowlist: Optional[List[str]] = None,
+        auto_execute: bool = False,
     ) -> Tuple[str, Optional[str], Optional[Dict]]:
         """
         Processa uma mensagem do usuário e retorna resposta + comando OpenCode.
 
         When user_id and user_role are provided, read-only commands are auto-executed
         and the result is fed back to the LLM in a loop until a final answer is reached.
-        Mutation commands still require explicit confirmation.
+        Mutating commands require explicit confirmation unless automatic execution is enabled
+        for a trusted admin session.
         """
         
         event_data = {
@@ -358,7 +393,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         route = self._select_llm_route(user_message, context)
 
         # Chamar API com loop de auto-execução para comandos read-only
-        max_autoexec_rounds = 5
+        max_autoexec_rounds = self._max_autoexec_rounds(auto_execute, user_role)
         round_count = 0
         aggregated_usage = None
         opencode_command = None
@@ -373,6 +408,15 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             if opencode_command is None:
                 opencode_command = self._extract_opencode_command(response_text)
             aggregated_usage = self._merge_usage(aggregated_usage, llm_result.usage)
+
+            if self._should_retry_missing_tool(
+                auto_execute,
+                user_message,
+                response_text,
+                opencode_command,
+            ):
+                messages = self._build_tool_repair_messages(user_message, context, response_text)
+                continue
 
             autoexec_enabled = bool(self.api_key and user_id and user_role)
             if not (
@@ -400,6 +444,18 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             }
 
             if not success:
+                if self._should_replay_failed_command(auto_execute, user_role, status, reason):
+                    messages.extend(
+                        self._build_command_result_replay_messages(
+                            response_text,
+                            opencode_command,
+                            success,
+                            msg,
+                            output,
+                        )
+                    )
+                    opencode_command = None
+                    continue
                 response_text = (
                     f"{response_text}\n\n"
                     f"The command `{opencode_command}` could not be executed: {msg}"
@@ -407,27 +463,15 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                 opencode_command = None
                 break
 
-            tool_result = output or msg
-            selected_tool_calls = llm_result.tool_calls[:1] if llm_result.tool_calls else None
-            if selected_tool_calls and selected_tool_calls[0].get("id"):
-                messages.append({
-                    "role": "assistant",
-                    "content": response_text or "",
-                    "tool_calls": selected_tool_calls,
-                })
-                if llm_result.reasoning_content:
-                    messages[-1]["reasoning_content"] = llm_result.reasoning_content
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": selected_tool_calls[0]["id"],
-                    "content": tool_result[:3000],
-                })
-            else:
-                messages.append({"role": "assistant", "content": response_text})
-                messages.append({
-                    "role": "user",
-                    "content": f"Command output:\n{tool_result[:3000]}",
-                })
+            messages.extend(
+                self._build_command_result_replay_messages(
+                    response_text,
+                    opencode_command,
+                    success,
+                    msg,
+                    output,
+                )
+            )
 
         await plugin_manager.emit_event("brain:after_llm_call", {"response": response_text})
 
@@ -463,6 +507,8 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                 reason_code=autoexecuted_command["reason_code"],
                 project_name=autoexecuted_command["project_name"],
             )
+            if autoexecuted_command["success"]:
+                self._persist_repos_project_if_needed(autoexecuted_command["project_name"])
 
         self._record_agent_route_decision(
             conversation_id=conversation_id,
@@ -647,6 +693,33 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         except Exception:
             logger.debug("Could not persist agent route decision", exc_info=True)
 
+    def _persist_repos_project_if_needed(self, project_name: Optional[str]) -> None:
+        if not project_name or not hasattr(self.memory, "add_project"):
+            return
+
+        settings = app_settings.get_settings()
+        repos_root = settings.dev_repos_root.expanduser().resolve()
+        project_root = (repos_root / project_name).resolve()
+        try:
+            project_root.relative_to(repos_root)
+        except ValueError:
+            return
+        if not project_root.exists():
+            return
+
+        try:
+            if hasattr(self.memory, "get_project") and self.memory.get_project(project_name):
+                return
+            self.memory.add_project(
+                project_name,
+                str(project_root),
+                project_type="project",
+                priority="medium",
+                replace=False,
+            )
+        except Exception:
+            logger.debug("Could not persist generated project %s", project_name, exc_info=True)
+
     def _get_persisted_app_settings(self) -> Dict[str, str]:
         if not hasattr(self.memory, "get_app_settings"):
             return {}
@@ -667,13 +740,19 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         self,
         messages: List[Dict],
         route: Optional[ModelRoute] = None,
+        tool_choice: object = "auto",
     ) -> LLMResult:
         """Chama API do DeepSeek e retorna resposta degradada se a API falhar."""
 
         if self.deepseek.configured:
             model = route.model if route else self.deepseek.model
             try:
-                result = self.deepseek.chat_completion(messages, OPENCODE_TOOLS, model=model)
+                result = self.deepseek.chat_completion(
+                    messages,
+                    OPENCODE_TOOLS,
+                    model=model,
+                    tool_choice=tool_choice,
+                )
                 return LLMResult(
                     content=result["content"],
                     provider=result["provider"],
@@ -696,6 +775,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                             messages,
                             OPENCODE_TOOLS,
                             model=fallback_model,
+                            tool_choice=tool_choice,
                         )
                         return LLMResult(
                             content=result["content"],
@@ -721,12 +801,18 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         user_message: str,
         conversation_id: Optional[str] = None,
         project_name: Optional[str] = None,
+        user_id: Optional[str] = None,
+        user_role: Optional[str] = None,
+        project_mutation_allowlist: Optional[List[str]] = None,
+        auto_execute: bool = False,
     ) -> AsyncIterator[Dict]:
         """Process a message and stream the response as SSE events.
 
         Yields:
             {"type": "text", "content": "..."}
             {"type": "command", "command": "..."}
+            {"type": "command_status", "command": "...", "status": "running"}
+            {"type": "command_result", "command": "...", "status": "...", ...}
             {"type": "done", "usage": {...}, ...}
         """
 
@@ -744,96 +830,220 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             yield {"type": "done", "usage": None}
             return
 
-        full_response = ""
-        collected_tool_calls = None
-        usage = None
-        try:
-            async for chunk in self.deepseek.chat_completion_streaming(
-                messages,
-                OPENCODE_TOOLS,
-                model=route.model,
-            ):
-                if chunk["type"] == "text":
-                    full_response += chunk["content"]
-                    yield chunk
-                elif chunk["type"] == "reasoning":
-                    yield chunk
-                elif chunk["type"] == "done":
-                    full_response = chunk.get("content", full_response)
-                    usage = chunk.get("usage")
-                    collected_tool_calls = chunk.get("tool_calls")
-                    break
-        except Exception as e:
-            if route.fallback_model and not full_response:
-                try:
-                    logger.warning(
-                        "DeepSeek streaming with %s failed (%s); retrying with %s",
-                        route.model,
-                        e,
-                        route.fallback_model,
-                    )
-                    async for chunk in self.deepseek.chat_completion_streaming(
-                        messages,
-                        OPENCODE_TOOLS,
-                        model=route.fallback_model,
-                    ):
-                        if chunk["type"] == "text":
-                            full_response += chunk["content"]
-                            yield chunk
-                        elif chunk["type"] == "reasoning":
-                            yield chunk
-                        elif chunk["type"] == "done":
-                            full_response = chunk.get("content", full_response)
-                            usage = chunk.get("usage")
-                            collected_tool_calls = chunk.get("tool_calls")
-                            break
-                except Exception as fallback_error:
-                    logger.warning(f"DeepSeek streaming fallback failed: {fallback_error}")
+        max_autoexec_rounds = self._max_autoexec_rounds(auto_execute, user_role)
+        round_count = 0
+        aggregated_usage = None
+        persisted_command = None
+        opencode_command = None
+        final_response = ""
+        response_parts: List[str] = []
+        executed_command = None
+
+        while round_count < max_autoexec_rounds:
+            round_count += 1
+            full_response = ""
+            collected_tool_calls = None
+            usage = None
+            try:
+                async for chunk in self.deepseek.chat_completion_streaming(
+                    messages,
+                    OPENCODE_TOOLS,
+                    model=route.model,
+                ):
+                    if chunk["type"] == "text":
+                        full_response += chunk["content"]
+                        yield chunk
+                    elif chunk["type"] == "reasoning":
+                        continue
+                    elif chunk["type"] == "done":
+                        full_response = chunk.get("content", full_response)
+                        usage = chunk.get("usage")
+                        collected_tool_calls = chunk.get("tool_calls")
+                        break
+            except Exception as e:
+                if route.fallback_model and not full_response:
+                    try:
+                        logger.warning(
+                            "DeepSeek streaming with %s failed (%s); retrying with %s",
+                            route.model,
+                            e,
+                            route.fallback_model,
+                        )
+                        async for chunk in self.deepseek.chat_completion_streaming(
+                            messages,
+                            OPENCODE_TOOLS,
+                            model=route.fallback_model,
+                        ):
+                            if chunk["type"] == "text":
+                                full_response += chunk["content"]
+                                yield chunk
+                            elif chunk["type"] == "reasoning":
+                                continue
+                            elif chunk["type"] == "done":
+                                full_response = chunk.get("content", full_response)
+                                usage = chunk.get("usage")
+                                collected_tool_calls = chunk.get("tool_calls")
+                                break
+                    except Exception as fallback_error:
+                        logger.warning(f"DeepSeek streaming fallback failed: {fallback_error}")
+                        fallback = self._get_fallback_response(messages)
+                        yield {"type": "text", "content": fallback}
+                        yield {"type": "done", "usage": None}
+                        return
+                else:
+                    logger.warning(f"DeepSeek streaming failed: {e}")
                     fallback = self._get_fallback_response(messages)
                     yield {"type": "text", "content": fallback}
                     yield {"type": "done", "usage": None}
                     return
-            else:
-                logger.warning(f"DeepSeek streaming failed: {e}")
-                fallback = self._get_fallback_response(messages)
-                yield {"type": "text", "content": fallback}
-                yield {"type": "done", "usage": None}
-                return
 
-        opencode_command = self._tool_calls_to_opencode_command(collected_tool_calls)
-        if opencode_command is None:
-            opencode_command = self._extract_opencode_command(full_response)
+            aggregated_usage = self._merge_usage(aggregated_usage, usage)
+            if full_response:
+                response_parts.append(full_response)
 
-        if opencode_command:
-            yield {"type": "command", "command": opencode_command}
+            opencode_command = self._tool_calls_to_opencode_command(collected_tool_calls)
+            if opencode_command is None:
+                opencode_command = self._extract_opencode_command(full_response)
+
+            if self._should_retry_missing_tool(
+                auto_execute,
+                user_message,
+                full_response,
+                opencode_command,
+            ):
+                messages = self._build_tool_repair_messages(user_message, context, full_response)
+                continue
+
+            if opencode_command:
+                yield {
+                    "type": "command",
+                    "command": opencode_command,
+                    "auto_execute": bool(auto_execute),
+                }
+
+            autoexec_enabled = bool(
+                auto_execute
+                and self.api_key
+                and user_id
+                and user_role
+                and opencode_command
+                and self._can_autoexecute_command(opencode_command, user_role)
+            )
+            if not autoexec_enabled:
+                final_response = self._sanitize_unconfirmed_execution_claims(
+                    full_response,
+                    opencode_command,
+                )
+                if opencode_command or executed_command is None:
+                    persisted_command = opencode_command
+                break
+
+            yield {
+                "type": "command_status",
+                "command": opencode_command,
+                "status": "running",
+            }
+            success, msg, output, status, reason, proj = await self.opencode.execute_command(
+                opencode_command,
+                user_id=user_id,
+                project_name=effective_project_name,
+                user_role=user_role,
+                project_mutation_allowlist=project_mutation_allowlist or [],
+            )
+            executed_command = {
+                "command": opencode_command,
+                "success": success,
+                "result": msg,
+                "output": output,
+                "status": status,
+                "reason_code": reason,
+                "project_name": proj,
+            }
+            persisted_command = opencode_command
+            yield {
+                "type": "command_result",
+                "command": opencode_command,
+                "success": success,
+                "message": msg,
+                "output": output,
+                "status": status,
+                "reason_code": reason,
+                "project_name": proj,
+            }
+
+            if not success:
+                if self._should_replay_failed_command(auto_execute, user_role, status, reason):
+                    messages.extend(
+                        self._build_command_result_replay_messages(
+                            full_response,
+                            opencode_command,
+                            success,
+                            msg,
+                            output,
+                        )
+                    )
+                    opencode_command = None
+                    continue
+                final_response = (
+                    f"{full_response}\n\n"
+                    f"The command `{opencode_command}` could not be executed: {msg}"
+                )
+                break
+
+            messages.extend(
+                self._build_command_result_replay_messages(
+                    full_response,
+                    opencode_command,
+                    success,
+                    msg,
+                    output,
+                )
+            )
+
+            opencode_command = None
+        else:
+            final_response = response_parts[-1] if response_parts else ""
 
         persisted_project_name = await self.memory.save_interaction(
             conversation_id=conversation_id,
             user_message=user_message,
-            ai_response=full_response,
-            opencode_command=opencode_command,
-            llm_usage=usage,
+            ai_response="\n\n".join(part for part in response_parts if part) or final_response,
+            opencode_command=persisted_command,
+            llm_usage=aggregated_usage,
             project_name=effective_project_name,
         )
+        if executed_command is not None and persisted_command == executed_command["command"]:
+            await self.memory.save_command_execution(
+                conversation_id=conversation_id,
+                command=executed_command["command"],
+                success=executed_command["success"],
+                result=executed_command["result"],
+                output=executed_command["output"],
+                status=executed_command["status"],
+                reason_code=executed_command["reason_code"],
+                project_name=executed_command["project_name"],
+            )
+            if executed_command["success"]:
+                self._persist_repos_project_if_needed(executed_command["project_name"])
         self._record_agent_route_decision(
             conversation_id=conversation_id,
             route=route,
-            usage=usage,
+            usage=aggregated_usage,
             project_name=persisted_project_name,
-            opencode_command=opencode_command,
+            opencode_command=persisted_command,
         )
         review_project_name = persisted_project_name if isinstance(persisted_project_name, str) else None
         self._review_completed_task(
             conversation_id=conversation_id,
             user_message=user_message,
-            ai_response=full_response,
+            ai_response=final_response,
             project_name=review_project_name,
-            opencode_command=opencode_command,
+            opencode_command=persisted_command,
             route=route,
-            tool_iterations=1 if opencode_command else 0,
+            tool_iterations=max(0, round_count - 1) + (1 if persisted_command else 0),
         )
 
-        yield {"type": "done", "usage": usage, "project_name": persisted_project_name}
+        yield {"type": "done", "usage": aggregated_usage, "project_name": persisted_project_name}
 
     def _coerce_llm_result(self, result: str | LLMResult) -> LLMResult:
         if isinstance(result, LLMResult):
@@ -875,6 +1085,137 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             )
 
         return merged
+
+    @staticmethod
+    def _max_autoexec_rounds(auto_execute: bool, user_role: Optional[str]) -> int:
+        """Allow trusted admin runs enough turns to build, test and fix without stopping early."""
+
+        if auto_execute and user_role == "admin":
+            return 20
+        if auto_execute:
+            return 8
+        return 5
+
+    @staticmethod
+    def _should_replay_failed_command(
+        auto_execute: bool,
+        user_role: Optional[str],
+        status: str,
+        reason_code: Optional[str],
+    ) -> bool:
+        """Let admin auto mode recover from normal command failures instead of stopping."""
+
+        return (
+            auto_execute
+            and user_role == "admin"
+            and status == "failed"
+            and reason_code == "execution_failed"
+        )
+
+    def _should_retry_missing_tool(
+        self,
+        auto_execute: bool,
+        user_message: str,
+        response_text: str,
+        opencode_command: Optional[str],
+    ) -> bool:
+        """Recover when the model promises action but emits no executable tool call."""
+
+        if not auto_execute or opencode_command:
+            return False
+        if response_text:
+            return self._response_promises_pending_action(response_text)
+        return self._user_request_expects_tool(user_message)
+
+    @staticmethod
+    def _user_request_expects_tool(user_message: str) -> bool:
+        normalized = " ".join((user_message or "").strip().lower().split())
+        if not normalized:
+            return False
+
+        explanatory_question_patterns = [
+            r"^(como|how)\b",
+            r"\b(o que|what|why|por que|porque)\b",
+        ]
+        if any(re.search(pattern, normalized) for pattern in explanatory_question_patterns):
+            return False
+
+        action_patterns = [
+            r"\b(crie|criar|cria|implemente|implementar|gere|gerar|monte|montar|adicione|adicionar|edite|editar|salve|salvar|rode|rodar|execute|executar|leia|ler|liste|listar|inspecione|inspecionar)\b",
+            r"\b(create|implement|generate|build|add|edit|save|run|execute|read|list|inspect)\b",
+            r"\b(pode\s+continuar|continue|continuar)\b",
+        ]
+        return any(re.search(pattern, normalized) for pattern in action_patterns)
+
+    @staticmethod
+    def _response_promises_pending_action(response_text: str) -> bool:
+        normalized = " ".join(response_text.strip().lower().split())
+        if not normalized:
+            return False
+
+        pending_action_patterns = [
+            r"\b(vou|irei|vamos)\s+(criar|escrever|gerar|montar|adicionar|editar|salvar|rodar|executar|ler|listar|inspecionar)\b",
+            r"\b(agora|em seguida)\s+(vou|vamos)\s+(criar|escrever|gerar|montar|adicionar|editar|salvar|rodar|executar|ler|listar|inspecionar)\b",
+            r"\b(i'?ll|i will|let me|i am going to|i'm going to)\s+(create|write|generate|add|edit|save|run|execute|read|list|inspect)\b",
+        ]
+        return any(re.search(pattern, normalized) for pattern in pending_action_patterns)
+
+    @staticmethod
+    def _build_command_result_replay_messages(
+        assistant_text: str,
+        command: str,
+        success: bool,
+        message: str,
+        output: Optional[str],
+    ) -> List[Dict[str, str]]:
+        """Replay tool output in a provider-compatible text form."""
+
+        result_text = output or message or "(no output)"
+        status = "success" if success else "failed"
+        return [
+            {"role": "assistant", "content": assistant_text or f"Executed `{command}`."},
+            {
+                "role": "user",
+                "content": (
+                    f"Command `{command}` finished with status `{status}`.\n"
+                    f"Result: {message}\n\n"
+                    f"Output:\n```\n{result_text[:3000]}\n```\n\n"
+                    "Continue the original task. If more filesystem or command work is "
+                    "needed, emit exactly one next tool call. If the task is complete, "
+                    "give the final concise result."
+                ),
+            },
+        ]
+
+    def _build_tool_repair_messages(
+        self,
+        user_message: str,
+        context: Dict,
+        previous_response: str,
+    ) -> List[Dict[str, str]]:
+        repair_context = {
+            **context,
+            "current_user_message": user_message,
+        }
+        system_prompt = (
+            self.generate_system_prompt(repair_context)
+            + "\n\n## CRITICAL TOOL REPAIR\n"
+            + "Your previous response promised a development action but emitted no tool call. "
+            + "For this retry, emit exactly one available tool call and no prose. "
+            + "For small new projects, call `write` for the first real source file; "
+            + "`write` creates parent directories automatically."
+        )
+        return [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": (
+                    f"Original request:\n{user_message}\n\n"
+                    f"Previous non-executable response:\n{previous_response[:1000]}\n\n"
+                    "Emit exactly one tool call now. Do not answer with intent text."
+                ),
+            },
+        ]
     
     @staticmethod
     def _tool_calls_to_opencode_command(tool_calls: Optional[List[Dict]]) -> Optional[str]:
@@ -953,7 +1294,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         cmd_type = parts[0].lower() if parts else ""
 
         if user_role == "admin":
-            return cmd_type in {"bash", *READ_ONLY_COMMANDS, "edit", "write"}
+            return cmd_type in set(ALLOWED_COMMANDS)
 
         if cmd_type == "bash":
             bash_command = parts[1].strip("\"' ") if len(parts) > 1 else ""
