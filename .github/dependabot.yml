@@ -31,3 +31,15 @@ updates:
       frontend:
         patterns:
           - "*"
+
+  - package-ecosystem: "cargo"
+    directory: "/frontend/src-tauri"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:45"
+      timezone: "America/Sao_Paulo"
+    groups:
+      tauri-runtime:
+        patterns:
+          - "*"

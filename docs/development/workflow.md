@@ -47,7 +47,7 @@ Python dependency manifests are split by purpose:
 - `requirements-dev.txt`: development and test dependencies
 - `requirements.lock` / `requirements-dev.lock`: resolved constraints used by Makefile and CI when installing
 
-Dependabot watches GitHub Actions, Python and frontend manifests weekly. The `Dependency Locks` workflow also runs weekly and can be dispatched manually to regenerate Python lock constraints and open a pull request when they change.
+Dependabot watches GitHub Actions, Python, frontend npm and Tauri Cargo manifests weekly. The `Dependency Locks` workflow also runs weekly and can be dispatched manually to regenerate Python lock constraints and open a pull request when they change.
 
 GitHub Releases are published from pushed `v*.*.*` tags by reading `docs/releases/<tag>.md`. Create the release notes before pushing the tag; manual dispatch is available for an existing tag.
 

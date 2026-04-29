@@ -43,6 +43,14 @@ When discussing security in PRs or issues:
 - prefer minimal reproductions
 - clearly distinguish confirmed issues from hardening suggestions
 
+## Dependency Monitoring
+
+Dependabot watches GitHub Actions, Python, frontend npm and Tauri Cargo manifests weekly.
+Python and npm dependency audits should remain clean before release. Rust/Tauri advisories
+can include transitive desktop stack warnings that are not directly pinned by this project;
+triage those through `frontend/src-tauri/Cargo.lock` and prefer upstream Tauri updates when
+patched versions are blocked by the current Tauri dependency graph.
+
 ## Operational Advice
 
 For local deployments:

@@ -332,36 +332,16 @@ jobs:
             exit 1
           fi
 
-          python3 - "$RELEASE_VERSION" "$RELEASE_TAG" "$GITHUB_REPOSITORY" "$release_dir" "$linux_updater" "$windows_updater" <<'PY'
-          import json
-          import sys
-          from datetime import datetime, timezone
-          from pathlib import Path
-
-          version, tag, repository, release_dir, linux_updater, windows_updater = sys.argv[1:]
-          release_path = Path(release_dir)
-
-          def platform_entry(filename: str) -> dict[str, str]:
-              signature = (release_path / f"{filename}.sig").read_text(encoding="utf-8").strip()
-              return {
-                  "signature": signature,
-                  "url": f"https://github.com/{repository}/releases/download/{tag}/{filename}",
-              }
-
-          manifest = {
-              "version": version,
-              "notes": f"DevSynapse AI {tag}",
-              "pub_date": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-              "platforms": {
-                  "linux-x86_64": platform_entry(linux_updater),
-                  "windows-x86_64": platform_entry(windows_updater),
-              },
-          }
-          (release_path / "latest.json").write_text(
-              json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-              encoding="utf-8",
-          )
-          PY
+          python3 scripts/generate-tauri-update-manifest.py \
+            --version "$RELEASE_VERSION" \
+            --platform linux-x86_64 \
+            --url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${linux_updater}" \
+            --signature-file "$release_dir/${linux_updater}.sig" \
+            --platform windows-x86_64 \
+            --url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${windows_updater}" \
+            --signature-file "$release_dir/${windows_updater}.sig" \
+            --notes "DevSynapse AI ${RELEASE_TAG}" \
+            --output "$release_dir/latest.json"
 
           (
             cd "$release_dir"
