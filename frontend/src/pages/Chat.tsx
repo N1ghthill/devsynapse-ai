@@ -38,6 +38,8 @@ import type {
 const CONVERSATION_STORAGE_KEY = 'devsynapse_conversation_id';
 const AUTO_APPROVE_STORAGE_KEY = 'devsynapse_auto_approve_commands';
 
+const createConversationId = () => `session_${Date.now()}`;
+
 const workflowTemplates: Array<{
   title: string;
   description: string;
@@ -103,7 +105,7 @@ export function Chat() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string>(
-    () => localStorage.getItem(CONVERSATION_STORAGE_KEY) || `session_${Date.now()}`
+    () => localStorage.getItem(CONVERSATION_STORAGE_KEY) || createConversationId()
   );
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
@@ -386,7 +388,7 @@ export function Chat() {
     pinnedToLatestRef.current = true;
     setMessages([]);
     setSelectedProject(projectName);
-    const nextConversationId = `session_${Date.now()}`;
+    const nextConversationId = createConversationId();
     setConversationId(nextConversationId);
     localStorage.setItem(CONVERSATION_STORAGE_KEY, nextConversationId);
   };
@@ -747,7 +749,7 @@ export function Chat() {
   const handleClear = () => {
     pinnedToLatestRef.current = true;
     setMessages([]);
-    const nextConversationId = `session_${Date.now()}`;
+    const nextConversationId = createConversationId();
     setConversationId(nextConversationId);
     localStorage.setItem(CONVERSATION_STORAGE_KEY, nextConversationId);
   };
