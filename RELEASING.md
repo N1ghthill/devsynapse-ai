@@ -7,11 +7,11 @@ This document is the release compliance checklist for DevSynapse AI.
 The current public-readiness baseline is:
 
 ```text
-v0.5.2
+v0.6.2
 ```
 
-It aligns with application version `0.5.2` in [config/settings.py](config/settings.py)
-and release notes in [docs/releases/v0.5.2.md](docs/releases/v0.5.2.md).
+It aligns with application version `0.6.2` in [config/settings.py](config/settings.py)
+and release notes in [docs/releases/v0.6.2.md](docs/releases/v0.6.2.md).
 
 ## Supported Targets
 
@@ -36,8 +36,8 @@ PowerShell or `.bat` installer.
 The desktop packaging flow is Tauri v2 plus a PyInstaller backend sidecar. The
 current repository baseline has validated Linux and Windows desktop artifacts:
 
-- `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.5.2_amd64.deb`
-- `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.5.2-1.x86_64.rpm`
+- `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.6.2_amd64.deb`
+- `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.6.2-1.x86_64.rpm`
 - Windows NSIS installer generated on `windows-latest`
 
 macOS bundles are configured in Tauri, but they are not validated release
@@ -91,17 +91,17 @@ Expected coverage:
 3. Create an annotated tag, for example:
 
 ```bash
-git tag -a v0.5.2 -m "DevSynapse AI v0.5.2"
+git tag -a v0.6.2 -m "DevSynapse AI v0.6.2"
 ```
 
 4. Push the tag:
 
 ```bash
-git push origin v0.5.2
+git push origin v0.6.2
 ```
 
 5. Confirm the GitHub release workflow publishes from
-   `docs/releases/v0.5.2.md`.
+   `docs/releases/v0.6.2.md`.
 
 ## Post-Release Corrections
 
@@ -110,5 +110,5 @@ If release notes are clarified after publication, update the release body
 explicitly after reviewing the diff:
 
 ```bash
-gh release edit v0.5.2 --notes-file docs/releases/v0.5.2.md
+gh release edit v0.6.2 --notes-file docs/releases/v0.6.2.md
 ```

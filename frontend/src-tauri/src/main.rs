@@ -5,6 +5,8 @@ use devsynapse_ai::{
     find_free_port, is_port_open, kill_child, start_backend_with_port, BackendState, ManagedProcess,
 };
 use std::sync::Arc;
+#[cfg(feature = "tray-icon")]
+use tauri::image::Image;
 use tauri::Manager;
 use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::Mutex;
@@ -13,6 +15,88 @@ use tokio::sync::Mutex;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 #[cfg(feature = "tray-icon")]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+#[cfg(feature = "tray-icon")]
+fn draw_tray_pixel(rgba: &mut [u8], size: i32, x: i32, y: i32) {
+    if x < 0 || y < 0 || x >= size || y >= size {
+        return;
+    }
+
+    let index = ((y * size + x) * 4) as usize;
+    rgba[index] = 255;
+    rgba[index + 1] = 255;
+    rgba[index + 2] = 255;
+    rgba[index + 3] = 255;
+}
+
+#[cfg(feature = "tray-icon")]
+fn draw_tray_dot(rgba: &mut [u8], size: i32, x: i32, y: i32, radius: i32) {
+    for dy in -radius..=radius {
+        for dx in -radius..=radius {
+            if dx * dx + dy * dy <= radius * radius {
+                draw_tray_pixel(rgba, size, x + dx, y + dy);
+            }
+        }
+    }
+}
+
+#[cfg(feature = "tray-icon")]
+fn draw_tray_line(
+    rgba: &mut [u8],
+    size: i32,
+    mut x0: i32,
+    mut y0: i32,
+    x1: i32,
+    y1: i32,
+    radius: i32,
+) {
+    let dx = (x1 - x0).abs();
+    let sx = if x0 < x1 { 1 } else { -1 };
+    let dy = -(y1 - y0).abs();
+    let sy = if y0 < y1 { 1 } else { -1 };
+    let mut err = dx + dy;
+
+    loop {
+        draw_tray_dot(rgba, size, x0, y0, radius);
+        if x0 == x1 && y0 == y1 {
+            break;
+        }
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            x0 += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y0 += sy;
+        }
+    }
+}
+
+#[cfg(feature = "tray-icon")]
+fn draw_tray_rect(rgba: &mut [u8], size: i32, x: i32, y: i32, width: i32, height: i32) {
+    for py in y..(y + height) {
+        for px in x..(x + width) {
+            draw_tray_pixel(rgba, size, px, py);
+        }
+    }
+}
+
+#[cfg(feature = "tray-icon")]
+fn tray_icon_image() -> Image<'static> {
+    const SIZE: i32 = 64;
+    let mut rgba = vec![0; (SIZE * SIZE * 4) as usize];
+
+    draw_tray_rect(&mut rgba, SIZE, 0, 3, 64, 9);
+    draw_tray_rect(&mut rgba, SIZE, 0, 52, 64, 9);
+    draw_tray_rect(&mut rgba, SIZE, 0, 3, 9, 58);
+    draw_tray_rect(&mut rgba, SIZE, 55, 3, 9, 58);
+    draw_tray_line(&mut rgba, SIZE, 16, 22, 31, 32, 5);
+    draw_tray_line(&mut rgba, SIZE, 16, 42, 31, 32, 5);
+    draw_tray_line(&mut rgba, SIZE, 38, 41, 53, 41, 5);
+
+    Image::new_owned(rgba, SIZE as u32, SIZE as u32)
+}
 
 // ── Tauri commands ───────────────────────────────────────────────────────────
 
@@ -37,7 +121,9 @@ pub struct DesktopUpdateStatus {
 
 fn updater_endpoint() -> String {
     option_env!("DEVSYNAPSE_UPDATER_ENDPOINT")
-        .unwrap_or("https://github.com/N1ghthill/devsynapse-ai/releases/latest/download/latest.json")
+        .unwrap_or(
+            "https://github.com/N1ghthill/devsynapse-ai/releases/latest/download/latest.json",
+        )
         .to_string()
 }
 
@@ -179,7 +265,11 @@ async fn install_desktop_update(app: tauri::AppHandle) -> Result<(), String> {
     update
         .download_and_install(
             |chunk_length, content_length| {
-                log::debug!("Downloaded update chunk: {} of {:?}", chunk_length, content_length);
+                log::debug!(
+                    "Downloaded update chunk: {} of {:?}",
+                    chunk_length,
+                    content_length
+                );
             },
             || {
                 log::info!("Desktop update download finished");
@@ -264,7 +354,7 @@ fn main() {
                 let _tray = TrayIconBuilder::new()
                     .menu(&menu)
                     .tooltip("DevSynapse AI")
-                    .icon(app.default_window_icon().unwrap().clone())
+                    .icon(tray_icon_image())
                     .on_menu_event(|app, event| match event.id().as_ref() {
                         "show" => {
                             if let Some(w) = app.get_webview_window("main") {

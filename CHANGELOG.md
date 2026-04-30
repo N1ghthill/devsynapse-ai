@@ -6,6 +6,21 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+## [v0.6.2] - 2026-04-30
+
+### Changed
+- Improved the packaged desktop tray icon with a larger white high-contrast
+  glyph for better visibility in system tray bars.
+- Replaced the browser/favicon surface with a cropped DevSynapse brand icon so
+  the symbol remains readable in small tab and packaged-web contexts.
+- Refined the chat workbench styling to better match the desktop product
+  direction while keeping project scope, command review, reasoning and usage
+  controls available.
+
+### Fixed
+- Buffered streaming chat updates to reduce layout jitter while assistant
+  responses arrive token by token.
+
 ## [v0.5.2] - 2026-04-28
 
 ### Added
