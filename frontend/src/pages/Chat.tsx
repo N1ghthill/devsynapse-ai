@@ -122,14 +122,28 @@ export function Chat() {
   const pinnedToLatestRef = useRef(true);
   const messageIdSequenceRef = useRef(0);
   const toolRunSequenceRef = useRef(0);
+  const streamBufferRef = useRef<Record<string, string>>({});
+  const streamFlushTimerRef = useRef<number | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
   useEffect(() => {
     if (pinnedToLatestRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      messagesEndRef.current?.scrollIntoView({
+        behavior: isLoading ? 'auto' : 'smooth',
+        block: 'end',
+      });
     }
   }, [messages, isLoading]);
+
+  useEffect(
+    () => () => {
+      if (streamFlushTimerRef.current !== null) {
+        window.clearTimeout(streamFlushTimerRef.current);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     localStorage.setItem(CONVERSATION_STORAGE_KEY, conversationId);
@@ -262,6 +276,36 @@ export function Chat() {
   const createToolRunId = () => {
     toolRunSequenceRef.current += 1;
     return `tool_${conversationId}_${toolRunSequenceRef.current}`;
+  };
+
+  const flushStreamBuffer = () => {
+    if (streamFlushTimerRef.current !== null) {
+      window.clearTimeout(streamFlushTimerRef.current);
+      streamFlushTimerRef.current = null;
+    }
+
+    const pendingContent = streamBufferRef.current;
+    const pendingMessageIds = Object.keys(pendingContent).filter(
+      (messageId) => pendingContent[messageId]
+    );
+    if (pendingMessageIds.length === 0) return;
+
+    streamBufferRef.current = {};
+    setMessages((prev) =>
+      prev.map((message) => {
+        const content = pendingContent[message.id];
+        return content ? { ...message, content: message.content + content } : message;
+      })
+    );
+  };
+
+  const scheduleStreamFlush = () => {
+    if (streamFlushTimerRef.current !== null) return;
+
+    streamFlushTimerRef.current = window.setTimeout(() => {
+      streamFlushTimerRef.current = null;
+      flushStreamBuffer();
+    }, 55);
   };
 
   const updateToolRun = (
@@ -508,15 +552,12 @@ export function Chat() {
           execute_command: autoApprove,
         },
         (token) => {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantMessageId
-                ? { ...msg, content: msg.content + token }
-                : msg
-            )
-          );
+          streamBufferRef.current[assistantMessageId] =
+            (streamBufferRef.current[assistantMessageId] || '') + token;
+          scheduleStreamFlush();
         },
         (command, autoExecute) => {
+          flushStreamBuffer();
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantMessageId
@@ -541,12 +582,14 @@ export function Chat() {
           );
         },
         (command, status) => {
+          flushStreamBuffer();
           updateToolRun(assistantMessageId, command, {
             status,
             result: status === 'running' ? 'Aguardando retorno do backend...' : undefined,
           });
         },
         (command, result) => {
+          flushStreamBuffer();
           updateToolRun(assistantMessageId, command, {
             status: result.status,
             result: result.output || result.message,
@@ -564,6 +607,7 @@ export function Chat() {
           }
         },
         (reasoning) => {
+          flushStreamBuffer();
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantMessageId
@@ -573,6 +617,7 @@ export function Chat() {
           );
         },
         (usage, projectName) => {
+          flushStreamBuffer();
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantMessageId
@@ -589,6 +634,7 @@ export function Chat() {
           void loadConversationList();
         },
         (error) => {
+          flushStreamBuffer();
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantMessageId
@@ -793,6 +839,14 @@ export function Chat() {
     });
 
   const hasMessages = messages.length > 0;
+  const hasPendingAssistantMessage = messages.some(
+    (message) =>
+      message.role === 'assistant' &&
+      !message.content &&
+      !message.command &&
+      !message.reasoningContent &&
+      (!message.toolRuns || message.toolRuns.length === 0)
+  );
 
   const normalizedQuery = conversationQuery.trim().toLowerCase();
   const visibleConversations = conversations.filter((conversation) => {
@@ -1152,7 +1206,7 @@ export function Chat() {
           />
         ))}
 
-        {isLoading && (
+        {isLoading && !hasMessages && !hasPendingAssistantMessage && (
           <div className="message message-ai">
             <div className="message-avatar">
               <Loader2 size={20} className="spinner" />
@@ -1167,7 +1221,7 @@ export function Chat() {
           </div>
         )}
 
-        <div ref={messagesEndRef} />
+        <div className="messages-end-anchor" ref={messagesEndRef} />
       </div>
 
       {(showScrollTop || showJumpToLatest) && (

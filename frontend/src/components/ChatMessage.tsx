@@ -117,6 +117,13 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
   const commandReview = message.command
     ? getCommandReview(message.command, message.projectName)
     : null;
+  const toolRuns = message.toolRuns || [];
+  const isPendingAssistant =
+    !isUser &&
+    !message.content &&
+    !message.command &&
+    !message.reasoningContent &&
+    toolRuns.length === 0;
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message.content);
@@ -125,8 +132,6 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
   };
 
   const canExecute = Boolean(message.command) && commandStatus !== 'running' && commandStatus !== 'success';
-  const toolRuns = message.toolRuns || [];
-
   const renderCommandReview = (command: string, projectName?: string | null) => {
     const review = getCommandReview(command, projectName);
     return (
@@ -168,7 +173,11 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
   };
 
   return (
-    <div className={`message ${isUser ? 'message-user' : 'message-ai'}`}>
+    <div
+      className={`message ${isUser ? 'message-user' : 'message-ai'} ${
+        isPendingAssistant ? 'message-streaming' : ''
+      }`}
+    >
       <div className="message-avatar">
         {isUser ? <User size={20} /> : <Bot size={20} />}
       </div>
@@ -185,7 +194,15 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
         </div>
 
         <div className="message-body">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
+          {isPendingAssistant ? (
+            <div className="typing-indicator" aria-label="DevSynapse está respondendo">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          ) : (
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          )}
         </div>
 
         {message.tokenUsage && (
