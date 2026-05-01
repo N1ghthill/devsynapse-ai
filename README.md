@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.5.2-blue)
+![Version](https://img.shields.io/badge/version-0.6.3-blue)
 
 **A local-first DeepSeek coding agent with safe command execution, project memory, and cost visibility.**
 
@@ -96,19 +96,19 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Verified Baseline
 
-Release validation completed on `2026-04-28` (v0.5.2 repository baseline):
+Release validation completed on `2026-05-01` (v0.6.3 repository baseline):
 - full repository verification: `make verify`
 - desktop build verification: `make desktop-build`
 - browser smoke validation: `make ui-smoke`
 - dependency consistency: `pip check`
 - frontend dependency audit: `npm audit --audit-level=high`
-- backend test suite: `207 passed`
+- backend test suite: `225 passed`
 - Python/Ruff checks, shell syntax checks, Python script compilation and frontend ESLint: passed
 - frontend production build: passed
 - GitHub Actions CI: passed on `main`
 - supported shell installer target: Debian/Ubuntu-style Linux with `apt`
 - validated desktop artifacts: Linux `.deb` / `.rpm` and Windows NSIS installer; macOS is configured but not validated
-- LLM usage telemetry, streaming chat delivery, project selector, conversation persistence, execution workflow and dashboard metrics are active in the current codebase
+- LLM usage telemetry, streaming chat delivery, project selector, project manager, conversation persistence, execution workflow and dashboard metrics are active in the current codebase
 
 ## What The Project Does
 
@@ -243,7 +243,7 @@ update-devsynapse
 To pin a specific published release:
 
 ```bash
-devsynapse update --version v0.5.2
+devsynapse update --version v0.6.3
 ```
 
 ### Manual Backend
@@ -308,7 +308,7 @@ Technical guides:
 - development roadmap: [docs/development/roadmap.md](docs/development/roadmap.md)
 - runtime and delivery notes: [docs/deployment/runtime.md](docs/deployment/runtime.md)
 - local security model: [docs/security/local-security-model.md](docs/security/local-security-model.md)
-- latest release notes: [docs/releases/v0.5.2.md](docs/releases/v0.5.2.md)
+- latest release notes: [docs/releases/v0.6.3.md](docs/releases/v0.6.3.md)
 
 Supplementary references:
 - engineering guide: [README_PROFESSIONAL.md](README_PROFESSIONAL.md)

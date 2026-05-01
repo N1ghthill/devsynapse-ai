@@ -6,6 +6,23 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+## [v0.6.3] - 2026-05-01
+
+### Added
+- Added a dedicated chat project manager component for searching, filtering,
+  creating, selecting, refreshing and removing projects from the chat workspace.
+- Added a dedicated conversation rail component for local conversation history,
+  search, CSV export, rename and delete actions.
+- Extended the Playwright UI smoke test to create and validate a project through
+  the chat project manager.
+
+### Changed
+- Preserved the selected project when creating or switching into a fresh
+  project-scoped conversation from chat.
+- Improved streamed Markdown/code rendering with copyable code blocks.
+- Cleaned up unused project-manager CSS and clarified status-filter naming.
+- Kept the existing fast "Aprovar tudo" operator flow unchanged.
+
 ## [v0.6.2] - 2026-04-30
 
 ### Changed
