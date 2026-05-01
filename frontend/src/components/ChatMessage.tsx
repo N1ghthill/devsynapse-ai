@@ -42,6 +42,82 @@ interface CommandReview {
   workingDirectory: string;
 }
 
+const normalizeStreamingMarkdown = (content: string) => {
+  const fenceCount = content.match(/```/g)?.length || 0;
+  if (fenceCount % 2 === 1) {
+    return `${content}\n\n\`\`\``;
+  }
+  return content;
+};
+
+const textFromReactNode = (value: React.ReactNode): string => {
+  if (typeof value === 'string' || typeof value === 'number') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(textFromReactNode).join('');
+  }
+  if (React.isValidElement<{ children?: React.ReactNode }>(value)) {
+    return textFromReactNode(value.props.children);
+  }
+  return '';
+};
+
+function MarkdownPre({
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLPreElement>) {
+  const [copiedCode, setCopiedCode] = React.useState(false);
+  const child = React.Children.toArray(children)[0];
+  const codeElement = React.isValidElement<{
+    className?: string;
+    children?: React.ReactNode;
+  }>(child)
+    ? child
+    : null;
+  const className = codeElement?.props.className || '';
+  const language = className.replace('language-', '').trim() || 'code';
+  const codeText = textFromReactNode(codeElement?.props.children || children).replace(/\n$/, '');
+
+  const copyCode = async () => {
+    await navigator.clipboard.writeText(codeText);
+    setCopiedCode(true);
+    window.setTimeout(() => setCopiedCode(false), 1600);
+  };
+
+  return (
+    <div className="markdown-code-block">
+      <div className="markdown-code-header">
+        <span>{language}</span>
+        <button type="button" onClick={copyCode} aria-label="Copiar código">
+          {copiedCode ? <Check size={13} /> : <Copy size={13} />}
+          <span>{copiedCode ? 'Copiado' : 'Copiar'}</span>
+        </button>
+      </div>
+      <pre {...props} className="markdown-code-pre">
+        <code className={className}>{codeText}</code>
+      </pre>
+    </div>
+  );
+}
+
+function MarkdownCode({
+  children,
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLElement>) {
+  return (
+    <code className={className} {...props}>
+      {children}
+    </code>
+  );
+}
+
+const markdownComponents = {
+  pre: MarkdownPre,
+  code: MarkdownCode,
+};
+
 function getCommandType(command: string): string {
   return command.match(/^([a-z_][\w-]*)/i)?.[1]?.toLowerCase() || 'command';
 }
@@ -201,7 +277,9 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
               <span></span>
             </div>
           ) : (
-            <ReactMarkdown>{message.content}</ReactMarkdown>
+            <ReactMarkdown components={markdownComponents}>
+              {normalizeStreamingMarkdown(message.content)}
+            </ReactMarkdown>
           )}
         </div>
 
@@ -245,7 +323,9 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
             </button>
             {reasoningOpen && (
               <div className="reasoning-body">
-                <ReactMarkdown>{message.reasoningContent}</ReactMarkdown>
+                <ReactMarkdown components={markdownComponents}>
+                  {normalizeStreamingMarkdown(message.reasoningContent)}
+                </ReactMarkdown>
               </div>
             )}
           </div>

@@ -5,25 +5,21 @@ import {
   BookOpenText,
   ClipboardList,
   Container,
-  Download,
   FileSearch,
   FlaskConical,
   FolderOpen,
-  FolderPlus,
   GitPullRequestArrow,
   ListTodo,
   Loader2,
   LockKeyhole,
   MessageSquarePlus,
-  Pencil,
-  Search,
-  ShieldCheck,
-  Trash2,
   X,
   type LucideIcon,
 } from 'lucide-react';
 import { ChatMessage } from '../components/ChatMessage';
 import { ChatInput } from '../components/ChatInput';
+import { ConversationRail } from '../components/ConversationRail';
+import { ProjectManager, type ProjectCreateDraft } from '../components/ProjectManager';
 import { adminApi, chatApi, dashboardApi, settingsApi } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import type {
@@ -110,9 +106,10 @@ export function Chat() {
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [showProjectMenu, setShowProjectMenu] = useState(false);
+  const [showProjectManager, setShowProjectManager] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
-  const [projectDraftName, setProjectDraftName] = useState('');
-  const [projectDraftPath, setProjectDraftPath] = useState('');
+  const [deletingProject, setDeletingProject] = useState<string | null>(null);
+  const [refreshingProjects, setRefreshingProjects] = useState(false);
   const [projectError, setProjectError] = useState<string | null>(null);
   const [autoApprove, setAutoApprove] = useState(
     () => localStorage.getItem(AUTO_APPROVE_STORAGE_KEY) === 'true'
@@ -124,15 +121,19 @@ export function Chat() {
   const toolRunSequenceRef = useRef(0);
   const streamBufferRef = useRef<Record<string, string>>({});
   const streamFlushTimerRef = useRef<number | null>(null);
+  const pendingProjectSelectionRef = useRef<string | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
   useEffect(() => {
     if (pinnedToLatestRef.current) {
-      messagesEndRef.current?.scrollIntoView({
-        behavior: isLoading ? 'auto' : 'smooth',
-        block: 'end',
+      const frame = window.requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({
+          behavior: isLoading ? 'auto' : 'smooth',
+          block: 'end',
+        });
       });
+      return () => window.cancelAnimationFrame(frame);
     }
   }, [messages, isLoading]);
 
@@ -162,6 +163,11 @@ export function Chat() {
     }
   };
 
+  const loadProjects = async () => {
+    const list = isAdmin ? await adminApi.listProjects() : await settingsApi.listProjects();
+    setProjects(list);
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -174,12 +180,16 @@ export function Chat() {
         if (!cancelled) {
           setMessages(conversationResponse.history || []);
           setConversations(listResponse.conversations || []);
-          setSelectedProject(conversationResponse.project_name || '');
+          setSelectedProject(
+            conversationResponse.project_name || pendingProjectSelectionRef.current || ''
+          );
+          pendingProjectSelectionRef.current = null;
         }
       } catch {
         if (!cancelled) {
           setMessages([]);
-          setSelectedProject('');
+          setSelectedProject(pendingProjectSelectionRef.current || '');
+          pendingProjectSelectionRef.current = null;
           void loadConversationList();
         }
       }
@@ -219,7 +229,7 @@ export function Chat() {
   useEffect(() => {
     let cancelled = false;
 
-    const loadProjects = async () => {
+    const loadProjectList = async () => {
       try {
         const list = isAdmin ? await adminApi.listProjects() : await settingsApi.listProjects();
         if (!cancelled) {
@@ -232,7 +242,7 @@ export function Chat() {
       }
     };
 
-    void loadProjects();
+    void loadProjectList();
     return () => {
       cancelled = true;
     };
@@ -402,11 +412,6 @@ export function Chat() {
   const currentScopeProject = lockedProject || selectedProject || null;
   const projectScopeLocked = Boolean(lockedProject);
   const conversationUsage = summarizeUsage(messages);
-  const toolRunTotal = messages.reduce(
-    (total, message) =>
-      total + (message.toolRuns?.length || 0) + (message.command ? 1 : 0),
-    0
-  );
   const activeToolRunTotal = messages.reduce(
     (total, message) =>
       total +
@@ -430,6 +435,7 @@ export function Chat() {
 
   const startConversationForProject = (projectName: string) => {
     pinnedToLatestRef.current = true;
+    pendingProjectSelectionRef.current = projectName;
     setMessages([]);
     setSelectedProject(projectName);
     const nextConversationId = createConversationId();
@@ -466,33 +472,66 @@ export function Chat() {
     return fallback;
   };
 
-  const handleCreateProject = async () => {
-    const name = projectDraftName.trim();
-    if (!name || creatingProject || !isAdmin) return;
+  const handleCreateProject = async (draft: ProjectCreateDraft): Promise<boolean> => {
+    const name = draft.name.trim();
+    if (!name || creatingProject || !isAdmin) return false;
 
     setCreatingProject(true);
     setProjectError(null);
     try {
       const created = await adminApi.createProject({
         name,
-        ...(projectDraftPath.trim() ? { path: projectDraftPath.trim() } : {}),
-        type: 'project',
-        priority: 'medium',
-        create_directory: true,
+        ...(draft.path.trim() ? { path: draft.path.trim() } : {}),
+        type: draft.type.trim() || 'project',
+        priority: draft.priority.trim() || 'medium',
+        create_directory: draft.createDirectory || !draft.path.trim(),
       });
       setProjects((prev) => {
         const withoutDuplicate = prev.filter((project) => project.name !== created.name);
         return [...withoutDuplicate, created].sort((a, b) => a.name.localeCompare(b.name));
       });
-      setProjectDraftName('');
-      setProjectDraftPath('');
       setShowProjectMenu(false);
       startConversationForProject(created.name);
       void loadConversationList();
+      return true;
     } catch (error) {
       setProjectError(getRequestError(error, 'Falha ao criar projeto'));
+      return false;
     } finally {
       setCreatingProject(false);
+    }
+  };
+
+  const handleRefreshProjects = async () => {
+    setRefreshingProjects(true);
+    setProjectError(null);
+    try {
+      await loadProjects();
+    } catch (error) {
+      setProjectError(getRequestError(error, 'Falha ao atualizar projetos'));
+    } finally {
+      setRefreshingProjects(false);
+    }
+  };
+
+  const handleDeleteProject = async (project: ProjectInfo) => {
+    if (!isAdmin || deletingProject) return;
+    const confirmed = window.confirm(`Remover "${project.name}" do DevSynapse?`);
+    if (!confirmed) return;
+
+    setDeletingProject(project.name);
+    setProjectError(null);
+    try {
+      await adminApi.deleteProject(project.name);
+      setProjects((prev) => prev.filter((entry) => entry.name !== project.name));
+      if (selectedProject === project.name) {
+        setSelectedProject('');
+      }
+      await loadConversationList();
+    } catch (error) {
+      setProjectError(getRequestError(error, `Falha ao remover ${project.name}`));
+    } finally {
+      setDeletingProject(null);
     }
   };
 
@@ -794,6 +833,7 @@ export function Chat() {
 
   const handleClear = () => {
     pinnedToLatestRef.current = true;
+    pendingProjectSelectionRef.current = null;
     setMessages([]);
     const nextConversationId = createConversationId();
     setConversationId(nextConversationId);
@@ -830,14 +870,6 @@ export function Chat() {
     }
   };
 
-  const formatConversationTime = (value: string) =>
-    new Date(value).toLocaleString([], {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
   const hasMessages = messages.length > 0;
   const hasPendingAssistantMessage = messages.some(
     (message) =>
@@ -848,182 +880,22 @@ export function Chat() {
       (!message.toolRuns || message.toolRuns.length === 0)
   );
 
-  const normalizedQuery = conversationQuery.trim().toLowerCase();
-  const visibleConversations = conversations.filter((conversation) => {
-    if (!normalizedQuery) return true;
-    return (
-      conversation.title.toLowerCase().includes(normalizedQuery) ||
-      conversation.preview.toLowerCase().includes(normalizedQuery) ||
-      (conversation.project_name || '').toLowerCase().includes(normalizedQuery)
-    );
-  });
-
-  const getConversationGroupLabel = (updatedAt: string) => {
-    const current = new Date();
-    const target = new Date(updatedAt);
-    const dayStart = new Date(current.getFullYear(), current.getMonth(), current.getDate());
-    const yesterdayStart = new Date(dayStart);
-    yesterdayStart.setDate(dayStart.getDate() - 1);
-    const targetDay = new Date(target.getFullYear(), target.getMonth(), target.getDate());
-
-    if (targetDay.getTime() === dayStart.getTime()) return 'Hoje';
-    if (targetDay.getTime() === yesterdayStart.getTime()) return 'Ontem';
-    return 'Mais antigas';
-  };
-
-  const groupedConversations = visibleConversations.reduce<Record<string, ConversationSummary[]>>(
-    (groups, conversation) => {
-      const label = getConversationGroupLabel(conversation.updated_at);
-      groups[label] = [...(groups[label] || []), conversation];
-      return groups;
-    },
-    {}
-  );
-  const orderedGroupLabels = ['Hoje', 'Ontem', 'Mais antigas'].filter(
-    (label) => (groupedConversations[label] || []).length > 0
-  );
-
-  const renderConversationItem = (conversation: ConversationSummary) => (
-    <div
-      key={conversation.id}
-      className={`conversation-item ${conversation.id === conversationId ? 'active' : ''}`}
-    >
-      <button
-        className="conversation-select"
-        onClick={() => handleSelectConversation(conversation.id)}
-        type="button"
-      >
-        <div className="conversation-item-top">
-          <span className="conversation-title">{conversation.title}</span>
-          <span className="conversation-time">{formatConversationTime(conversation.updated_at)}</span>
-        </div>
-        <p className="conversation-preview">{conversation.preview || 'Sem resumo disponível.'}</p>
-        {conversation.project_name && (
-          <span className="conversation-project-chip">{conversation.project_name}</span>
-        )}
-        <div className="conversation-metrics">
-          <span>{(conversation.total_tokens || 0).toLocaleString()} tok</span>
-          <span>{formatUsd(conversation.estimated_cost_usd || 0)}</span>
-        </div>
-      </button>
-      <div className="conversation-actions">
-        <button
-          className="conversation-action-btn"
-          onClick={() => void handleRenameConversation(conversation)}
-          type="button"
-          aria-label="Renomear conversa"
-        >
-          <Pencil size={14} />
-        </button>
-        <button
-          className="conversation-action-btn danger"
-          onClick={() => void handleDeleteConversation(conversation)}
-          type="button"
-          aria-label="Excluir conversa"
-        >
-          <Trash2 size={14} />
-        </button>
-      </div>
-    </div>
-  );
-
-  const renderConversationRail = () => (
-    <aside className="chat-rail">
-      <div className="chat-rail-header">
-        <div>
-          <h2>Conversas</h2>
-          <p>{conversations.length} sessões locais</p>
-        </div>
-        <div className="rail-actions">
-          <button className="new-chat-btn" onClick={handleClear} type="button">
-            <MessageSquarePlus size={16} />
-            <span>Nova</span>
-          </button>
-          <button
-            className="new-chat-btn secondary"
-            onClick={() => void downloadUsageCsv()}
-            type="button"
-          >
-            <Download size={16} />
-            <span>CSV</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="conversation-search">
-        <Search size={15} className="conversation-search-icon" />
-        <input
-          type="text"
-          value={conversationQuery}
-          onChange={(event) => setConversationQuery(event.target.value)}
-          placeholder="Buscar conversa..."
-          aria-label="Buscar conversa"
-        />
-      </div>
-
-      <div className="conversation-list">
-        {visibleConversations.length > 0 ? (
-          orderedGroupLabels.map((label) => (
-            <section key={label} className="conversation-group">
-              <div className="conversation-group-label">{label}</div>
-              <div className="conversation-group-items">
-                {groupedConversations[label].map(renderConversationItem)}
-              </div>
-            </section>
-          ))
-        ) : (
-          <div className="conversation-empty">
-            <p>
-              {normalizedQuery
-                ? 'Nenhuma conversa corresponde à busca.'
-                : 'Nenhuma conversa salva ainda.'}
-            </p>
-          </div>
-        )}
-      </div>
-    </aside>
-  );
-
   const renderChatPanel = () => (
     <>
       <div className="chat-header">
         <div className="chat-header-main">
           <div className="workspace-title-row">
-            <span className="workspace-kicker">Workspace local</span>
+            <h1>DevSynapse</h1>
             <span className="workspace-live-dot">Pronto</span>
           </div>
-          <h1>DevSynapse</h1>
           <p className="chat-subtitle">
             {currentConversation?.title || 'Nova sessão de desenvolvimento'}
           </p>
         </div>
         <div className="chat-header-actions">
-          <button
-            className={`header-auto-approve ${autoApprove ? 'active' : ''}`}
-            onClick={() => setAutoApprove((enabled) => !enabled)}
-            type="button"
-            aria-pressed={autoApprove}
-            title={
-              isAdmin
-                ? 'Admin: executar comandos suportados sem confirmação por etapa'
-                : 'Executar comandos autorizados automaticamente'
-            }
-          >
-            <ShieldCheck size={15} />
-            <span>
-              {autoApprove
-                ? isAdmin
-                  ? 'Admin automático'
-                  : 'Execução automática'
-                : 'Revisão manual'}
-            </span>
-          </button>
-          <span className="session-id">
-            {conversationId.slice(0, 20)}...
-          </span>
-          <button className="clear-btn" onClick={handleClear} type="button">
-            <Trash2 size={16} />
-            Limpar
+          <button className="top-new-chat-btn" onClick={handleClear} type="button">
+            <MessageSquarePlus size={16} />
+            Nova conversa
           </button>
         </div>
 
@@ -1045,14 +917,26 @@ export function Chat() {
                 <div className="project-menu">
                   <div className="project-menu-head">
                     <strong>Projeto da conversa</strong>
-                    <button
-                      type="button"
-                      className="project-menu-close"
-                      onClick={() => setShowProjectMenu(false)}
-                      aria-label="Fechar menu de projetos"
-                    >
-                      <X size={14} />
-                    </button>
+                    <div className="project-menu-actions">
+                      <button
+                        type="button"
+                        className="project-menu-manage"
+                        onClick={() => {
+                          setShowProjectMenu(false);
+                          setShowProjectManager(true);
+                        }}
+                      >
+                        Projetos
+                      </button>
+                      <button
+                        type="button"
+                        className="project-menu-close"
+                        onClick={() => setShowProjectMenu(false)}
+                        aria-label="Fechar menu de projetos"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   </div>
 
                   {projectScopeLocked && (
@@ -1081,39 +965,16 @@ export function Chat() {
                     )}
                   </div>
 
-                  {isAdmin && (
-                    <div className="project-create-panel">
-                      <label htmlFor="project-name-input">Novo projeto</label>
-                      <div className="project-create-row">
-                        <input
-                          id="project-name-input"
-                          type="text"
-                          value={projectDraftName}
-                          onChange={(event) => setProjectDraftName(event.target.value)}
-                          placeholder="nome-do-projeto"
-                        />
-                        <button
-                          type="button"
-                          className="project-create-btn"
-                          onClick={() => void handleCreateProject()}
-                          disabled={creatingProject || !projectDraftName.trim()}
-                        >
-                          <FolderPlus size={15} />
-                          <span>{creatingProject ? 'Criando' : 'Criar'}</span>
-                        </button>
-                      </div>
-                      <input
-                        type="text"
-                        value={projectDraftPath}
-                        onChange={(event) => setProjectDraftPath(event.target.value)}
-                        placeholder="caminho opcional; vazio usa a pasta de repositórios"
-                      />
-                      {projectError && <p className="project-menu-error">{projectError}</p>}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
+            <button
+              type="button"
+              className="project-manager-open"
+              onClick={() => setShowProjectManager(true)}
+            >
+              Projetos
+            </button>
             {projectScopeLocked && (
               <span className="scope-chip locked">
                 <LockKeyhole size={13} />
@@ -1123,9 +984,6 @@ export function Chat() {
             {!projectScopeLocked && projects.length === 0 && (
               <span className="scope-chip">Sem projetos</span>
             )}
-            <span className={currentScopeProject ? 'scope-chip active' : 'scope-chip'}>
-              {currentScopeProject ? currentScopeProject : 'Escopo global'}
-            </span>
             {projectScopeLocked && selectedProject && selectedProject !== lockedProject && (
               <div className="project-lock-note inline">
                 Abra uma nova conversa para trocar de projeto.
@@ -1146,10 +1004,12 @@ export function Chat() {
               <strong>{formatUsd(conversationUsage?.estimated_cost_usd || 0)}</strong>
               <span>custo</span>
             </span>
-            <span className={activeToolRunTotal > 0 ? 'context-pill active' : 'context-pill'}>
-              <strong>{toolRunTotal.toLocaleString()}</strong>
-              <span>{activeToolRunTotal > 0 ? 'rodando' : 'execuções'}</span>
-            </span>
+            {activeToolRunTotal > 0 && (
+              <span className="context-pill active">
+                <strong>{activeToolRunTotal.toLocaleString()}</strong>
+                <span>rodando</span>
+              </span>
+            )}
             {budgetSummary && (
               <div className={`chat-budget-banner banner-${budgetSummary.severity}`}>
                 {budgetSummary.text}
@@ -1264,11 +1124,40 @@ export function Chat() {
   return (
     <div className="chat-page">
       <div className="chat-shell">
-        {renderConversationRail()}
+        <ConversationRail
+          conversations={conversations}
+          activeConversationId={conversationId}
+          query={conversationQuery}
+          formatUsd={formatUsd}
+          onQueryChange={setConversationQuery}
+          onNewConversation={handleClear}
+          onDownloadUsageCsv={downloadUsageCsv}
+          onSelectConversation={handleSelectConversation}
+          onRenameConversation={handleRenameConversation}
+          onDeleteConversation={handleDeleteConversation}
+        />
         <section className="chat-main-panel">
           {renderChatPanel()}
         </section>
       </div>
+      {showProjectManager && (
+        <ProjectManager
+          isAdmin={isAdmin}
+          projects={projects}
+          currentScopeProject={currentScopeProject}
+          projectScopeLocked={projectScopeLocked}
+          lockedProject={lockedProject}
+          projectError={projectError}
+          creatingProject={creatingProject}
+          deletingProject={deletingProject}
+          refreshingProjects={refreshingProjects}
+          onClose={() => setShowProjectManager(false)}
+          onRefresh={handleRefreshProjects}
+          onSelectProject={handleProjectSelection}
+          onCreateProject={handleCreateProject}
+          onDeleteProject={handleDeleteProject}
+        />
+      )}
     </div>
   );
 }

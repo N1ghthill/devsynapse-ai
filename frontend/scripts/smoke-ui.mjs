@@ -44,6 +44,17 @@ async function runSmoke() {
       page.getByRole('button', { name: 'Sign In' }).click(),
     ]);
     await expectVisible(page.getByText('Workspace local'), 'chat workspace header');
+    await expectVisible(page.getByRole('heading', { name: 'Escolha um fluxo' }), 'chat empty state');
+
+    await page.getByRole('button', { name: 'Projetos' }).click();
+    await expectVisible(page.getByRole('dialog', { name: 'Escolher projeto' }), 'project manager');
+    await page.getByRole('button', { name: 'Adicionar projeto' }).click();
+    await page.getByLabel('Nome').fill('smoke-ui-project');
+    await Promise.all([
+      page.getByRole('dialog', { name: 'Escolher projeto' }).waitFor({ state: 'hidden', timeout }),
+      page.getByRole('button', { name: 'Adicionar projeto' }).click(),
+    ]);
+    await expectVisible(page.getByText('smoke-ui-project').first(), 'created project selection');
 
     await page.getByRole('link', { name: 'Painel' }).click();
     await expectVisible(page.getByRole('heading', { name: 'Dashboard' }), 'dashboard heading');
