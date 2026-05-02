@@ -108,11 +108,12 @@ make eval-agent
 
 `make eval-agent` creates a timestamped benchmark run under
 `/tmp/devsynapse-agent-evaluations/`, initializes a small Python project with
-failing tests, validates project-scope policy blocks and, when a DeepSeek API
-key is configured, asks DevSynapse to diagnose, edit and re-run the fixture.
+failing tests, validates project-scope policy blocks, creates auxiliary
+documentation/refactor/setup-diagnosis fixtures and, when a DeepSeek API key is
+configured, asks DevSynapse to diagnose, edit and re-run the primary fixture.
 Reports are written as Markdown and JSON inside the generated `reports/`
-directory. Use `make eval-agent EVAL_AGENT_ARGS=--no-llm` when you only want to
-verify the disposable harness and policy checks without spending API tokens.
+directory. CI runs `make eval-agent EVAL_AGENT_ARGS=--no-llm` so the disposable
+harness and policy checks stay covered without spending API tokens.
 
 ## Expectations For Contributors
 

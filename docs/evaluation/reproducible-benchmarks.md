@@ -46,6 +46,58 @@ Evidence generated:
 - git diff for the file edited by the agent
 - LLM usage metadata when the DeepSeek step runs
 
+### Docs Only Lab
+
+Purpose: validate a documentation-only inspection workflow where the correct
+outcome is repository understanding without file mutation.
+
+Fixture:
+
+- README with a `Quick Start` section
+- small operator guide under `docs/`
+- isolated git repository under `/tmp`
+
+Evidence generated:
+
+- read command against the README
+- grep command scoped to Markdown files
+- clean `git diff --exit-code`
+
+### Multi-File Refactor Lab
+
+Purpose: provide a repeatable fixture for future focused refactor benchmarks
+without making the default CI path spend LLM tokens.
+
+Fixture:
+
+- two Python modules with duplicated tax-rate logic
+- passing pytest suite before any refactor
+- isolated git repository under `/tmp`
+
+Evidence generated:
+
+- baseline pytest output
+- grep command that identifies duplicated implementation points
+- read command against one affected module
+
+### Missing Dependency Lab
+
+Purpose: validate setup-diagnosis evidence where the expected first answer is
+to identify a missing dependency, not edit source code.
+
+Fixture:
+
+- Python module importing an intentionally absent optional package
+- pytest suite that fails during collection
+- README that describes the fixture intent
+- isolated git repository under `/tmp`
+
+Evidence generated:
+
+- failing baseline pytest output caused by the missing dependency
+- read command against the README
+- expected failing pytest output recorded as a diagnostic condition
+
 ### Project Boundary Checks
 
 Purpose: prove that command execution remains project-aware while the agent is
@@ -96,3 +148,14 @@ The next useful fixtures should cover:
 - missing dependency diagnosis where the correct action is to report the setup
   issue instead of editing source;
 - budget-warning scenario that validates cost visibility during agent work.
+
+## CI Coverage
+
+CI runs the no-LLM harness with:
+
+```bash
+make eval-agent EVAL_AGENT_ARGS=--no-llm
+```
+
+This keeps the disposable fixture and policy-block path continuously validated
+without requiring secrets or spending DeepSeek tokens.

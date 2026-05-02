@@ -65,6 +65,14 @@ def _run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
 
 
+def _init_git_repo(project_root: Path, message: str) -> None:
+    _run(["git", "init", "-q"], project_root)
+    _run(["git", "config", "user.email", "eval@example.local"], project_root)
+    _run(["git", "config", "user.name", "DevSynapse Eval"], project_root)
+    _run(["git", "add", "."], project_root)
+    _run(["git", "commit", "-q", "-m", message], project_root)
+
+
 def _create_fixture(project_root: Path) -> None:
     if project_root.exists():
         shutil.rmtree(project_root)
@@ -121,11 +129,112 @@ def test_invoice_total_applies_discount_to_subtotal():
 """,
     )
 
-    _run(["git", "init", "-q"], project_root)
-    _run(["git", "config", "user.email", "eval@example.local"], project_root)
-    _run(["git", "config", "user.name", "DevSynapse Eval"], project_root)
-    _run(["git", "add", "."], project_root)
-    _run(["git", "commit", "-q", "-m", "initial failing benchmark fixture"], project_root)
+    _init_git_repo(project_root, "initial failing benchmark fixture")
+
+
+def _create_docs_fixture(project_root: Path) -> None:
+    if project_root.exists():
+        shutil.rmtree(project_root)
+    (project_root / "docs").mkdir(parents=True)
+
+    _write(
+        project_root / "README.md",
+        """# Docs Only Lab
+
+Disposable documentation benchmark for DevSynapse AI evaluation.
+
+## Quick Start
+
+Run the local app and inspect the generated documentation before publishing.
+""",
+    )
+    _write(
+        project_root / "docs" / "operator-guide.md",
+        """# Operator Guide
+
+This fixture is intentionally documentation-only. A correct agent should inspect
+and summarize the repository without mutating files unless explicitly asked.
+""",
+    )
+    _init_git_repo(project_root, "initial documentation benchmark fixture")
+
+
+def _create_refactor_fixture(project_root: Path) -> None:
+    if project_root.exists():
+        shutil.rmtree(project_root)
+    (project_root / "billing").mkdir(parents=True)
+
+    _write(
+        project_root / "billing" / "orders.py",
+        """from __future__ import annotations
+
+
+def order_tax(subtotal: float) -> float:
+    tax_rate = 0.12
+    return round(subtotal * tax_rate, 2)
+""",
+    )
+    _write(
+        project_root / "billing" / "invoices.py",
+        """from __future__ import annotations
+
+
+def invoice_tax(subtotal: float) -> float:
+    tax_rate = 0.12
+    return round(subtotal * tax_rate, 2)
+""",
+    )
+    _write(
+        project_root / "test_billing.py",
+        """from billing.invoices import invoice_tax
+from billing.orders import order_tax
+
+
+def test_order_tax():
+    assert order_tax(100.0) == 12.0
+
+
+def test_invoice_tax():
+    assert invoice_tax(50.0) == 6.0
+""",
+    )
+    _init_git_repo(project_root, "initial multi-file refactor benchmark fixture")
+
+
+def _create_missing_dependency_fixture(project_root: Path) -> None:
+    if project_root.exists():
+        shutil.rmtree(project_root)
+    (project_root / "reporting").mkdir(parents=True)
+
+    _write(
+        project_root / "reporting" / "exporter.py",
+        """from __future__ import annotations
+
+import optional_vendor_sdk
+
+
+def export_payload(payload: dict[str, str]) -> str:
+    return optional_vendor_sdk.render(payload)
+""",
+    )
+    _write(
+        project_root / "test_exporter.py",
+        """from reporting.exporter import export_payload
+
+
+def test_export_payload_uses_vendor_renderer():
+    assert export_payload({"status": "ok"}) == "status=ok"
+""",
+    )
+    _write(
+        project_root / "README.md",
+        """# Missing Dependency Lab
+
+This fixture represents a setup diagnosis task. A correct agent should identify
+the missing optional dependency before editing source code.
+""",
+    )
+    _init_git_repo(project_root, "initial missing dependency benchmark fixture")
 
 
 def _prepare_isolated_env(run_dir: Path, deepseek_key: str | None) -> None:
@@ -184,6 +293,121 @@ async def _run_bridge_checks(project_name: str, project_root: Path) -> list[dict
             }
         )
     return checks
+
+
+async def _run_bridge_command_set(
+    project_name: str,
+    project_root: Path,
+    commands: list[tuple[str, str]],
+) -> list[dict[str, Any]]:
+    from core.monitoring import MonitoringSystem
+    from core.opencode_bridge import OpenCodeBridge
+
+    monitor = MonitoringSystem()
+    bridge = OpenCodeBridge(
+        known_projects={
+            project_name: {
+                "path": str(project_root),
+                "type": "evaluation-fixture",
+                "priority": "medium",
+            }
+        },
+        monitoring_system=monitor,
+    )
+
+    results = []
+    for name, command in commands:
+        success, message, output, status, reason_code, resolved_project = await bridge.execute_command(
+            command,
+            user_id="eval-user",
+            project_name=project_name,
+            user_role="admin",
+            project_mutation_allowlist=[project_name],
+        )
+        results.append(
+            {
+                "name": name,
+                "command": command,
+                "success": success,
+                "status": status,
+                "reason_code": reason_code,
+                "project_name": resolved_project,
+                "message": message,
+                "output_preview": (output or "")[:500],
+            }
+        )
+    return results
+
+
+async def _run_benchmark_catalog(repos_root: Path) -> list[dict[str, Any]]:
+    scenarios: list[dict[str, Any]] = []
+
+    docs_root = repos_root / "docs-only-lab"
+    _create_docs_fixture(docs_root)
+    docs_checks = await _run_bridge_command_set(
+        "docs-only-lab",
+        docs_root,
+        [
+            ("read_readme", f'read "{docs_root / "README.md"}"'),
+            ("grep_quick_start", 'grep "Quick Start" --include="*.md"'),
+        ],
+    )
+    docs_diff = _run(["git", "diff", "--exit-code"], docs_root)
+    scenarios.append(
+        {
+            "name": "docs-only-lab",
+            "purpose": "documentation inspection with no mutation",
+            "checks": docs_checks,
+            "expected_final_state": "no_git_diff",
+            "final_exit_code": docs_diff.returncode,
+            "final_output": docs_diff.stdout + docs_diff.stderr,
+        }
+    )
+
+    refactor_root = repos_root / "multi-file-refactor-lab"
+    _create_refactor_fixture(refactor_root)
+    refactor_baseline = _run([sys.executable, "-m", "pytest", "-q"], refactor_root)
+    refactor_checks = await _run_bridge_command_set(
+        "multi-file-refactor-lab",
+        refactor_root,
+        [
+            ("grep_duplicate_tax_rate", 'grep "tax_rate = 0.12" --include="*.py"'),
+            ("read_orders_module", f'read "{refactor_root / "billing" / "orders.py"}"'),
+        ],
+    )
+    scenarios.append(
+        {
+            "name": "multi-file-refactor-lab",
+            "purpose": "multi-file Python fixture for future focused refactor tasks",
+            "checks": refactor_checks,
+            "expected_final_state": "baseline_tests_pass_before_refactor",
+            "final_exit_code": refactor_baseline.returncode,
+            "final_output": refactor_baseline.stdout + refactor_baseline.stderr,
+        }
+    )
+
+    dependency_root = repos_root / "missing-dependency-lab"
+    _create_missing_dependency_fixture(dependency_root)
+    dependency_baseline = _run([sys.executable, "-m", "pytest", "-q"], dependency_root)
+    dependency_checks = await _run_bridge_command_set(
+        "missing-dependency-lab",
+        dependency_root,
+        [
+            ("read_readme", f'read "{dependency_root / "README.md"}"'),
+        ],
+    )
+    scenarios.append(
+        {
+            "name": "missing-dependency-lab",
+            "purpose": "setup diagnosis fixture where editing source is not the first answer",
+            "checks": dependency_checks,
+            "expected_final_state": "baseline_fails_with_missing_dependency",
+            "final_exit_code": 0 if dependency_baseline.returncode != 0 else 1,
+            "final_output": dependency_baseline.stdout + dependency_baseline.stderr,
+        }
+    )
+
+    return scenarios
 
 
 async def _run_llm_agent(project_name: str, project_root: Path) -> dict[str, Any] | None:
@@ -273,7 +497,32 @@ def _markdown_report(result: dict[str, Any]) -> str:
             ]
         )
     else:
-        lines.append("Skipped because no DeepSeek API key was available.")
+        skip_reason = result.get("llm_skip_reason")
+        if skip_reason == "disabled_by_flag":
+            lines.append("Skipped because `--no-llm` was used.")
+        else:
+            lines.append("Skipped because no DeepSeek API key was available.")
+
+    scenarios = result.get("benchmark_scenarios") or []
+    lines.extend(["", "## Benchmark Catalog", ""])
+    for scenario in scenarios:
+        lines.extend(
+            [
+                f"### {scenario['name']}",
+                "",
+                f"- purpose: {scenario['purpose']}",
+                f"- expected_final_state: `{scenario['expected_final_state']}`",
+                f"- final_exit_code: `{scenario['final_exit_code']}`",
+                "",
+                "Checks:",
+            ]
+        )
+        for check in scenario["checks"]:
+            lines.append(
+                f"- `{check['name']}`: status=`{check['status']}` "
+                f"reason=`{check.get('reason_code')}` success=`{check['success']}`"
+            )
+        lines.extend(["", "```text", scenario["final_output"].strip(), "```", ""])
 
     return "\n".join(lines).rstrip() + "\n"
 
@@ -294,12 +543,18 @@ async def main() -> int:
     project_name = "tiny-ledger-lab"
     project_root = run_dir / "repos" / project_name
     deepseek_key = None if args.no_llm else _configured_deepseek_key()
+    llm_skip_reason = None
+    if args.no_llm:
+        llm_skip_reason = "disabled_by_flag"
+    elif not deepseek_key:
+        llm_skip_reason = "missing_deepseek_key"
 
     _prepare_isolated_env(run_dir, deepseek_key)
     _create_fixture(project_root)
 
     baseline = _run([sys.executable, "-m", "pytest", "-q"], project_root)
     policy_checks = await _run_bridge_checks(project_name, project_root)
+    benchmark_scenarios = await _run_benchmark_catalog(run_dir / "repos")
     llm_agent = await _run_llm_agent(project_name, project_root) if deepseek_key else None
     final_pytest = _run([sys.executable, "-m", "pytest", "-q"], project_root)
     diff = _run(["git", "diff", "--", "tiny_ledger/calculator.py"], project_root)
@@ -309,9 +564,11 @@ async def main() -> int:
         "project": project_name,
         "project_path": str(project_root),
         "llm_enabled": bool(llm_agent),
+        "llm_skip_reason": llm_skip_reason,
         "baseline_exit_code": baseline.returncode,
         "baseline_pytest": baseline.stdout + baseline.stderr,
         "policy_checks": policy_checks,
+        "benchmark_scenarios": benchmark_scenarios,
         "llm_agent": llm_agent,
         "final_exit_code": final_pytest.returncode,
         "final_pytest": final_pytest.stdout + final_pytest.stderr,
@@ -324,6 +581,7 @@ async def main() -> int:
 
     print(f"Evaluation written to {reports_dir}")
     print(f"LLM enabled: {result['llm_enabled']}")
+    print(f"Benchmark scenarios: {len(benchmark_scenarios)}")
     print(f"Baseline exit: {result['baseline_exit_code']} | Final exit: {result['final_exit_code']}")
     return 0 if result["final_exit_code"] == 0 or not result["llm_enabled"] else 1
 

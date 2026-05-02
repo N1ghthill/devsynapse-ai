@@ -97,7 +97,9 @@ make eval-agent
 ```
 
 The target writes Markdown and JSON reports under `/tmp/devsynapse-agent-evaluations/`
-and does not touch real user repositories.
+and does not touch real user repositories. CI runs the no-LLM variant so the
+disposable harness and command-policy checks stay continuously validated without
+requiring secrets.
 
 ## Evaluation Evidence
 
