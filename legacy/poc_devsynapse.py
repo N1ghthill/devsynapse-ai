@@ -61,7 +61,7 @@ class DevSynapsePOC:
         initial_prefs = [
             ("coding_style", "clean_simple", "observed", 0.8),
             ("cost_preference", "low_cost_first", "observed", 0.9),
-            ("project_priority", "botassist_high", "assumed", 0.7),
+            ("project_priority", "sample_project_high", "assumed", 0.7),
             ("communication_style", "direct_conversational", "observed", 0.85)
         ]
         
@@ -75,7 +75,7 @@ class DevSynapsePOC:
     def init_opencode_context(self):
         """Coleta contexto sobre o ambiente OpenCode/projetos"""
         self.projects = {}
-        repos_path = "/home/irving/ruas/repos"
+        repos_path = os.path.join(os.path.expanduser("~"), "repos")
         
         try:
             projects = os.listdir(repos_path)
@@ -143,7 +143,7 @@ COMANDOS OPENCODE DISPONÍVEIS:
 - edit: Editar arquivos
 - write: Escrever arquivos
 
-Exemplo: "Para listar arquivos no BotAssist, use: bash 'ls /home/irving/ruas/repos/botassist-whatsapp'"
+Exemplo: "Para listar arquivos em um projeto, use: bash 'ls ~/repos/exemplo'"
 """
         
         # Preparar mensagens
@@ -260,7 +260,7 @@ Exemplo: "Para listar arquivos no BotAssist, use: bash 'ls /home/irving/ruas/rep
         print("=" * 60)
         print(f"📁 Projetos detectados: {len(self.projects)}")
         print("💬 Digite 'sair' para encerrar")
-        print("💡 Exemplo: 'Mostre os arquivos do BotAssist'")
+        print("💡 Exemplo: 'Mostre os arquivos do projeto exemplo'")
         print("=" * 60)
         
         while True:

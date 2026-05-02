@@ -145,8 +145,8 @@ class OpenCodeBridge:
             
             # Verificar se está dentro de diretórios permitidos
             allowed_prefixes = [
-                Path("/home/irving/ruas/repos"),
-                Path("/home/irving"),
+                Path.home() / "repos",
+                Path.home(),
                 Path("/tmp"),
                 Path("/var/tmp")
             ]
@@ -177,7 +177,7 @@ class OpenCodeBridge:
                 capture_output=True,
                 text=True,
                 timeout=OPENCODE_TIMEOUT,
-                cwd="/home/irving"  # Diretório seguro
+                cwd=str(Path.home())  # Diretório seguro
             )
             
             output = result.stdout
@@ -273,7 +273,7 @@ class OpenCodeBridge:
                 cmd.extend(["--include", include_pattern])
             
             # Diretório base seguro
-            base_dir = "/home/irving/ruas/repos"
+            base_dir = str(Path.home() / "repos")
             cmd.append(base_dir)
             
             result = subprocess.run(

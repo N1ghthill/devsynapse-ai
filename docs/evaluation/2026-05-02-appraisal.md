@@ -9,7 +9,7 @@ SQLite, workspace e dois repositorios Git descartaveis:
 - `react-widget-lab`: fixture Node.js com testes `node --test` e um build check.
 - `python-service-lab`: fixture Python com testes `pytest`.
 
-Nao houve push para GitHub. O teste nao usou repositorios em `/home/irving/ruas/repos`
+Nao houve push para GitHub. O teste nao usou repositorios reais do operador
 como alvo de execucao do DevSynapse.
 
 ## Artefatos

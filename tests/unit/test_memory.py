@@ -11,7 +11,7 @@ from core.llm_optimization import build_task_profile
 
 PROJECT_NAME = "devsynapse-ai"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BOTASSIST_ROOT = PROJECT_ROOT.parent / "botassist-whatsapp"
+SAMPLE_APP_ROOT = PROJECT_ROOT.parent / "sample-app"
 
 
 def _create_memory(db_path):
@@ -21,7 +21,7 @@ def _create_memory(db_path):
         memory = MemorySystem()
         memory.add_project(PROJECT_NAME, str(PROJECT_ROOT),
                            "ai-assistant", "high")
-        memory.add_project("botassist-whatsapp", str(BOTASSIST_ROOT),
+        memory.add_project("sample-app", str(SAMPLE_APP_ROOT),
                            "electron-app", "high")
         return memory
 
@@ -576,13 +576,13 @@ class TestMemorySystem:
         db_path = tmp_path / "test_project_permissions.db"
         memory = _create_memory(db_path)
 
-        memory.replace_project_permissions("irving", ["devsynapse-ai", "botassist-site"])
+        memory.replace_project_permissions("irving", ["devsynapse-ai", "sample-site"])
 
         user_permissions = memory.get_project_permissions("irving")
         all_permissions = memory.get_project_permissions()
 
-        assert user_permissions == ["botassist-site", "devsynapse-ai"]
-        assert all_permissions["irving"] == ["botassist-site", "devsynapse-ai"]
+        assert user_permissions == ["devsynapse-ai", "sample-site"]
+        assert all_permissions["irving"] == ["devsynapse-ai", "sample-site"]
 
     def test_admin_audit_logs_are_persisted(self, tmp_path):
         db_path = tmp_path / "test_admin_audit.db"

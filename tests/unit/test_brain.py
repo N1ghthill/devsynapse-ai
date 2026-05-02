@@ -1083,7 +1083,7 @@ class TestDevSynapseBrain:
     @pytest.mark.parametrize(
         "command",
         [
-            'read "/home/irving/.ssh/id_rsa"',
+            'read "/home/user/.ssh/id_rsa"',
             'grep "DEEPSEEK_API_KEY"',
             'glob "/etc/*"',
             'write "/tmp/out.txt" --content="hello"',

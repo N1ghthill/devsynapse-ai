@@ -44,5 +44,4 @@ make eval-agent EVAL_AGENT_ARGS=--no-llm
 
 - No GitHub push was performed.
 - Disposable project paths were under `/tmp`.
-- Private issue notes are kept outside the repository under
-  `~/Documentos/devsynapse-private-evaluation-2026-05-02/`.
+- Private issue notes are kept outside the public repository.

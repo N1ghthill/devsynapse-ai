@@ -80,10 +80,5 @@ estimated_cost_usd: 0.001736
 
 ## Private Follow-Up
 
-Any operational issue observed during this run was documented outside the public repository at:
-
-```text
-~/Documentos/devsynapse-private-evaluation-2026-05-02/
-```
-
-Those notes are intentionally not part of this public evidence set.
+Any operational issue observed during this run was documented outside the public
+repository. Those notes are intentionally not part of this public evidence set.
