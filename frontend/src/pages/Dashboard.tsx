@@ -8,6 +8,7 @@ import {
   Cpu,
   DollarSign,
   Library,
+  ShieldAlert,
   XCircle,
 } from 'lucide-react';
 import { dashboardApi } from '../api/client';
@@ -20,13 +21,19 @@ function StatusBadge({ status }: { status: string }) {
     warning: { color: '#f97316', icon: AlertTriangle },
     critical: { color: '#ef4444', icon: XCircle },
   };
+  const labels: Record<string, string> = {
+    healthy: 'Saudável',
+    degraded: 'Degradado',
+    warning: 'Atenção',
+    critical: 'Crítico',
+  };
 
   const { color, icon: Icon } = config[status] || config.warning;
 
   return (
     <span className="status-badge" style={{ color }}>
       <Icon size={16} />
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+      {labels[status] || 'Desconhecido'}
     </span>
   );
 }
@@ -44,7 +51,7 @@ export function Dashboard() {
         setStats(data);
         setError(null);
       } catch {
-        setError('Failed to load dashboard data');
+        setError('Falha ao carregar os dados do painel');
       }
       setLoading(false);
     };
@@ -61,7 +68,7 @@ export function Dashboard() {
     return (
       <div className="page-loading">
         <Cpu size={48} className="spinner" />
-        <p>Loading dashboard...</p>
+        <p>Carregando painel...</p>
       </div>
     );
   }
@@ -90,7 +97,7 @@ export function Dashboard() {
     <div className="dashboard-page">
       <div className="page-header">
         <div>
-          <h1>Dashboard</h1>
+          <h1>Painel</h1>
           <div className="dashboard-filters">
             {[
               { label: '24h', hours: 24 },
@@ -118,7 +125,7 @@ export function Dashboard() {
           </div>
           <div className="stat-info">
             <span className="stat-value">{stats?.command_stats?.totals?.total || 0}</span>
-            <span className="stat-label">Total Commands</span>
+            <span className="stat-label">Comandos</span>
           </div>
         </div>
 
@@ -128,7 +135,17 @@ export function Dashboard() {
           </div>
           <div className="stat-info">
             <span className="stat-value">{stats?.command_stats?.totals?.successful || 0}</span>
-            <span className="stat-label">Successful</span>
+            <span className="stat-label">Sucesso</span>
+          </div>
+        </div>
+
+        <div className="stat-card warning">
+          <div className="stat-icon">
+            <ShieldAlert size={24} />
+          </div>
+          <div className="stat-info">
+            <span className="stat-value">{stats?.command_stats?.totals?.blocked || 0}</span>
+            <span className="stat-label">Bloqueados</span>
           </div>
         </div>
 
@@ -138,7 +155,7 @@ export function Dashboard() {
           </div>
           <div className="stat-info">
             <span className="stat-value">{stats?.command_stats?.totals?.failed || 0}</span>
-            <span className="stat-label">Failed</span>
+            <span className="stat-label">Falhas</span>
           </div>
         </div>
 
@@ -148,7 +165,7 @@ export function Dashboard() {
           </div>
           <div className="stat-info">
             <span className="stat-value">{stats?.api_stats?.totals?.total_requests || 0}</span>
-            <span className="stat-label">API Requests</span>
+            <span className="stat-label">Requisições API</span>
           </div>
         </div>
 
@@ -158,7 +175,7 @@ export function Dashboard() {
           </div>
           <div className="stat-info">
             <span className="stat-value">{knowledge?.memories.total_memories || 0}</span>
-            <span className="stat-label">Memories</span>
+            <span className="stat-label">Memórias</span>
           </div>
         </div>
 
@@ -180,14 +197,14 @@ export function Dashboard() {
             <span className="stat-value">
               {formatUsd(stats?.llm_usage?.totals?.estimated_cost_usd || 0)}
             </span>
-            <span className="stat-label">LLM Cost</span>
+            <span className="stat-label">Custo LLM</span>
           </div>
         </div>
       </div>
 
       <div className="dashboard-grid">
         <div className="dashboard-card">
-          <h3>Command Types</h3>
+          <h3>Tipos de Comando</h3>
           <div className="chart-container">
             {stats?.command_stats?.by_type?.map((item) => (
               <div key={item.command_type} className="chart-bar">
@@ -213,10 +230,10 @@ export function Dashboard() {
         </div>
 
         <div className="dashboard-card">
-          <h3>System Health</h3>
+          <h3>Saúde do Sistema</h3>
           <div className="health-metrics">
             <div className="health-item">
-              <span>Command Error Rate</span>
+              <span>Taxa de falha operacional</span>
               <span
                 className={`health-value ${
                   (stats?.system_health?.command_error_rate || 0) > 0.1 ? 'danger' : 'success'
@@ -226,7 +243,7 @@ export function Dashboard() {
               </span>
             </div>
             <div className="health-item">
-              <span>API Error Rate</span>
+              <span>Taxa de erro API</span>
               <span
                 className={`health-value ${
                   (stats?.system_health?.api_error_rate || 0) > 0.1 ? 'danger' : 'success'
@@ -236,7 +253,7 @@ export function Dashboard() {
               </span>
             </div>
             <div className="health-item">
-              <span>Active Alerts</span>
+              <span>Alertas ativos</span>
               <span
                 className={`health-value ${
                   (stats?.system_health?.active_alerts || 0) > 0 ? 'warning' : 'success'
@@ -245,27 +262,33 @@ export function Dashboard() {
                 {stats?.system_health?.active_alerts || 0}
               </span>
             </div>
+            <div className="health-item">
+              <span>Bloqueios de política</span>
+              <span className="health-value warning">
+                {stats?.system_health?.policy_blocks || 0}
+              </span>
+            </div>
           </div>
         </div>
 
         <div className="dashboard-card">
-          <h3>LLM Usage</h3>
+          <h3>Uso de LLM</h3>
           <div className="health-metrics">
             <div className="health-item">
-              <span>Total Tokens</span>
+              <span>Total de tokens</span>
               <span className="health-value success">
                 {(stats?.llm_usage?.totals?.total_tokens || 0).toLocaleString()}
               </span>
             </div>
             <div className="health-item">
-              <span>Prompt / Completion</span>
+              <span>Prompt / Resposta</span>
               <span className="health-value">
                 {(stats?.llm_usage?.totals?.prompt_tokens || 0).toLocaleString()} /{' '}
                 {(stats?.llm_usage?.totals?.completion_tokens || 0).toLocaleString()}
               </span>
             </div>
             <div className="health-item">
-              <span>Cache Hit Rate</span>
+              <span>Taxa de cache hit</span>
               <span
                 className={`health-value ${
                   (stats?.llm_usage?.totals?.cache_hit_rate_pct || 0) >= 70
@@ -277,39 +300,39 @@ export function Dashboard() {
               </span>
             </div>
             <div className="health-item">
-              <span>Cache Hit / Miss</span>
+              <span>Cache hit / miss</span>
               <span className="health-value">
                 {(stats?.llm_usage?.totals?.prompt_cache_hit_tokens || 0).toLocaleString()} /{' '}
                 {(stats?.llm_usage?.totals?.prompt_cache_miss_tokens || 0).toLocaleString()}
               </span>
             </div>
             <div className="health-item">
-              <span>Requests</span>
+              <span>Requisições</span>
               <span className="health-value">
                 {stats?.llm_usage?.totals?.request_count || 0}
               </span>
             </div>
             <div className="health-item">
-              <span>Learned Patterns</span>
+              <span>Padrões aprendidos</span>
               <span className="health-value">
                 {agentLearning?.learned_patterns || 0}
               </span>
             </div>
             <div className="health-item">
-              <span>Learning Signals</span>
+              <span>Sinais de aprendizado</span>
               <span className="health-value">
                 {(agentLearning?.success_signals || 0).toLocaleString()} /{' '}
                 {(agentLearning?.failure_signals || 0).toLocaleString()}
               </span>
             </div>
             <div className="health-item">
-              <span>Nudge Events</span>
+              <span>Eventos de nudge</span>
               <span className="health-value">
                 {knowledge?.nudges.total_events || 0}
               </span>
             </div>
             <div className="health-item">
-              <span>Memory Confidence</span>
+              <span>Confiança da memória</span>
               <span className="health-value">
                 {((knowledge?.memories.avg_confidence || 0) * 100).toFixed(0)}%
               </span>
@@ -318,36 +341,36 @@ export function Dashboard() {
         </div>
 
         <div className="dashboard-card">
-          <h3>Budget Status</h3>
+          <h3>Status do Orçamento</h3>
           <div className="health-metrics">
             <div className="health-item">
-              <span>Daily</span>
+              <span>Diário</span>
               <span className={`health-value budget-${budget?.daily?.level || 'disabled'}`}>
                 {budget?.daily?.budget_usd
                   ? `${formatUsd(budget?.daily?.actual_cost_usd || 0)} / ${formatUsd(
                       budget?.daily?.budget_usd || 0
                     )}`
-                  : 'Disabled'}
+                  : 'Desativado'}
               </span>
             </div>
             <div className="health-item">
-              <span>Daily Usage</span>
+              <span>Uso diário</span>
               <span className={`health-value budget-${budget?.daily?.level || 'disabled'}`}>
                 {budget?.daily?.budget_usd ? `${(budget?.daily?.usage_pct || 0).toFixed(1)}%` : 'n/a'}
               </span>
             </div>
             <div className="health-item">
-              <span>Monthly</span>
+              <span>Mensal</span>
               <span className={`health-value budget-${budget?.monthly?.level || 'disabled'}`}>
                 {budget?.monthly?.budget_usd
                   ? `${formatUsd(budget?.monthly?.actual_cost_usd || 0)} / ${formatUsd(
                       budget?.monthly?.budget_usd || 0
                     )}`
-                  : 'Disabled'}
+                  : 'Desativado'}
               </span>
             </div>
             <div className="health-item">
-              <span>Monthly Usage</span>
+              <span>Uso mensal</span>
               <span className={`health-value budget-${budget?.monthly?.level || 'disabled'}`}>
                 {budget?.monthly?.budget_usd
                   ? `${(budget?.monthly?.usage_pct || 0).toFixed(1)}%`
@@ -358,7 +381,7 @@ export function Dashboard() {
         </div>
 
         <div className="dashboard-card full-width">
-          <h3>Daily LLM Cost</h3>
+          <h3>Custo Diário de LLM</h3>
           <div className="chart-container">
             {costSeries.length ? (
               costSeries.map((item) => (
@@ -384,7 +407,7 @@ export function Dashboard() {
         </div>
 
         <div className="dashboard-card full-width">
-          <h3>Cost by Project</h3>
+          <h3>Custo por Projeto</h3>
           <div className="chart-container">
             {projectSeries.length ? (
               projectSeries.map((item) => (
@@ -412,45 +435,45 @@ export function Dashboard() {
         </div>
 
         <div className="dashboard-card full-width">
-          <h3>Budget Thresholds</h3>
+          <h3>Limites de Orçamento</h3>
           <div className="health-metrics">
             <div className="health-item">
-              <span>Warning Threshold</span>
+              <span>Limite de aviso</span>
               <span className="health-value">
                 {budget?.daily?.warning_threshold_pct ?? 0}% / {budget?.monthly?.warning_threshold_pct ?? 0}%
               </span>
             </div>
             <div className="health-item">
-              <span>Critical Threshold</span>
+              <span>Limite crítico</span>
               <span className="health-value">
                 {budget?.daily?.critical_threshold_pct ?? 0}% / {budget?.monthly?.critical_threshold_pct ?? 0}%
               </span>
             </div>
             <div className="health-item">
-              <span>Daily Trigger</span>
+              <span>Disparo diário</span>
               <span className="health-value">
                 {budget?.daily?.budget_usd
                   ? `${formatUsd(budget?.daily?.warning_threshold_cost_usd || 0)} -> ${formatUsd(
                       budget?.daily?.critical_threshold_cost_usd || 0
                     )}`
-                  : 'Disabled'}
+                  : 'Desativado'}
               </span>
             </div>
             <div className="health-item">
-              <span>Monthly Trigger</span>
+              <span>Disparo mensal</span>
               <span className="health-value">
                 {budget?.monthly?.budget_usd
                   ? `${formatUsd(budget?.monthly?.warning_threshold_cost_usd || 0)} -> ${formatUsd(
                       budget?.monthly?.critical_threshold_cost_usd || 0
                     )}`
-                  : 'Disabled'}
+                  : 'Desativado'}
               </span>
             </div>
           </div>
         </div>
 
         <div className="dashboard-card full-width">
-          <h3>Recent Alerts</h3>
+          <h3>Alertas Recentes</h3>
           {stats?.active_alerts?.length ? (
             <div className="alerts-list">
               {stats.active_alerts.map((alert) => (
@@ -467,7 +490,7 @@ export function Dashboard() {
           ) : (
             <div className="empty-section">
               <CheckCircle size={32} />
-              <p>No active alerts</p>
+              <p>Nenhum alerta ativo</p>
             </div>
           )}
         </div>

@@ -37,11 +37,11 @@ async function runSmoke() {
   try {
     await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
 
-    await page.getByLabel('Username').fill(username);
-    await page.getByLabel('Password').fill(password);
+    await page.getByLabel('Usuário').fill(username);
+    await page.getByLabel('Senha').fill(password);
     await Promise.all([
       page.waitForURL(/\/chat$/, { timeout }),
-      page.getByRole('button', { name: 'Sign In' }).click(),
+      page.getByRole('button', { name: 'Entrar' }).click(),
     ]);
     await expectVisible(page.getByText('Workspace local'), 'chat workspace header');
     await expectVisible(page.getByRole('heading', { name: 'Escolha um fluxo' }), 'chat empty state');
@@ -57,17 +57,17 @@ async function runSmoke() {
     await expectVisible(page.getByText('smoke-ui-project').first(), 'created project selection');
 
     await page.getByRole('link', { name: 'Painel' }).click();
-    await expectVisible(page.getByRole('heading', { name: 'Dashboard' }), 'dashboard heading');
-    await expectVisible(page.getByText('Total Commands'), 'dashboard totals');
+    await expectVisible(page.getByRole('heading', { name: 'Painel' }), 'dashboard heading');
+    await expectVisible(page.locator('.stat-label', { hasText: 'Comandos' }).first(), 'dashboard totals');
 
     await page.getByRole('link', { name: 'Ajustes' }).click();
-    await expectVisible(page.getByRole('heading', { name: 'Settings' }), 'settings heading');
-    await page.getByRole('button', { name: 'Save Changes' }).click();
-    await expectVisible(page.getByText('Settings saved successfully'), 'settings save confirmation');
+    await expectVisible(page.getByRole('heading', { name: 'Ajustes' }), 'settings heading');
+    await page.getByRole('button', { name: 'Salvar alterações' }).click();
+    await expectVisible(page.getByText('Ajustes salvos com sucesso'), 'settings save confirmation');
 
     await page.getByRole('link', { name: 'Admin' }).click();
-    await expectVisible(page.getByRole('heading', { name: 'Admin', exact: true }), 'admin heading');
-    await expectVisible(page.getByRole('button', { name: 'Save Permissions' }).first(), 'admin permissions');
+    await expectVisible(page.getByRole('heading', { name: 'Administração', exact: true }), 'admin heading');
+    await expectVisible(page.getByRole('button', { name: 'Salvar permissões' }).first(), 'admin permissions');
 
     if (failedResponses.length > 0) {
       throw new Error(`HTTP 5xx responses during smoke: ${failedResponses.join(', ')}`);

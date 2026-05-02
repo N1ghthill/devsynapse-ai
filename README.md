@@ -90,6 +90,15 @@ for landing-page artifact status.
 
 More context is available in the [product showcase](docs/product/showcase.md) and the [screenshot evidence index](docs/screenshots/README.md).
 
+To generate fresh disposable evidence locally:
+
+```bash
+make eval-agent
+```
+
+The target writes Markdown and JSON reports under `/tmp/devsynapse-agent-evaluations/`
+and does not touch real user repositories.
+
 ## Evaluation Evidence
 
 Recent product evidence is organized under [docs/evaluation](docs/evaluation/README.md).
@@ -294,6 +303,7 @@ make lint
 make script-check
 make frontend-lint
 make frontend-build
+make eval-agent
 make desktop-build
 make verify
 make migrate

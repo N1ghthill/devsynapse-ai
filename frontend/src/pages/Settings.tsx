@@ -29,7 +29,7 @@ export function Settings() {
         const data = await settingsApi.get();
         setSettings(data);
       } catch {
-        setMessage({ type: 'error', text: 'Failed to load settings' });
+        setMessage({ type: 'error', text: 'Falha ao carregar ajustes' });
       }
       setLoading(false);
     };
@@ -43,9 +43,9 @@ export function Settings() {
 
     try {
       await settingsApi.update(settings);
-      setMessage({ type: 'success', text: 'Settings saved successfully' });
+      setMessage({ type: 'success', text: 'Ajustes salvos com sucesso' });
     } catch {
-      setMessage({ type: 'error', text: 'Failed to save settings' });
+      setMessage({ type: 'error', text: 'Falha ao salvar ajustes' });
     }
 
     setSaving(false);
@@ -57,7 +57,7 @@ export function Settings() {
       const status = await desktopUpdaterApi.check();
       setUpdateStatus(status);
     } catch {
-      setMessage({ type: 'error', text: 'Failed to check for desktop updates' });
+      setMessage({ type: 'error', text: 'Falha ao verificar atualizações do desktop' });
     }
     setCheckingUpdate(false);
   };
@@ -67,7 +67,7 @@ export function Settings() {
     try {
       await desktopUpdaterApi.install();
     } catch {
-      setMessage({ type: 'error', text: 'Failed to install desktop update' });
+      setMessage({ type: 'error', text: 'Falha ao instalar atualização do desktop' });
       setInstallingUpdate(false);
     }
   };
@@ -76,7 +76,7 @@ export function Settings() {
     return (
       <div className="page-loading">
         <Cpu size={48} className="spinner" />
-        <p>Loading settings...</p>
+        <p>Carregando ajustes...</p>
       </div>
     );
   }
@@ -84,7 +84,7 @@ export function Settings() {
   return (
     <div className="settings-page">
       <div className="page-header">
-        <h1>Settings</h1>
+        <h1>Ajustes</h1>
         {canEditSettings && (
           <button className="save-btn" onClick={handleSave} disabled={saving}>
             {saving ? (
@@ -92,7 +92,7 @@ export function Settings() {
             ) : (
               <Save size={16} />
             )}
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving ? 'Salvando...' : 'Salvar alterações'}
           </button>
         )}
       </div>
@@ -105,13 +105,13 @@ export function Settings() {
 
       <div className="settings-grid">
         <div className="settings-card">
-          <h3>API Keys</h3>
+          <h3>Chaves de API</h3>
           <div className="setting-field">
-            <label>DeepSeek API Key</label>
+            <label>Chave da API DeepSeek</label>
             <div className="key-input-row">
               <input
                 type="password"
-                placeholder={typeof settings?.deepseek_api_key === 'boolean' && settings.deepseek_api_key ? '•••••••• (configured)' : 'Enter your DeepSeek API key'}
+                placeholder={typeof settings?.deepseek_api_key === 'boolean' && settings.deepseek_api_key ? '•••••••• (configurada)' : 'Informe sua chave da API DeepSeek'}
                 value={typeof settings?.deepseek_api_key === 'string' ? settings.deepseek_api_key : ''}
                 disabled={!canEditSettings}
                 onChange={(e) =>
@@ -121,16 +121,16 @@ export function Settings() {
                 }
               />
               {typeof settings?.deepseek_api_key === 'boolean' && settings.deepseek_api_key && (
-                <span className="key-status configured">Configured</span>
+                <span className="key-status configured">Configurada</span>
               )}
             </div>
           </div>
         </div>
 
         <div className="settings-card">
-          <h3>Model Configuration</h3>
+          <h3>Configuração de Modelo</h3>
           <div className="setting-field">
-            <label>DeepSeek Model</label>
+            <label>Modelo DeepSeek</label>
             <input
               type="text"
               value={settings?.deepseek_model || ''}
@@ -143,7 +143,7 @@ export function Settings() {
             />
           </div>
           <div className="setting-field">
-            <label>Flash Model</label>
+            <label>Modelo Flash</label>
             <input
               type="text"
               value={settings?.deepseek_flash_model || ''}
@@ -156,7 +156,7 @@ export function Settings() {
             />
           </div>
           <div className="setting-field">
-            <label>Pro Model</label>
+            <label>Modelo Pro</label>
             <input
               type="text"
               value={settings?.deepseek_pro_model || ''}
@@ -180,7 +180,7 @@ export function Settings() {
                   )
                 }
               />
-              Flash/Pro routing
+              Roteamento Flash/Pro
             </label>
           </div>
           <div className="setting-field checkbox-field">
@@ -195,11 +195,11 @@ export function Settings() {
                   )
                 }
               />
-              Auto economy mode
+              Modo econômico automático
             </label>
           </div>
           <div className="setting-field">
-            <label>Cache Hit Warning (%)</label>
+            <label>Aviso de cache hit (%)</label>
             <input
               type="number"
               min="0"
@@ -220,7 +220,7 @@ export function Settings() {
             />
           </div>
           <div className="setting-field">
-            <label>Temperature</label>
+            <label>Temperatura</label>
             <div className="range-input">
               <input
                 type="range"
@@ -243,7 +243,7 @@ export function Settings() {
             </div>
           </div>
           <div className="setting-field">
-            <label>Max Tokens</label>
+            <label>Máximo de tokens</label>
             <input
               type="number"
               value={settings?.max_tokens || 1500}
@@ -260,9 +260,9 @@ export function Settings() {
         </div>
 
         <div className="settings-card">
-          <h3>Conversation</h3>
+          <h3>Conversa</h3>
           <div className="setting-field">
-            <label>History Limit</label>
+            <label>Limite de histórico</label>
             <input
               type="number"
               value={settings?.conversation_history_limit || 20}
@@ -282,9 +282,9 @@ export function Settings() {
         </div>
 
         <div className="settings-card">
-          <h3>LLM Budget</h3>
+          <h3>Orçamento de LLM</h3>
           <div className="setting-field">
-            <label>Daily Budget (USD)</label>
+            <label>Orçamento diário (USD)</label>
             <input
               type="number"
               min="0"
@@ -302,10 +302,10 @@ export function Settings() {
                 )
               }
             />
-            <small>Use `0` to disable the daily budget alert.</small>
+            <small>Use `0` para desativar o alerta de orçamento diário.</small>
           </div>
           <div className="setting-field">
-            <label>Monthly Budget (USD)</label>
+            <label>Orçamento mensal (USD)</label>
             <input
               type="number"
               min="0"
@@ -323,10 +323,10 @@ export function Settings() {
                 )
               }
             />
-            <small>Uses the current calendar month, not a rolling 30-day window.</small>
+            <small>Usa o mês calendário atual, não uma janela móvel de 30 dias.</small>
           </div>
           <div className="setting-field">
-            <label>Warning Threshold (%)</label>
+            <label>Limite de aviso (%)</label>
             <input
               type="number"
               min="0"
@@ -347,7 +347,7 @@ export function Settings() {
             />
           </div>
           <div className="setting-field">
-            <label>Critical Threshold (%)</label>
+            <label>Limite crítico (%)</label>
             <input
               type="number"
               min="0"
@@ -366,14 +366,14 @@ export function Settings() {
                 )
               }
             />
-            <small>Critical can be above `100` if you want a soft overrun policy.</small>
+            <small>O crítico pode ficar acima de `100` para permitir estouro controlado.</small>
           </div>
         </div>
 
         <div className="settings-card">
-          <h3>Project Access</h3>
+          <h3>Acesso a Projetos</h3>
           <div className="setting-field">
-            <label>My Mutation Scope</label>
+            <label>Meu escopo de mutação</label>
             <textarea
               rows={5}
               value={(settings?.project_mutation_allowlist || []).join('\n')}
@@ -381,14 +381,14 @@ export function Settings() {
             />
             <small>
               {auth.user?.role === 'admin'
-                ? 'Admins can mutate all registered projects.'
-                : 'Your project mutation permissions are managed by an admin.'}
+                ? 'Administradores podem alterar todos os projetos registrados.'
+                : 'Suas permissões de mutação são gerenciadas por um administrador.'}
             </small>
           </div>
         </div>
 
         <div className="settings-card">
-          <h3>API Server</h3>
+          <h3>Servidor API</h3>
           <div className="setting-field">
             <label>Host</label>
             <input
@@ -408,9 +408,9 @@ export function Settings() {
         </div>
 
         <div className="settings-card">
-          <h3>Application Updates</h3>
+          <h3>Atualizações do Aplicativo</h3>
           <div className="setting-field">
-            <label>Installed Version</label>
+            <label>Versão instalada</label>
               <input
                 type="text"
                 value={updateStatus?.currentVersion || __APP_VERSION__}
@@ -421,22 +421,22 @@ export function Settings() {
             <>
               {updateStatus && !updateStatus.configured && (
                 <div className="message-bar message-error">
-                  Desktop updater is not configured for this build.
+                  O atualizador desktop não está configurado nesta build.
                 </div>
               )}
               {updateStatus?.configured && updateStatus.available && (
                 <div className="message-bar message-success">
-                  Version {updateStatus.version} is available.
+                  Versão {updateStatus.version} disponível.
                 </div>
               )}
               {updateStatus?.configured && !updateStatus.available && (
                 <div className="message-bar message-success">
-                  The desktop app is up to date.
+                  O aplicativo desktop está atualizado.
                 </div>
               )}
               {updateStatus?.body && (
                 <div className="setting-field">
-                  <label>Release Notes</label>
+                  <label>Notas da versão</label>
                   <textarea rows={5} value={updateStatus.body} readOnly />
                 </div>
               )}
@@ -448,7 +448,7 @@ export function Settings() {
                   type="button"
                 >
                   <RefreshCw size={16} className={checkingUpdate ? 'spinner' : ''} />
-                  {checkingUpdate ? 'Checking...' : 'Check for Updates'}
+                  {checkingUpdate ? 'Verificando...' : 'Verificar atualizações'}
                 </button>
                 <button
                   className="save-btn"
@@ -462,12 +462,12 @@ export function Settings() {
                   type="button"
                 >
                   <Download size={16} className={installingUpdate ? 'spinner' : ''} />
-                  {installingUpdate ? 'Installing...' : 'Install Update'}
+                  {installingUpdate ? 'Instalando...' : 'Instalar atualização'}
                 </button>
               </div>
             </>
           ) : (
-            <small>Desktop updates are available inside the packaged Tauri app.</small>
+            <small>Atualizações desktop estão disponíveis no aplicativo Tauri empacotado.</small>
           )}
         </div>
       </div>

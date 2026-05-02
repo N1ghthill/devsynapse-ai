@@ -1437,6 +1437,7 @@ body {
 
 .stat-card.success .stat-icon { color: var(--success); }
 .stat-card.danger .stat-icon { color: var(--danger); }
+.stat-card.warning .stat-icon { color: var(--warning); }
 .stat-card.info .stat-icon { color: var(--info); }
 
 .stat-icon {

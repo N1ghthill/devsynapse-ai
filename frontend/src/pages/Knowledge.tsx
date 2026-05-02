@@ -42,7 +42,7 @@ export function Knowledge() {
       setProjects(projectList);
       setMessage(null);
     } catch {
-      setMessage('Failed to load knowledge data');
+      setMessage('Falha ao carregar conhecimento');
     }
     setLoading(false);
   };
@@ -68,7 +68,7 @@ export function Knowledge() {
       setMemoryForm({ content: '', memory_type: 'fact', confidence_score: 0.6 });
       await load();
     } catch {
-      setMessage('Failed to save memory');
+      setMessage('Falha ao salvar memória');
     }
     setSavingMemory(false);
   };
@@ -87,7 +87,7 @@ export function Knowledge() {
       setSkillForm({ name: '', description: '', category: 'general', body: '' });
       await load();
     } catch {
-      setMessage('Failed to save skill');
+      setMessage('Falha ao salvar skill');
     }
     setSavingSkill(false);
   };
@@ -106,13 +106,13 @@ export function Knowledge() {
     <div className="knowledge-page">
       <div className="page-header">
         <div>
-          <h1>Knowledge</h1>
+          <h1>Conhecimento</h1>
           <div className="dashboard-filters">
             <select
               value={selectedProject}
               onChange={(event) => setSelectedProject(event.target.value)}
               className="knowledge-select"
-              aria-label="Project scope"
+              aria-label="Escopo de projeto"
             >
               <option value="">Global</option>
               {projects.map((project) => (
@@ -128,11 +128,11 @@ export function Knowledge() {
               onKeyDown={(event) => {
                 if (event.key === 'Enter') void load();
               }}
-              placeholder="Search memories"
+              placeholder="Buscar memórias"
             />
             <button className="dashboard-filter-btn" type="button" onClick={() => void load()}>
               <RefreshCw size={14} />
-              Refresh
+              Atualizar
             </button>
           </div>
         </div>
@@ -144,13 +144,13 @@ export function Knowledge() {
         <section className="settings-card">
           <div className="admin-card-header">
             <div>
-              <h3>Memories</h3>
-              <p className="admin-subtitle">{memories.length} loaded</p>
+              <h3>Memórias</h3>
+              <p className="admin-subtitle">{memories.length} carregadas</p>
             </div>
             <Brain size={18} />
           </div>
           <div className="setting-field">
-            <label>Content</label>
+            <label>Conteúdo</label>
             <textarea
               rows={4}
               value={memoryForm.content}
@@ -161,21 +161,21 @@ export function Knowledge() {
           </div>
           <div className="knowledge-form-row">
             <div className="setting-field">
-              <label>Type</label>
+              <label>Tipo</label>
               <select
                 value={memoryForm.memory_type}
                 onChange={(event) =>
                   setMemoryForm((prev) => ({ ...prev, memory_type: event.target.value }))
                 }
               >
-                <option value="fact">fact</option>
-                <option value="procedure">procedure</option>
+                <option value="fact">fato</option>
+                <option value="procedure">procedimento</option>
                 <option value="insight">insight</option>
-                <option value="preference">preference</option>
+                <option value="preference">preferência</option>
               </select>
             </div>
             <div className="setting-field">
-              <label>Confidence</label>
+              <label>Confiança</label>
               <input
                 type="number"
                 min="0"
@@ -198,11 +198,11 @@ export function Knowledge() {
             disabled={savingMemory || !memoryForm.content.trim()}
           >
             {savingMemory ? <RefreshCw size={16} className="spinner" /> : <Plus size={16} />}
-            Save Memory
+            Salvar memória
           </button>
           <div className="knowledge-list">
             {loading ? (
-              <p className="admin-subtitle">Loading...</p>
+              <p className="admin-subtitle">Carregando...</p>
             ) : (
               memories.map((memory) => (
                 <article className="knowledge-item" key={memory.id}>
@@ -218,7 +218,7 @@ export function Knowledge() {
                         type="button"
                         className="conversation-action-btn"
                         onClick={() => void adjustMemory(memory.id, 0.05)}
-                        aria-label="Reinforce memory"
+                        aria-label="Reforçar memória"
                       >
                         <ThumbsUp size={14} />
                       </button>
@@ -226,7 +226,7 @@ export function Knowledge() {
                         type="button"
                         className="conversation-action-btn danger"
                         onClick={() => void adjustMemory(memory.id, -0.08)}
-                        aria-label="Penalize memory"
+                        aria-label="Penalizar memória"
                       >
                         <ThumbsDown size={14} />
                       </button>
@@ -242,14 +242,14 @@ export function Knowledge() {
           <div className="admin-card-header">
             <div>
               <h3>Skills</h3>
-              <p className="admin-subtitle">{skills.length} registered</p>
+              <p className="admin-subtitle">{skills.length} registradas</p>
             </div>
             <Library size={18} />
           </div>
           <fieldset className="knowledge-fieldset" disabled={!canCreateSkills}>
             <div className="knowledge-form-row">
               <div className="setting-field">
-                <label>Name</label>
+                <label>Nome</label>
                 <input
                   type="text"
                   value={skillForm.name}
@@ -259,7 +259,7 @@ export function Knowledge() {
                 />
               </div>
               <div className="setting-field">
-                <label>Category</label>
+                <label>Categoria</label>
                 <input
                   type="text"
                   value={skillForm.category}
@@ -270,7 +270,7 @@ export function Knowledge() {
               </div>
             </div>
             <div className="setting-field">
-              <label>Description</label>
+              <label>Descrição</label>
               <input
                 type="text"
                 value={skillForm.description}
@@ -280,7 +280,7 @@ export function Knowledge() {
               />
             </div>
             <div className="setting-field">
-              <label>Body</label>
+              <label>Corpo</label>
               <textarea
                 rows={6}
                 value={skillForm.body}
@@ -297,17 +297,17 @@ export function Knowledge() {
             disabled={savingSkill || !canCreateSkills || !skillForm.name.trim()}
           >
             {savingSkill ? <RefreshCw size={16} className="spinner" /> : <Plus size={16} />}
-            Save Skill
+            Salvar skill
           </button>
           {!canCreateSkills && (
-            <p className="admin-subtitle knowledge-note">Skill writes require admin access.</p>
+            <p className="admin-subtitle knowledge-note">Escrever skills exige acesso admin.</p>
           )}
           <div className="knowledge-list">
             {skills.map((skill) => (
               <article className="knowledge-item" key={`${skill.scope}-${skill.slug}`}>
                 <div className="knowledge-item-header">
                   <strong>{skill.name}</strong>
-                  <span>{skill.use_count} uses</span>
+                  <span>{skill.use_count} usos</span>
                 </div>
                 <p>{skill.description}</p>
                 <div className="knowledge-item-footer">
@@ -318,7 +318,7 @@ export function Knowledge() {
                     type="button"
                     className="conversation-action-btn"
                     onClick={() => void activateSkill(skill)}
-                    aria-label="Activate skill"
+                    aria-label="Ativar skill"
                   >
                     <Check size={14} />
                   </button>

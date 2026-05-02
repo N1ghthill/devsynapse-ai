@@ -14,11 +14,11 @@ export function Login() {
   const [loading, setLoading] = useState(false);
   const { completeBootstrap, login } = useAuth();
   const requiresFirstRunSetup = Boolean(bootstrapStatus?.admin_password_required);
-  let buttonLabel = 'Sign In';
+  let buttonLabel = 'Entrar';
   if (checkingBootstrap) {
-    buttonLabel = 'Checking...';
+    buttonLabel = 'Verificando...';
   } else if (loading) {
-    buttonLabel = 'Signing in...';
+    buttonLabel = 'Entrando...';
   }
 
   let buttonIcon = <LogIn size={20} />;
@@ -40,7 +40,7 @@ export function Login() {
       })
       .catch(() => {
         if (!cancelled) {
-          setError('Backend is not ready');
+          setError('Backend ainda não está pronto');
         }
       })
       .finally(() => {
@@ -62,12 +62,12 @@ export function Login() {
 
     try {
       if (!username || !password) {
-        setError('Please fill in all fields');
+        setError('Preencha todos os campos');
         return;
       }
       await login(username, password);
     } catch {
-      setError('Invalid credentials');
+      setError('Credenciais inválidas');
     } finally {
       setLoading(false);
     }
@@ -79,7 +79,7 @@ export function Login() {
         <div className="login-header">
           <Cpu size={48} className="login-logo" />
           <h1>DevSynapse</h1>
-          <p>{requiresFirstRunSetup ? 'First-Run Setup' : 'Development Synapse AI'}</p>
+          <p>{requiresFirstRunSetup ? 'Configuração inicial' : 'Development Synapse AI'}</p>
         </div>
 
         {requiresFirstRunSetup && bootstrapStatus ? (
@@ -87,14 +87,14 @@ export function Login() {
             status={bootstrapStatus}
             includeAdminPassword
             submitting={loading}
-            submitLabel="Complete Setup"
+            submitLabel="Concluir configuração"
             onSubmit={async (payload) => {
               setLoading(true);
               setError(null);
               try {
                 await completeBootstrap(payload);
               } catch {
-                setError('Failed to complete setup');
+                setError('Falha ao concluir configuração');
               } finally {
                 setLoading(false);
               }
@@ -105,25 +105,25 @@ export function Login() {
             {error && <div className="form-error">{error}</div>}
 
             <div className="form-field">
-              <label htmlFor="username">Username</label>
+              <label htmlFor="username">Usuário</label>
               <input
                 id="username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
+                placeholder="Digite seu usuário"
                 autoFocus
               />
             </div>
 
             <div className="form-field">
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">Senha</label>
               <input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
+                placeholder="Digite sua senha"
               />
             </div>
 

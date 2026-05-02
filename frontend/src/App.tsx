@@ -53,7 +53,7 @@ function SetupGate() {
   if (checkingSetup) {
     return (
       <div className="page-loading">
-        <p>Checking setup...</p>
+        <p>Verificando configuração...</p>
       </div>
     );
   }
@@ -67,7 +67,7 @@ function SetupGate() {
     if (auth.user?.role !== 'admin') {
       return (
         <div className="page-error">
-          <p>Admin setup is required.</p>
+          <p>Configuração administrativa obrigatória.</p>
         </div>
       );
     }
@@ -83,7 +83,7 @@ function AppShell() {
   if (auth.isLoading) {
     return (
       <div className="page-loading">
-        <p>Validating session...</p>
+        <p>Validando sessão...</p>
       </div>
     );
   }

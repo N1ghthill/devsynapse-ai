@@ -3,7 +3,7 @@ PIP ?= ./venv/bin/pip
 PYTEST ?= ./venv/bin/pytest
 RUFF ?= ./venv/bin/ruff
 
-.PHONY: setup dev install install-dev update run test lint frontend-lint frontend-build desktop-backend desktop-build desktop-build-updates desktop-dev script-check ui-smoke update-locks verify seed-users migrate migration-status
+.PHONY: setup dev install install-dev update run test lint frontend-lint frontend-build desktop-backend desktop-build desktop-build-updates desktop-dev script-check ui-smoke eval-agent update-locks verify seed-users migrate migration-status
 
 setup:
 	python3 -m venv venv
@@ -73,7 +73,7 @@ script-check:
 	bash -n scripts/update_locks.sh
 	sh -n frontend/src-tauri/scripts/linux-preremove.sh
 	bash -n devsynapse.sh
-	$(PYTHON) -m py_compile scripts/dev.py scripts/ensure_runtime_config.py scripts/generate-tauri-update-manifest.py scripts/migrate.py scripts/manage_users.py
+	$(PYTHON) -m py_compile scripts/dev.py scripts/ensure_runtime_config.py scripts/eval_agent.py scripts/generate-tauri-update-manifest.py scripts/migrate.py scripts/manage_users.py
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh scripts/ui_smoke.sh scripts/build-backend.sh scripts/update_locks.sh frontend/src-tauri/scripts/linux-preremove.sh devsynapse.sh; \
 	else \
@@ -82,6 +82,9 @@ script-check:
 
 ui-smoke:
 	bash scripts/ui_smoke.sh
+
+eval-agent:
+	$(PYTHON) scripts/eval_agent.py $(EVAL_AGENT_ARGS)
 
 update-locks:
 	bash scripts/update_locks.sh

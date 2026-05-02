@@ -34,12 +34,14 @@ class _MonitoringStub:
             "overall_status": "healthy",
             "command_error_rate": 0.0,
             "api_error_rate": 0.0,
+            "policy_blocks": 0,
             "active_alerts": 0,
+            "informational_alerts": 0,
         }
 
     def get_command_stats(self, hours=24):
         return {
-            "totals": {"total": 0, "successful": 0, "failed": 0},
+            "totals": {"total": 0, "successful": 0, "blocked": 0, "failed": 0},
             "by_type": [],
             "recent": [],
             "timeframe_hours": hours,

@@ -35,6 +35,9 @@ Real DeepSeek agent evidence captured on `2026-05-02`:
 
 See the [evaluation evidence index](../evaluation/README.md) and the
 [real DeepSeek run](../evaluation/real-llm/2026-05-02-real-deepseek-evidence.md).
+Fresh local evidence can be generated with `make eval-agent`; the repeatable
+benchmark scenarios are documented in
+[reproducible benchmarks](../evaluation/reproducible-benchmarks.md).
 
 Screenshot sources:
 - [screenshot evidence index](../screenshots/README.md)

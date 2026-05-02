@@ -14,6 +14,13 @@ from core.migrations import build_monitoring_migration_manager
 
 logger = logging.getLogger(__name__)
 
+POLICY_BLOCKED_COMMAND_TYPES = {
+    "authorization_failed",
+    "plugin_cancelled",
+    "project_scope_mismatch",
+    "validation_failed",
+}
+
 
 class MonitoringSystem:
     """Sistema de monitoramento e métricas"""
@@ -68,6 +75,14 @@ class MonitoringSystem:
         
         # Verificar se precisa gerar alerta
         if not success and error_message:
+            if command_type in POLICY_BLOCKED_COMMAND_TYPES:
+                self.create_alert(
+                    alert_type="command_blocked",
+                    severity="info",
+                    message=f"Bloqueio de política em {command_type}: {error_message[:200]}"
+                )
+                return
+
             self.create_alert(
                 alert_type="command_failure",
                 severity="warning",
@@ -269,46 +284,62 @@ class MonitoringSystem:
         
         since_time = (datetime.now() - timedelta(hours=hours)).isoformat()
         
+        blocked_types = tuple(sorted(POLICY_BLOCKED_COMMAND_TYPES))
+        blocked_placeholders = ",".join("?" for _ in blocked_types)
+
         # Total de comandos
         cursor.execute('''
             SELECT COUNT(*) as total,
                    SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful,
-                   SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failed
+                   SUM(CASE WHEN success = 0 AND command_type IN ({blocked_placeholders}) THEN 1 ELSE 0 END) as blocked,
+                   SUM(CASE WHEN success = 0 AND command_type NOT IN ({blocked_placeholders}) THEN 1 ELSE 0 END) as failed
             FROM command_executions
             WHERE timestamp >= ?
-        ''', (since_time,))
+        '''.format(blocked_placeholders=blocked_placeholders), (*blocked_types, *blocked_types, since_time))
         
-        totals = cursor.fetchone()
+        totals = dict(cursor.fetchone())
+        totals = {key: int(value or 0) for key, value in totals.items()}
         
         # Comandos por tipo
         cursor.execute('''
             SELECT command_type,
                    COUNT(*) as count,
                    AVG(execution_time) as avg_time,
-                   SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful
+                   SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful,
+                   SUM(CASE WHEN success = 0 AND command_type IN ({blocked_placeholders}) THEN 1 ELSE 0 END) as blocked,
+                   SUM(CASE WHEN success = 0 AND command_type NOT IN ({blocked_placeholders}) THEN 1 ELSE 0 END) as failed
             FROM command_executions
             WHERE timestamp >= ?
             GROUP BY command_type
             ORDER BY count DESC
-        ''', (since_time,))
+        '''.format(blocked_placeholders=blocked_placeholders), (*blocked_types, *blocked_types, since_time))
         
         by_type = [dict(row) for row in cursor.fetchall()]
         
         # Comandos recentes
         cursor.execute('''
-            SELECT timestamp, command_type, command_text, success, execution_time
+            SELECT timestamp,
+                   command_type,
+                   command_text,
+                   success,
+                   execution_time,
+                   CASE
+                       WHEN success = 1 THEN 'success'
+                       WHEN command_type IN ({blocked_placeholders}) THEN 'blocked'
+                       ELSE 'failed'
+                   END as outcome
             FROM command_executions
             WHERE timestamp >= ?
             ORDER BY timestamp DESC
             LIMIT 10
-        ''', (since_time,))
+        '''.format(blocked_placeholders=blocked_placeholders), (*blocked_types, since_time))
         
         recent = [dict(row) for row in cursor.fetchall()]
         
         conn.close()
         
         return {
-            "totals": dict(totals),
+            "totals": totals,
             "by_type": by_type,
             "recent": recent,
             "timeframe_hours": hours
@@ -404,17 +435,23 @@ class MonitoringSystem:
         # Última hora
         hour_ago = (datetime.now() - timedelta(hours=1)).isoformat()
         
-        # Taxa de erro de comandos (última hora)
+        blocked_types = tuple(sorted(POLICY_BLOCKED_COMMAND_TYPES))
+        blocked_placeholders = ",".join("?" for _ in blocked_types)
+
+        # Taxa de erro operacional de comandos (última hora), sem contar bloqueios de política
         cursor.execute('''
             SELECT 
                 COUNT(*) as total,
-                SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as errors
+                SUM(CASE WHEN success = 0 AND command_type NOT IN ({blocked_placeholders}) THEN 1 ELSE 0 END) as errors,
+                SUM(CASE WHEN success = 0 AND command_type IN ({blocked_placeholders}) THEN 1 ELSE 0 END) as policy_blocks
             FROM command_executions
             WHERE timestamp >= ?
-        ''', (hour_ago,))
+        '''.format(blocked_placeholders=blocked_placeholders), (*blocked_types, *blocked_types, hour_ago))
         
         cmd_stats = cursor.fetchone()
-        cmd_error_rate = cmd_stats[1] / cmd_stats[0] if cmd_stats[0] > 0 else 0
+        cmd_errors = cmd_stats[1] or 0
+        policy_blocks = cmd_stats[2] or 0
+        cmd_error_rate = cmd_errors / cmd_stats[0] if cmd_stats[0] > 0 else 0
         
         # Taxa de erro da API (última hora)
         cursor.execute('''
@@ -428,9 +465,14 @@ class MonitoringSystem:
         api_stats = cursor.fetchone()
         api_error_rate = api_stats[1] / api_stats[0] if api_stats[0] > 0 else 0
         
-        # Alertas ativos
-        cursor.execute('SELECT COUNT(*) FROM alerts WHERE resolved = 0')
+        # Alertas ativos operacionais
+        cursor.execute(
+            'SELECT COUNT(*) FROM alerts WHERE resolved = 0 AND severity IN ("critical", "warning")'
+        )
         active_alerts = cursor.fetchone()[0]
+
+        cursor.execute('SELECT COUNT(*) FROM alerts WHERE resolved = 0 AND severity = "info"')
+        informational_alerts = cursor.fetchone()[0]
         
         # Alertas críticos
         cursor.execute('SELECT COUNT(*) FROM alerts WHERE resolved = 0 AND severity = "critical"')
@@ -452,7 +494,9 @@ class MonitoringSystem:
             "overall_status": overall_status,
             "command_error_rate": cmd_error_rate,
             "api_error_rate": api_error_rate,
+            "policy_blocks": policy_blocks,
             "active_alerts": active_alerts,
+            "informational_alerts": informational_alerts,
             "critical_alerts": critical_alerts,
             "last_updated": datetime.now().isoformat()
         }

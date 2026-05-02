@@ -100,6 +100,20 @@ npm run capture:docs-screenshots
 
 The screenshot workflow requires a running backend and frontend with seeded local users. See [../screenshots/README.md](../screenshots/README.md).
 
+Disposable agent evaluation:
+
+```bash
+make eval-agent
+```
+
+`make eval-agent` creates a timestamped benchmark run under
+`/tmp/devsynapse-agent-evaluations/`, initializes a small Python project with
+failing tests, validates project-scope policy blocks and, when a DeepSeek API
+key is configured, asks DevSynapse to diagnose, edit and re-run the fixture.
+Reports are written as Markdown and JSON inside the generated `reports/`
+directory. Use `make eval-agent EVAL_AGENT_ARGS=--no-llm` when you only want to
+verify the disposable harness and policy checks without spending API tokens.
+
 ## Expectations For Contributors
 
 Add or update tests when you change:

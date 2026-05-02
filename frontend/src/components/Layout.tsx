@@ -42,7 +42,7 @@ export function Layout() {
         </div>
 
         <nav className="sidebar-nav">
-          <span className="nav-section-label">Workspace</span>
+          <span className="nav-section-label">Ambiente</span>
           {navItems.map(({ path, icon: Icon, label }) => (
             <NavLink
               key={path}

@@ -51,7 +51,7 @@ export function Admin() {
         setProjects(projectList);
         setError(null);
       } catch {
-        setError('Failed to load admin data');
+        setError('Falha ao carregar dados administrativos');
       }
       setLoading(false);
     };
@@ -89,7 +89,7 @@ export function Admin() {
       setLogs(logsData.logs);
       setError(null);
     } catch {
-      setError(`Failed to update permissions for ${user.username}`);
+      setError(`Falha ao atualizar permissões de ${user.username}`);
     }
     setSavingUser(null);
   };
@@ -121,14 +121,14 @@ export function Admin() {
       });
       setError(null);
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to register project'));
+      setError(getErrorMessage(err, 'Falha ao registrar projeto'));
     }
     setCreatingProject(false);
   };
 
   const deleteProject = async (project: ProjectInfo) => {
     const confirmed = window.confirm(
-      `Remove "${project.name}" from DevSynapse? This only removes the registry entry.`
+      `Remover "${project.name}" do DevSynapse? Isso remove apenas o registro.`
     );
     if (!confirmed) return;
 
@@ -144,7 +144,7 @@ export function Admin() {
       setLogs(logsData.logs);
       setError(null);
     } catch {
-      setError(`Failed to remove project ${project.name}`);
+      setError(`Falha ao remover projeto ${project.name}`);
     }
     setDeletingProject(null);
   };
@@ -153,7 +153,7 @@ export function Admin() {
     return (
       <div className="page-loading">
         <RefreshCw size={48} className="spinner" />
-        <p>Loading admin workspace...</p>
+        <p>Carregando administração...</p>
       </div>
     );
   }
@@ -161,7 +161,7 @@ export function Admin() {
   return (
     <div className="settings-page">
       <div className="page-header">
-        <h1>Admin</h1>
+        <h1>Administração</h1>
       </div>
 
       {error && (
@@ -178,17 +178,17 @@ export function Admin() {
               <div>
                 <h3>{user.username}</h3>
                 <p className="admin-subtitle">
-                  role={user.role} · active={String(user.is_active)}
+                  papel={user.role} · ativo={String(user.is_active)}
                 </p>
               </div>
               <Shield size={18} />
             </div>
             <div className="setting-field">
-              <label>{user.role === 'admin' ? 'Project Mutation Scope' : 'Project Mutation Allowlist'}</label>
+              <label>{user.role === 'admin' ? 'Escopo de mutação' : 'Allowlist de mutação'}</label>
               <textarea
                 rows={6}
                 value={user.project_mutation_allowlist.join('\n')}
-                placeholder="One project per line"
+                placeholder="Um projeto por linha"
                 readOnly={user.role === 'admin'}
                 onChange={(e) => updateAllowlist(user.username, e.target.value)}
               />
@@ -204,7 +204,7 @@ export function Admin() {
                 ) : (
                   <Save size={16} />
                 )}
-                {savingUser === user.username ? 'Saving...' : 'Save Permissions'}
+                {savingUser === user.username ? 'Salvando...' : 'Salvar permissões'}
               </button>
             )}
           </div>
@@ -212,10 +212,10 @@ export function Admin() {
         <div className="settings-card">
           <div className="admin-card-header">
             <div>
-              <h3>Projects</h3>
+              <h3>Projetos</h3>
               <p className="admin-subtitle">
-                {projects.filter((project) => project.path_exists !== false).length} active ·{' '}
-                {projects.filter((project) => project.path_exists === false).length} stale
+                {projects.filter((project) => project.path_exists !== false).length} ativos ·{' '}
+                {projects.filter((project) => project.path_exists === false).length} ausentes
               </p>
             </div>
             <FolderPlus size={18} />
@@ -225,9 +225,9 @@ export function Admin() {
               <div className="admin-project-item" key={project.name}>
                 <div>
                   <strong>{project.name}</strong>
-                  <span>{project.path || 'Path available to admins only'}</span>
+                  <span>{project.path || 'Caminho disponível apenas para administradores'}</span>
                   {project.path_exists === false && (
-                    <span className="admin-project-status stale">Missing on disk</span>
+                    <span className="admin-project-status stale">Ausente no disco</span>
                   )}
                 </div>
                 <button
@@ -235,7 +235,7 @@ export function Admin() {
                   onClick={() => void deleteProject(project)}
                   disabled={deletingProject === project.name}
                   type="button"
-                  title="Remove project registry entry"
+                  title="Remover registro do projeto"
                 >
                   {deletingProject === project.name ? (
                     <RefreshCw size={16} className="spinner" />
@@ -248,7 +248,7 @@ export function Admin() {
           </div>
           <div className="admin-project-form">
             <div className="setting-field">
-              <label>Name</label>
+              <label>Nome</label>
               <input
                 type="text"
                 value={projectForm.name}
@@ -256,7 +256,7 @@ export function Admin() {
               />
             </div>
             <div className="setting-field">
-              <label>Path</label>
+              <label>Caminho</label>
               <input
                 type="text"
                 value={projectForm.path}
@@ -265,7 +265,7 @@ export function Admin() {
             </div>
             <div className="admin-project-fields">
               <div className="setting-field">
-                <label>Type</label>
+                <label>Tipo</label>
                 <input
                   type="text"
                   value={projectForm.type}
@@ -275,16 +275,16 @@ export function Admin() {
                 />
               </div>
               <div className="setting-field">
-                <label>Priority</label>
+                <label>Prioridade</label>
                 <select
                   value={projectForm.priority}
                   onChange={(e) =>
                     setProjectForm((prev) => ({ ...prev, priority: e.target.value }))
                   }
                 >
-                  <option value="high">high</option>
-                  <option value="medium">medium</option>
-                  <option value="low">low</option>
+                  <option value="high">alta</option>
+                  <option value="medium">média</option>
+                  <option value="low">baixa</option>
                 </select>
               </div>
             </div>
@@ -299,20 +299,20 @@ export function Admin() {
             ) : (
               <FolderPlus size={16} />
             )}
-            {creatingProject ? 'Registering...' : 'Register Project'}
+            {creatingProject ? 'Registrando...' : 'Registrar projeto'}
           </button>
         </div>
         <div className="settings-card">
           <div className="admin-card-header">
             <div>
-              <h3>Audit Trail</h3>
-              <p className="admin-subtitle">Recent administrative permission changes</p>
+              <h3>Trilha de auditoria</h3>
+              <p className="admin-subtitle">Alterações administrativas recentes</p>
             </div>
             <Shield size={18} />
           </div>
           <div className="admin-audit-list">
             {logs.length === 0 ? (
-              <p className="admin-subtitle">No administrative changes recorded yet.</p>
+              <p className="admin-subtitle">Nenhuma alteração administrativa registrada.</p>
             ) : (
               logs.map((log) => {
                 const projects = Array.isArray(log.details.project_mutation_allowlist)
@@ -322,10 +322,10 @@ export function Admin() {
                   typeof log.details.project_name === 'string' ? log.details.project_name : null;
                 const actionLabel =
                   log.action === 'create_project' || log.action === 'restore_project'
-                    ? 'Registered project'
+                    ? 'Registrou projeto'
                     : log.action === 'delete_project'
-                      ? 'Removed project'
-                    : 'Updated mutation scope for';
+                      ? 'Removeu projeto'
+                    : 'Atualizou escopo de mutação de';
 
                 return (
                   <div className="admin-audit-item" key={log.id}>
@@ -335,12 +335,12 @@ export function Admin() {
                     </div>
                     <p>
                       {actionLabel}{' '}
-                      <strong>{projectName || log.target_username || 'unknown'}</strong>
+                    <strong>{projectName || log.target_username || 'desconhecido'}</strong>
                     </p>
                     <p className="admin-subtitle">
                       {projectName || projects.length > 0
                         ? projectName || projects.join(', ')
-                        : 'No project mutations allowed'}
+                        : 'Nenhuma mutação de projeto permitida'}
                     </p>
                   </div>
                 );

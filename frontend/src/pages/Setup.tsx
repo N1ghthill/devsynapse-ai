@@ -28,7 +28,7 @@ export function Setup() {
       })
       .catch(() => {
         if (!cancelled) {
-          setError('Failed to load setup status');
+          setError('Falha ao carregar status de configuração');
         }
       })
       .finally(() => {
@@ -46,7 +46,7 @@ export function Setup() {
     return (
       <div className="page-loading">
         <RefreshCw size={48} className="spinner" />
-        <p>Loading setup...</p>
+        <p>Carregando configuração...</p>
       </div>
     );
   }
@@ -55,7 +55,7 @@ export function Setup() {
     return (
       <div className="page-error">
         <Cpu size={48} />
-        <p>Admin access is required.</p>
+        <p>Acesso de administrador obrigatório.</p>
       </div>
     );
   }
@@ -63,7 +63,7 @@ export function Setup() {
   return (
     <div className="settings-page">
       <div className="page-header">
-        <h1>Setup</h1>
+        <h1>Configuração</h1>
       </div>
 
       {error && <div className="message-bar message-error">{error}</div>}
@@ -74,7 +74,7 @@ export function Setup() {
             status={status}
             includeAdminPassword={status.admin_password_required}
             submitting={saving}
-            submitLabel="Complete Setup"
+            submitLabel="Concluir configuração"
             onSubmit={async (payload) => {
               setSaving(true);
               setError(null);
@@ -82,7 +82,7 @@ export function Setup() {
                 await completeBootstrap(payload);
                 navigate('/chat', { replace: true });
               } catch {
-                setError('Failed to complete setup');
+                setError('Falha ao concluir configuração');
               } finally {
                 setSaving(false);
               }

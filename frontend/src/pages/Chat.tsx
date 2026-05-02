@@ -689,7 +689,7 @@ export function Chat() {
       const errorMessage: Message = {
         id: createMessageId(),
         role: 'system',
-        content: 'Failed to get response. Please check your connection.',
+        content: 'Falha ao obter resposta. Verifique sua conexão.',
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMessage]);

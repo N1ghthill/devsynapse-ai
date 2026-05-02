@@ -31,21 +31,21 @@ export function BootstrapForm({
 
     if (includeAdminPassword) {
       if (adminPassword.length < 8) {
-        setError('Password must be at least 8 characters');
+        setError('A senha deve ter pelo menos 8 caracteres');
         return;
       }
       if (adminPassword !== confirmPassword) {
-        setError('Passwords do not match');
+        setError('As senhas não conferem');
         return;
       }
     }
 
     if (!status.deepseek_api_key_configured && !deepseekApiKey.trim()) {
-      setError('DeepSeek API key is required');
+      setError('A chave da API DeepSeek é obrigatória');
       return;
     }
     if (!reposRoot.trim()) {
-      setError('Repository folder is required');
+      setError('A pasta de repositórios é obrigatória');
       return;
     }
 
@@ -65,7 +65,7 @@ export function BootstrapForm({
       {includeAdminPassword && (
         <>
           <div className="form-field">
-            <label htmlFor="admin-username">Admin Username</label>
+            <label htmlFor="admin-username">Usuário administrador</label>
             <input
               id="admin-username"
               type="text"
@@ -74,43 +74,43 @@ export function BootstrapForm({
             />
           </div>
           <div className="form-field">
-            <label htmlFor="admin-password">New Admin Password</label>
+            <label htmlFor="admin-password">Nova senha do administrador</label>
             <input
               id="admin-password"
               type="password"
               value={adminPassword}
               onChange={(event) => setAdminPassword(event.target.value)}
-              placeholder="Create a local admin password"
+              placeholder="Crie uma senha local de administrador"
               autoFocus
             />
           </div>
           <div className="form-field">
-            <label htmlFor="confirm-admin-password">Confirm Admin Password</label>
+            <label htmlFor="confirm-admin-password">Confirmar senha do administrador</label>
             <input
               id="confirm-admin-password"
               type="password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              placeholder="Confirm your local admin password"
+              placeholder="Confirme a senha local de administrador"
             />
           </div>
         </>
       )}
 
       <div className="form-field">
-        <label htmlFor="deepseek-api-key">DeepSeek API Key</label>
+        <label htmlFor="deepseek-api-key">Chave da API DeepSeek</label>
         <input
           id="deepseek-api-key"
           type="password"
           value={deepseekApiKey}
           onChange={(event) => setDeepseekApiKey(event.target.value)}
-          placeholder={status.deepseek_api_key_configured ? 'Configured' : 'sk-...'}
+          placeholder={status.deepseek_api_key_configured ? 'Configurada' : 'sk-...'}
           autoFocus={!includeAdminPassword}
         />
       </div>
 
       <div className="form-field">
-        <label htmlFor="workspace-root">Workspace Root</label>
+        <label htmlFor="workspace-root">Raiz do workspace</label>
         <input
           id="workspace-root"
           type="text"
@@ -120,7 +120,7 @@ export function BootstrapForm({
       </div>
 
       <div className="form-field">
-        <label htmlFor="repos-root">Repository Folder</label>
+        <label htmlFor="repos-root">Pasta de repositórios</label>
         <input
           id="repos-root"
           type="text"
@@ -136,13 +136,13 @@ export function BootstrapForm({
             checked={registerProjects}
             onChange={(event) => setRegisterProjects(event.target.checked)}
           />
-          Register discovered Git projects
+          Registrar projetos Git descobertos
         </label>
       </div>
 
       <button type="submit" className="login-btn" disabled={submitting}>
         {submitting ? <Loader2 size={20} className="spinner" /> : <KeyRound size={20} />}
-        {submitting ? 'Saving...' : submitLabel}
+        {submitting ? 'Salvando...' : submitLabel}
       </button>
     </form>
   );

@@ -87,6 +87,7 @@ class TestSystemIntegration:
 
         cmd_stats = monitor.get_command_stats(hours=24)
         assert cmd_stats["totals"]["total"] >= 1
+        assert "blocked" in cmd_stats["totals"]
 
         api_stats = monitor.get_api_stats(hours=24)
         assert api_stats["totals"]["total_requests"] >= 1
@@ -204,3 +205,34 @@ class TestSystemIntegration:
         active = monitor.get_active_alerts()
         resolved_ids = [a["id"] for a in active]
         assert alerts[0]["id"] not in resolved_ids
+
+    def test_monitoring_separates_policy_blocks_from_operational_failures(self, tmp_path):
+        monitor = MonitoringSystem(tmp_path / "monitoring.db")
+
+        monitor.log_command_execution(
+            command_type="project_scope_mismatch",
+            command_text='write "../escape.md" --content="blocked"',
+            success=False,
+            execution_time=0.01,
+            error_message="Comando não pode acessar caminho fora do projeto",
+        )
+        monitor.log_command_execution(
+            command_type="bash",
+            command_text='bash "python3 -m pytest"',
+            success=False,
+            execution_time=0.02,
+            error_message="Comando falhou (exit code: 1)",
+        )
+
+        cmd_stats = monitor.get_command_stats(hours=24)
+        assert cmd_stats["totals"]["blocked"] == 1
+        assert cmd_stats["totals"]["failed"] == 1
+
+        health = monitor.get_system_health()
+        assert health["policy_blocks"] == 1
+        assert health["command_error_rate"] == 0.5
+
+        alerts = monitor.get_active_alerts()
+        alert_types = {alert["alert_type"] for alert in alerts}
+        assert "command_blocked" in alert_types
+        assert "command_failure" in alert_types

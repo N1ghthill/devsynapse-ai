@@ -110,8 +110,14 @@ export interface ExecuteCommandRequest {
 
 export interface DashboardStats {
   command_stats: {
-    totals: { total: number; successful: number; failed: number };
-    by_type: Array<{ command_type: string; count: number }>;
+    totals: { total: number; successful: number; blocked: number; failed: number };
+    by_type: Array<{
+      command_type: string;
+      count: number;
+      successful?: number;
+      blocked?: number;
+      failed?: number;
+    }>;
   };
   api_stats: {
     totals: { total_requests: number; avg_response_time: number };
@@ -166,7 +172,9 @@ export interface DashboardStats {
     overall_status: string;
     command_error_rate: number;
     api_error_rate: number;
+    policy_blocks: number;
     active_alerts: number;
+    informational_alerts: number;
   };
   active_alerts: Array<{
     id: number;

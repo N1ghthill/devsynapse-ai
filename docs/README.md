@@ -25,6 +25,7 @@ This directory is the technical documentation entrypoint for contributors and ma
 - product showcase and use cases: [product/showcase.md](product/showcase.md)
 - screenshot evidence index: [screenshots/README.md](screenshots/README.md)
 - evaluation evidence and real DeepSeek agent run: [evaluation/README.md](evaluation/README.md)
+- reproducible agent benchmarks: [evaluation/reproducible-benchmarks.md](evaluation/reproducible-benchmarks.md)
 
 ## Development
 
