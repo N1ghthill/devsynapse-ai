@@ -1,15 +1,19 @@
 """
 Unit tests for plugin system
 """
-import pytest
 import json
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from core.plugin_system import (
-    PluginManager, PluginContext, PluginEvent, BasePlugin,
-    PluginManifest, PLUGIN_EVENTS, BUILTIN_HOOKS, plugin_manager
+    BUILTIN_HOOKS,
+    PLUGIN_EVENTS,
+    PluginContext,
+    PluginEvent,
+    PluginManager,
+    PluginManifest,
+    plugin_manager,
 )
 
 

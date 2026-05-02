@@ -122,16 +122,15 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Verified Baseline
 
-Release validation completed on `2026-05-01` (v0.6.3 repository baseline):
+Local verification refreshed on `2026-05-02` (v0.6.3 repository baseline):
 - full repository verification: `make verify`
-- desktop build verification: `make desktop-build`
-- browser smoke validation: `make ui-smoke`
 - dependency consistency: `pip check`
 - frontend dependency audit: `npm audit --audit-level=high`
-- backend test suite: `225 passed`
+- backend test suite: `229 passed`
 - Python/Ruff checks, shell syntax checks, Python script compilation and frontend ESLint: passed
 - frontend production build: passed
-- GitHub Actions CI: passed on `main`
+- OpenAPI schema generation: passed
+- previous release validation also covered `make desktop-build`, `make ui-smoke` and GitHub Actions CI on `main`
 - supported shell installer target: Debian/Ubuntu-style Linux with `apt`
 - validated desktop artifacts: Linux `.deb` / `.rpm` and Windows NSIS installer; macOS is configured but not validated
 - LLM usage telemetry, streaming chat delivery, project selector, project manager, conversation persistence, execution workflow and dashboard metrics are active in the current codebase

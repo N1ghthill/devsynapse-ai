@@ -86,7 +86,11 @@ async def get_settings_route(
     )
 
 
-@router.put("/settings")
+def _persisted_float_setting(persisted: dict, key: str, default: float) -> float:
+    return float(persisted.get(key, default))
+
+
+@router.put("/settings", response_model=SettingsResponse)
 async def update_settings(
     settings_data: SettingsUpdateRequest,
     admin=Depends(require_admin),
@@ -94,13 +98,28 @@ async def update_settings(
     brain: DevSynapseBrain = Depends(get_brain),
 ):
     updates = settings_data.model_dump(exclude_none=True)
-    warning_threshold = updates.get("llm_budget_warning_threshold_pct")
-    critical_threshold = updates.get("llm_budget_critical_threshold_pct")
-    if (
-        warning_threshold is not None
-        and critical_threshold is not None
-        and critical_threshold < warning_threshold
-    ):
+    persisted = memory_system.get_app_settings()
+    warning_threshold = float(
+        updates.get(
+            "llm_budget_warning_threshold_pct",
+            _persisted_float_setting(
+                persisted,
+                "llm_budget_warning_threshold_pct",
+                settings.llm_budget_warning_threshold_pct,
+            ),
+        )
+    )
+    critical_threshold = float(
+        updates.get(
+            "llm_budget_critical_threshold_pct",
+            _persisted_float_setting(
+                persisted,
+                "llm_budget_critical_threshold_pct",
+                settings.llm_budget_critical_threshold_pct,
+            ),
+        )
+    )
+    if critical_threshold < warning_threshold:
         raise HTTPException(
             status_code=400,
             detail="Critical budget threshold must be greater than or equal to warning threshold",

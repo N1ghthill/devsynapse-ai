@@ -1006,6 +1006,10 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         else:
             final_response = response_parts[-1] if response_parts else ""
 
+        if executed_command is not None and not final_response.strip():
+            final_response = self._command_completion_fallback(executed_command)
+            yield {"type": "text", "content": final_response}
+
         persisted_project_name = await self.memory.save_interaction(
             conversation_id=conversation_id,
             user_message=user_message,
@@ -1046,6 +1050,27 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         )
 
         yield {"type": "done", "usage": aggregated_usage, "project_name": persisted_project_name}
+
+    @staticmethod
+    def _command_completion_fallback(executed_command: Dict) -> str:
+        status = executed_command.get("status")
+        reason_code = executed_command.get("reason_code")
+        project_name = executed_command.get("project_name")
+        project_suffix = f" Projeto: {project_name}." if project_name else ""
+
+        if status == "success":
+            return f"Execução concluída. O resultado do comando está disponível abaixo.{project_suffix}"
+        if status == "blocked":
+            if reason_code == "project_scope_mismatch":
+                return (
+                    "A execução foi bloqueada porque o comando tentou sair do escopo "
+                    f"do projeto.{project_suffix}"
+                )
+            return (
+                "A execução foi bloqueada por uma regra de segurança ou permissão."
+                f"{project_suffix}"
+            )
+        return f"A execução terminou com falha e precisa de revisão.{project_suffix}"
 
     def _coerce_llm_result(self, result: str | LLMResult) -> LLMResult:
         if isinstance(result, LLMResult):

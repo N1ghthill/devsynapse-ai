@@ -141,7 +141,8 @@ async def test_bootstrap_complete_configures_first_run_runtime(route_services, t
         brain=route_services.brain,
     )
 
-    assert response.user == {"username": "admin", "role": "admin"}
+    assert response.user.username == "admin"
+    assert response.user.role == "admin"
     assert response.access_token
     assert response.status.requires_setup is False
     assert response.registered_projects[0].name == "example-project"
@@ -528,12 +529,12 @@ async def test_list_conversations_and_stats_include_llm_usage(route_services):
         monitoring_system=route_services.monitoring,
         memory_system=route_services.memory,
     )
-    assert stats.llm_usage["totals"]["total_tokens"] == 340
-    assert stats.llm_usage["totals"]["estimated_cost_usd"] == pytest.approx(0.0000462)
-    assert stats.llm_usage["totals"]["cache_hit_rate_pct"] == pytest.approx(16.67)
-    assert stats.llm_usage["by_project"][0]["project_name"] == "devsynapse-ai"
-    assert stats.llm_usage["budget"]["daily"]["level"] == "critical"
-    assert stats.llm_usage["budget"]["monthly"]["level"] == "healthy"
+    assert stats.llm_usage.totals.total_tokens == 340
+    assert stats.llm_usage.totals.estimated_cost_usd == pytest.approx(0.0000462)
+    assert stats.llm_usage.totals.cache_hit_rate_pct == pytest.approx(16.67)
+    assert stats.llm_usage.by_project[0].project_name == "devsynapse-ai"
+    assert stats.llm_usage.budget.daily.level == "critical"
+    assert stats.llm_usage.budget.monthly.level == "healthy"
 
 
 @pytest.mark.asyncio
@@ -627,6 +628,29 @@ async def test_update_settings_rejects_critical_threshold_below_warning(route_se
     assert exc_info.value.status_code == 400
 
 
+@pytest.mark.asyncio
+async def test_update_settings_rejects_partial_threshold_state(route_services):
+    from api.models import SettingsUpdateRequest
+    from api.routes.settings import update_settings
+
+    route_services.memory.update_app_settings(
+        {
+            "llm_budget_warning_threshold_pct": 80,
+            "llm_budget_critical_threshold_pct": 100,
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await update_settings(
+            settings_data=SettingsUpdateRequest(llm_budget_critical_threshold_pct=70),
+            admin=route_services.admin,
+            memory_system=route_services.memory,
+            brain=route_services.brain,
+        )
+
+    assert exc_info.value.status_code == 400
+
+
 def test_update_settings_route_requires_admin_dependency():
     from fastapi.routing import APIRoute
 
@@ -641,6 +665,52 @@ def test_update_settings_route_requires_admin_dependency():
 
     dependency_calls = {dependency.call for dependency in route.dependant.dependencies}
     assert require_admin in dependency_calls
+
+
+def test_mutation_routes_have_explicit_response_models():
+    from fastapi.routing import APIRoute
+
+    from api.models import (
+        AlertListResponse,
+        AlertResolveResponse,
+        SettingsResponse,
+        SkillDeleteResponse,
+    )
+    from api.routes.knowledge import router as knowledge_router
+    from api.routes.monitoring import router as monitoring_router
+    from api.routes.settings import router as settings_router
+
+    settings_route = next(
+        route
+        for route in settings_router.routes
+        if isinstance(route, APIRoute) and route.path == "/settings" and "PUT" in route.methods
+    )
+    alerts_route = next(
+        route
+        for route in monitoring_router.routes
+        if isinstance(route, APIRoute)
+        and route.path == "/monitoring/alerts"
+        and "GET" in route.methods
+    )
+    resolve_route = next(
+        route
+        for route in monitoring_router.routes
+        if isinstance(route, APIRoute)
+        and route.path == "/monitoring/alerts/{alert_id}/resolve"
+        and "POST" in route.methods
+    )
+    delete_skill_route = next(
+        route
+        for route in knowledge_router.routes
+        if isinstance(route, APIRoute)
+        and route.path == "/skills/{skill_name}"
+        and "DELETE" in route.methods
+    )
+
+    assert settings_route.response_model is SettingsResponse
+    assert alerts_route.response_model is AlertListResponse
+    assert resolve_route.response_model is AlertResolveResponse
+    assert delete_skill_route.response_model is SkillDeleteResponse
 
 
 @pytest.mark.asyncio
@@ -956,8 +1026,8 @@ async def test_knowledge_routes_manage_memories_and_skills(route_services):
     assert skill_response.slug == "pytest-triage"
     assert activated.use_count == 1
     assert skills.skills[0].slug == "pytest-triage"
-    assert stats.memories["total_memories"] == 1
-    assert stats.skills["active_skills"] == 1
+    assert stats.memories.total_memories == 1
+    assert stats.skills.active_skills == 1
 
 
 @pytest.mark.asyncio

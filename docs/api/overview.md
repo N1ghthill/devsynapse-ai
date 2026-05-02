@@ -124,17 +124,20 @@ Purpose:
 - `/chat/stream` returns SSE events: `text` chunks, `command` when extracted, `command_status` and `command_result` when `ChatRequest.execute_command` enables automatic execution, and `done` with usage metadata and resolved `project_name` when available
 - `/chat/stream` does not expose provider reasoning content to clients; internal reasoning may still be used by the model provider but is not part of the UI contract
 - when `ChatRequest.execute_command` is enabled and an action-oriented request gets either an empty model response or intent text without a tool call, the backend retries that turn with a strict "emit one tool call or final answer" instruction before ending the stream
+- when automatic command execution completes but the model does not emit final prose, `/chat/stream` emits a concise completion text before `done`
 - admin automatic streaming runs supported OpenCode commands without project allowlist confirmation and can continue after ordinary command execution failures by feeding the failure output back to the model; selected conversation project scope, validation, blacklist, plugin and authorization blocks still end the run
 - `/execute` returns structured execution status, reason code and project context
 - `/execute` normalizes common LLM placeholder paths such as `/home/user/projects`, `~/projects` and `/workspace` to the configured local repository/workspace roots before validation and execution; if a mutating command points outside the selected conversation project, execution is blocked with `project_scope_mismatch`, while read-only reference commands can inspect other allowed or registered repositories
 - `/chat/history`, `/conversations` and `/conversations/{conversation_id}` include persisted `project_name` when available
 - `/monitoring/stats` includes `llm_usage` aggregates, cache hit-rate telemetry, project-level breakdown, agent learning stats and budget status snapshots
 - `/monitoring/stats` also includes `llm_usage.knowledge` with memory, skill and nudge aggregates
+- alert list, alert resolution, settings updates and skill deletion use explicit response models in `api/models.py`
 - `/memories` returns both base `confidence_score` and computed `effective_confidence`; the effective score applies `memory_decay_score`, evidence and access signals
 - skill writes create `SKILL.md` files under the local DevSynapse data directory by default; explicit project skills use `.devsynapse/skills` inside the registered project
 - skill write/delete routes require an admin role, while listing and activation require an authenticated user
 - `llm_model_routing_enabled` lets the backend route simple and medium work to Flash while keeping complex work on Pro
 - `llm_auto_economy_enabled` forces Flash routing when budget status is critical
+- `PUT /settings` validates the final persisted budget-threshold state, so partial updates cannot leave the critical threshold below the warning threshold
 - `/feedback` updates conversation feedback and can create agent-learning signals used by future routing decisions
 - `/projects` returns active registered project `name`, `type`, `priority`, `last_accessed` and `access_count`; entries whose local path no longer exists are hidden from user-facing selection
 - `/admin/projects` returns active and stale registered projects with local `path` and `path_exists` for administrative management

@@ -7,7 +7,6 @@ exclude = [
   "__pycache__",
   "frontend/node_modules",
   "frontend/dist",
-  "tests",
 ]
 
 [tool.ruff.lint]

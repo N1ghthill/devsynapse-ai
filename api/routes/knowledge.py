@@ -11,6 +11,7 @@ from api.models import (
     ProjectMemoryResponse,
     SkillActivateRequest,
     SkillCreateRequest,
+    SkillDeleteResponse,
     SkillDetailResponse,
     SkillListResponse,
     SkillSummaryResponse,
@@ -211,7 +212,7 @@ async def update_skill(
     return SkillDetailResponse(**skill)
 
 
-@router.delete("/skills/{skill_name}")
+@router.delete("/skills/{skill_name}", response_model=SkillDeleteResponse)
 async def delete_skill(
     skill_name: str,
     project_name: str | None = None,
@@ -223,4 +224,4 @@ async def delete_skill(
     deleted = memory_system.delete_skill(skill_name, project_name=project_name)
     if not deleted:
         raise HTTPException(status_code=404, detail="Skill não encontrada")
-    return {"success": True, "skill": skill_name}
+    return SkillDeleteResponse(success=True, skill=skill_name)

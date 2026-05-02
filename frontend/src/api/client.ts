@@ -3,6 +3,8 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
   AdminAuditLog,
   AdminUser,
+  AlertListResponse,
+  AlertResolveResponse,
   BootstrapCompleteRequest,
   BootstrapCompleteResponse,
   BootstrapStatus,
@@ -19,6 +21,7 @@ import type {
   ProjectCreateRequest,
   ProjectInfo,
   SettingsData,
+  SkillDeleteResponse,
   SkillCreateRequest,
   SkillDetail,
   SkillSummary,
@@ -327,8 +330,15 @@ export const dashboardApi = {
     return response.data;
   },
 
-  getAlerts: async () => {
-    const response = await api.get('/monitoring/alerts');
+  getAlerts: async (): Promise<AlertListResponse> => {
+    const response = await api.get<AlertListResponse>('/monitoring/alerts');
+    return response.data;
+  },
+
+  resolveAlert: async (alertId: number): Promise<AlertResolveResponse> => {
+    const response = await api.post<AlertResolveResponse>(
+      `/monitoring/alerts/${alertId}/resolve`
+    );
     return response.data;
   },
 };
@@ -386,6 +396,16 @@ export const knowledgeApi = {
     const response = await api.post<SkillDetail>(`/skills/${skillName}/activate`, {
       project_name: projectName || null,
       reason: 'ui',
+    });
+    return response.data;
+  },
+
+  deleteSkill: async (
+    skillName: string,
+    projectName?: string | null
+  ): Promise<SkillDeleteResponse> => {
+    const response = await api.delete<SkillDeleteResponse>(`/skills/${skillName}`, {
+      params: projectName ? { project_name: projectName } : {},
     });
     return response.data;
   },

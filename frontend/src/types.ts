@@ -185,6 +185,29 @@ export interface DashboardStats {
   }>;
 }
 
+export interface AlertInfo {
+  id: number;
+  alert_type: string;
+  severity: string;
+  message: string;
+  timestamp: string;
+}
+
+export interface AlertListResponse {
+  alerts: AlertInfo[];
+  resolved: boolean;
+}
+
+export interface AlertResolveResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface SkillDeleteResponse {
+  success: boolean;
+  skill: string;
+}
+
 export interface BudgetWindowStatus {
   window: 'daily' | 'monthly';
   budget_usd: number;

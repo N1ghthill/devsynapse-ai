@@ -28,6 +28,13 @@ async function expectVisible(locator, label) {
   }
 }
 
+async function expectHidden(locator, label) {
+  await locator.waitFor({ state: 'hidden', timeout });
+  if (await locator.isVisible()) {
+    throw new Error(`${label} is still visible`);
+  }
+}
+
 async function runSmoke() {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
@@ -45,6 +52,76 @@ async function runSmoke() {
     ]);
     await expectVisible(page.getByText('Workspace local'), 'chat workspace header');
     await expectVisible(page.getByRole('heading', { name: 'Escolha um fluxo' }), 'chat empty state');
+
+    let interceptedChatStream = false;
+    await page.route('**/chat/stream', async (route) => {
+      interceptedChatStream = true;
+      const events = [
+        {
+          type: 'command',
+          command: 'bash "echo smoke-chat-ok"',
+          auto_execute: true,
+        },
+        {
+          type: 'command_status',
+          command: 'bash "echo smoke-chat-ok"',
+          status: 'running',
+        },
+        {
+          type: 'command_result',
+          command: 'bash "echo smoke-chat-ok"',
+          success: true,
+          message: 'Comando executado com sucesso (exit code: 0)',
+          output: 'smoke-chat-ok\n',
+          status: 'success',
+          reason_code: null,
+          project_name: null,
+        },
+        {
+          type: 'done',
+          usage: {
+            provider: 'smoke',
+            model: 'smoke-model',
+            prompt_tokens: 1,
+            completion_tokens: 1,
+            total_tokens: 2,
+            prompt_cache_hit_tokens: 0,
+            prompt_cache_miss_tokens: 1,
+            reasoning_tokens: 0,
+            estimated_cost_usd: 0,
+          },
+          project_name: null,
+        },
+      ];
+      await route.fulfill({
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+        },
+        body: events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''),
+      });
+    });
+
+    await page.getByRole('button', { name: /Revisão manual/ }).click();
+    await page
+      .getByPlaceholder('Peça uma análise, refatoração, teste ou comando local...')
+      .fill('rode um comando rápido de validação');
+    await page.getByTitle('Enviar mensagem').click();
+    await expectVisible(
+      page.getByText('Execução concluída. O resultado do comando está disponível abaixo.'),
+      'chat command completion summary'
+    );
+    await expectVisible(
+      page.locator('.command-status-badge.status-success', { hasText: 'Executado' }).first(),
+      'chat command success badge'
+    );
+    await expectVisible(page.getByText('smoke-chat-ok', { exact: true }), 'chat command output');
+    await expectHidden(page.locator('.typing-indicator'), 'chat typing indicator');
+    if (!interceptedChatStream) {
+      throw new Error('chat stream was not exercised during smoke');
+    }
+    await page.unroute('**/chat/stream');
 
     await page.getByRole('button', { name: 'Projetos' }).click();
     await expectVisible(page.getByRole('dialog', { name: 'Escolher projeto' }), 'project manager');

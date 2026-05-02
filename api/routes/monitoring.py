@@ -12,7 +12,7 @@ from api.dependencies import (
     get_monitoring_system,
     require_user,
 )
-from api.models import DashboardStats, HealthResponse
+from api.models import AlertListResponse, AlertResolveResponse, DashboardStats, HealthResponse
 from config.settings import get_settings
 from core.brain import DevSynapseBrain
 from core.memory import MemorySystem
@@ -77,7 +77,7 @@ async def get_monitoring_stats(
     )
 
 
-@router.get("/monitoring/alerts")
+@router.get("/monitoring/alerts", response_model=AlertListResponse)
 async def get_alerts(
     resolved: bool = False,
     user=Depends(require_user),
@@ -92,7 +92,7 @@ async def get_alerts(
     }
 
 
-@router.post("/monitoring/alerts/{alert_id}/resolve")
+@router.post("/monitoring/alerts/{alert_id}/resolve", response_model=AlertResolveResponse)
 async def resolve_alert(
     alert_id: int,
     user=Depends(require_user),

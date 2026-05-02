@@ -332,13 +332,38 @@ export function Chat() {
           .findIndex((run) => run.command === command && run.status !== 'success');
         const actualIndex = index === -1 ? -1 : existingRuns.length - 1 - index;
         if (actualIndex === -1) {
-          return message;
+          return {
+            ...message,
+            toolRuns: [
+              ...existingRuns,
+              {
+                id: createToolRunId(),
+                command,
+                status: updates.status || 'running',
+                ...updates,
+              },
+            ],
+          };
         }
         const nextRuns = [...existingRuns];
         nextRuns[actualIndex] = { ...nextRuns[actualIndex], ...updates };
         return { ...message, toolRuns: nextRuns };
       })
     );
+  };
+
+  const completionTextForToolRuns = (toolRuns: ToolRun[]) => {
+    if (toolRuns.length === 0) return '';
+    if (toolRuns.some((toolRun) => toolRun.status === 'blocked')) {
+      return 'A execução foi interrompida por uma regra de segurança ou escopo. Revise o resultado do comando abaixo.';
+    }
+    if (toolRuns.some((toolRun) => toolRun.status === 'failed')) {
+      return 'A execução terminou com falha. O resultado do comando abaixo mostra o ponto que precisa de revisão.';
+    }
+    if (toolRuns.every((toolRun) => toolRun.status === 'success')) {
+      return 'Execução concluída. O resultado do comando está disponível abaixo.';
+    }
+    return '';
   };
 
   const summarizeUsage = (items: Message[]): TokenUsage | null => {
@@ -610,7 +635,10 @@ export function Chat() {
                         {
                           id: createToolRunId(),
                           command,
-                          status: 'proposed',
+                          status: autoExecute ? 'running' : 'proposed',
+                          result: autoExecute
+                            ? 'Aguardando retorno do backend...'
+                            : undefined,
                           projectName: msg.projectName,
                         },
                       ],
@@ -660,7 +688,14 @@ export function Chat() {
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantMessageId
-                ? { ...msg, tokenUsage: usage, projectName: projectName || msg.projectName }
+                ? {
+                    ...msg,
+                    content:
+                      msg.content ||
+                      completionTextForToolRuns(msg.toolRuns || []),
+                    tokenUsage: usage,
+                    projectName: projectName || msg.projectName,
+                  }
                 : msg.id === userMessageId && projectName
                   ? { ...msg, projectName }
                   : msg

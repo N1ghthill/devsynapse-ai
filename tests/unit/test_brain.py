@@ -412,6 +412,75 @@ class TestDevSynapseBrain:
         mock_memory.save_command_execution.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_streaming_emits_completion_when_tool_run_has_no_final_text(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        brain.api_key = "test-key"
+        mock_bridge.execute_command = AsyncMock(
+            return_value=(True, "ok", "tool output", "success", None, "devsynapse-ai")
+        )
+
+        async def stream_tool_only(*args, **kwargs):
+            del args, kwargs
+            yield {
+                "type": "done",
+                "content": "",
+                "usage": None,
+                "tool_calls": [
+                    {
+                        "id": "call_read",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": '{"path": "/tmp/file.txt"}',
+                        },
+                    }
+                ],
+            }
+
+        async def stream_no_final_text(*args, **kwargs):
+            del args, kwargs
+            yield {
+                "type": "done",
+                "content": "",
+                "usage": None,
+                "tool_calls": None,
+            }
+
+        with (
+            patch.object(
+                brain.deepseek,
+                "chat_completion_streaming",
+                side_effect=[stream_tool_only(), stream_no_final_text()],
+            ),
+            patch.object(brain, "_max_autoexec_rounds", return_value=2),
+        ):
+            events = [
+                event
+                async for event in brain.process_message_streaming(
+                    "Leia o arquivo",
+                    "test_session",
+                    user_id="irving",
+                    user_role="admin",
+                    auto_execute=True,
+                )
+            ]
+
+        assert [event["type"] for event in events] == [
+            "command",
+            "command_status",
+            "command_result",
+            "text",
+            "done",
+        ]
+        assert events[3]["content"] == (
+            "Execução concluída. O resultado do comando está disponível abaixo. "
+            "Projeto: devsynapse-ai."
+        )
+        assert mock_memory.save_interaction.call_args.kwargs["ai_response"] == events[3]["content"]
+
+    @pytest.mark.asyncio
     async def test_streaming_recovers_when_model_promises_action_without_tool(
         self, mock_memory, mock_bridge
     ):

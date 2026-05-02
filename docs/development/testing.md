@@ -2,12 +2,11 @@
 
 ## Current Verification Baseline
 
-At the latest documentation refresh on `2026-04-25`, local verification produced:
-- `143` passing backend tests
+At the latest documentation refresh on `2026-05-02`, local verification produced:
+- `229` passing backend tests
 - successful script checks
 - successful frontend lint and production build
-- passing installer/updater/uninstaller and development-server smoke tests
-- browser UI smoke coverage for login, dashboard, settings save and admin navigation
+- valid OpenAPI schema generation for the documented route set
 
 ## Test Layout
 
@@ -64,6 +63,14 @@ make script-check
 If `shellcheck` is installed locally, it also runs ShellCheck against the shell entrypoints,
 including `scripts/update.sh`.
 
+Backend linting:
+
+```bash
+make lint
+```
+
+Ruff checks application code and tests for import order and basic correctness.
+
 Frontend validation:
 
 ```bash
@@ -82,7 +89,10 @@ make ui-smoke
 frontend with a matching API URL and runs Playwright against the production
 bundle served by FastAPI. The smoke runtime seeds an admin account plus a
 temporary non-admin user so the Admin permission workflow is exercised without
-touching local developer data.
+touching local developer data. It also exercises a rapid chat command stream
+where `command`, `running`, `command_result` and `done` arrive together, then
+asserts that the chat shows a final completion summary, a successful command
+badge and command output instead of staying in a pending state.
 
 Install the Chromium browser once with:
 
