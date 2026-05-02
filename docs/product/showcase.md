@@ -20,14 +20,25 @@ This page maps the current product surface to concrete use cases and evidence ca
 
 ## Current Evidence
 
-Baseline validated on `2026-04-27`:
-- `make verify` passed with `186` tests, script checks, frontend lint and frontend build
-- `make desktop-build` generated Linux `.deb` and `.rpm` desktop artifacts
+Repository baseline validated on `2026-05-01`:
+- `make verify` passed with `225` backend tests, script checks, frontend lint and frontend build
+- `make desktop-build` verified the desktop packaging flow
+- `make ui-smoke` verified login, project management, dashboard, settings and admin navigation
 - GitHub Actions CI passed on `main`
-- portable configuration via environment variables verified
+- portable runtime configuration via environment variables verified
+
+Real DeepSeek agent evidence captured on `2026-05-02`:
+- DevSynapse ran against a disposable project, not a real user repository
+- the agent inspected code, diagnosed failing tests, edited the bug and re-ran validation
+- final result: `3 passed in 0.01s`
+- token, cache-hit and cost telemetry were recorded in the chat UI
+
+See the [evaluation evidence index](../evaluation/README.md) and the
+[real DeepSeek run](../evaluation/real-llm/2026-05-02-real-deepseek-evidence.md).
 
 Screenshot sources:
 - [screenshot evidence index](../screenshots/README.md)
+- [evaluation screenshots](../evaluation/README.md)
 - [testing guide](../development/testing.md)
 - [release notes](../releases/v0.6.3.md)
 
@@ -89,6 +100,7 @@ Relevant screenshot:
 - LLM usage and cost telemetry are part of the operator workflow.
 - DeepSeek settings, budget controls and project mutation scope are exposed in the product UI.
 - Admin users can inspect and manage project mutation permissions.
+- A real DeepSeek-backed agent turn can diagnose, edit and validate a disposable code fixture.
 
 ## What This Does Not Claim
 

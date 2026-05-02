@@ -90,6 +90,21 @@ for landing-page artifact status.
 
 More context is available in the [product showcase](docs/product/showcase.md) and the [screenshot evidence index](docs/screenshots/README.md).
 
+## Evaluation Evidence
+
+Recent product evidence is organized under [docs/evaluation](docs/evaluation/README.md).
+
+- Real DeepSeek agent run on `2026-05-02`: DevSynapse inspected a disposable
+  Python project, diagnosed failing tests, edited the bug and finished with
+  `3 passed in 0.01s`.
+- Local orchestrator appraisal on `2026-05-02`: project scoping, command
+  authorization, blocked unsafe paths, telemetry and UI screenshots were
+  validated against disposable projects.
+
+The real-LLM evidence includes screenshots, structured JSON output, token/cost
+telemetry and the exact code diff produced by the agent:
+[real DeepSeek evidence](docs/evaluation/real-llm/2026-05-02-real-deepseek-evidence.md).
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE).

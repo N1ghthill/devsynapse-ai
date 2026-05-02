@@ -1,0 +1,536 @@
+[
+  {
+    "name": "api_info",
+    "body": {
+      "service": "DevSynapse AI API",
+      "version": "0.6.3",
+      "status": "operational",
+      "endpoints": {
+        "chat": "/chat",
+        "execute": "/execute",
+        "feedback": "/feedback",
+        "bootstrap": "/bootstrap/status",
+        "health": "/health",
+        "knowledge": "/knowledge/stats",
+        "dashboard": "/monitoring/stats",
+        "docs": "/docs"
+      }
+    }
+  },
+  {
+    "name": "admin_login",
+    "body": {
+      "token_type": "bearer",
+      "user": {
+        "username": "admin",
+        "role": "admin"
+      }
+    }
+  },
+  {
+    "name": "user_login",
+    "body": {
+      "token_type": "bearer",
+      "user": {
+        "username": "eval-user",
+        "role": "user"
+      }
+    }
+  },
+  {
+    "name": "public_projects",
+    "body": {
+      "projects": [
+        {
+          "name": "python-service-lab",
+          "type": "project",
+          "priority": "medium",
+          "last_accessed": "2026-05-02T02:08:43.172587",
+          "access_count": 0
+        },
+        {
+          "name": "react-widget-lab",
+          "type": "project",
+          "priority": "medium",
+          "last_accessed": "2026-05-02T02:08:43.172625",
+          "access_count": 0
+        }
+      ],
+      "count": 2
+    }
+  },
+  {
+    "name": "admin_projects",
+    "body": {
+      "projects": [
+        {
+          "name": "python-service-lab",
+          "type": "project",
+          "priority": "medium",
+          "last_accessed": "2026-05-02T02:08:43.172587",
+          "access_count": 0,
+          "path": "/tmp/devsynapse-eval-final-2026-05-02/repos/python-service-lab",
+          "path_exists": true
+        },
+        {
+          "name": "react-widget-lab",
+          "type": "project",
+          "priority": "medium",
+          "last_accessed": "2026-05-02T02:08:43.172625",
+          "access_count": 0,
+          "path": "/tmp/devsynapse-eval-final-2026-05-02/repos/react-widget-lab",
+          "path_exists": true
+        }
+      ],
+      "count": 2
+    }
+  },
+  {
+    "name": "user_permissions",
+    "body": {
+      "username": "eval-user",
+      "role": "user",
+      "is_active": true,
+      "project_mutation_allowlist": [
+        "react-widget-lab"
+      ]
+    }
+  },
+  {
+    "name": "pwd_in_react",
+    "body": {
+      "success": true,
+      "message": "Comando executado com sucesso (exit code: 0)",
+      "output": "/tmp/devsynapse-eval-final-2026-05-02/repos/react-widget-lab\n",
+      "status": "success",
+      "reason_code": null,
+      "project_name": "react-widget-lab",
+      "interpretation": null
+    }
+  },
+  {
+    "name": "npm_test_react",
+    "body": {
+      "success": true,
+      "message": "Comando executado com sucesso (exit code: 0)",
+      "output": "\n> test\n> node --test src/math.test.js\n\nTAP version 13\n# Subtest: formatCurrency formats two decimals\nok 1 - formatCurrency formats two decimals\n  ---\n  duration_ms: 2.780727\n  type: 'test'\n  ...\n# Subtest: applyDiscount subtracts percent\nok 2 - applyDiscount subtracts percent\n  ---\n  duration_ms: 0.228651\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 234.941727\n",
+      "status": "success",
+      "reason_code": null,
+      "project_name": "react-widget-lab",
+      "interpretation": null
+    }
+  },
+  {
+    "name": "node_build_react",
+    "body": {
+      "success": true,
+      "message": "Comando executado com sucesso (exit code: 0)",
+      "output": "\n> build\n> node src/build-check.js\n\nbuild-check-ok\n",
+      "status": "success",
+      "reason_code": null,
+      "project_name": "react-widget-lab",
+      "interpretation": null
+    }
+  },
+  {
+    "name": "write_allowed_react",
+    "body": {
+      "success": true,
+      "message": "Arquivo criado: /tmp/devsynapse-eval-final-2026-05-02/repos/react-widget-lab/DEV_EVIDENCE.md (65 chars)",
+      "output": "Novo arquivo criado\nTamanho: 65 chars",
+      "status": "success",
+      "reason_code": null,
+      "project_name": "react-widget-lab",
+      "interpretation": null
+    }
+  },
+  {
+    "name": "write_blocked_python_permission",
+    "body": {
+      "success": false,
+      "message": "Ação 'write' não autorizada para o projeto 'python-service-lab'",
+      "output": null,
+      "status": "blocked",
+      "reason_code": "authorization_failed",
+      "project_name": "python-service-lab",
+      "interpretation": null
+    }
+  },
+  {
+    "name": "write_blocked_escape",
+    "body": {
+      "success": false,
+      "message": "Comando não pode acessar caminho fora do projeto 'react-widget-lab': /tmp/devsynapse-eval-final-2026-05-02/repos/escape.md",
+      "output": null,
+      "status": "blocked",
+      "reason_code": "project_scope_mismatch",
+      "project_name": "react-widget-lab",
+      "interpretation": null
+    }
+  },
+  {
+    "name": "blacklisted_rm_rf",
+    "body": {
+      "success": false,
+      "message": "Comando contém padrão não permitido: rm -rf",
+      "output": null,
+      "status": "blocked",
+      "reason_code": "validation_failed",
+      "project_name": "react-widget-lab",
+      "interpretation": null
+    }
+  },
+  {
+    "name": "pytest_python_admin",
+    "body": {
+      "success": true,
+      "message": "Comando executado com sucesso (exit code: 0)",
+      "output": "..                                                                       [100%]\n2 passed in 0.01s\n",
+      "status": "success",
+      "reason_code": null,
+      "project_name": "python-service-lab",
+      "interpretation": null
+    }
+  },
+  {
+    "name": "project_memory_create",
+    "body": {
+      "id": 1,
+      "project_name": "react-widget-lab",
+      "memory_type": "evaluation",
+      "content": "Projeto descartável usado para evidenciar execução segura por escopo.",
+      "source": "manual-eval",
+      "confidence_score": 0.8,
+      "memory_decay_score": 0.02,
+      "effective_confidence": 0.8173,
+      "evidence_count": 1,
+      "access_count": 0,
+      "created_at": "2026-05-02T02:09:22.406811",
+      "updated_at": "2026-05-02T02:09:22.406811",
+      "last_accessed_at": null,
+      "tags": [
+        "evaluation",
+        "evidence"
+      ],
+      "metadata": {}
+    }
+  },
+  {
+    "name": "project_memories_list",
+    "body": {
+      "memories": [
+        {
+          "id": 1,
+          "project_name": "react-widget-lab",
+          "memory_type": "evaluation",
+          "content": "Projeto descartável usado para evidenciar execução segura por escopo.",
+          "source": "manual-eval",
+          "confidence_score": 0.8,
+          "memory_decay_score": 0.02,
+          "effective_confidence": 0.8381,
+          "evidence_count": 1,
+          "access_count": 1,
+          "created_at": "2026-05-02T02:09:22.406811",
+          "updated_at": "2026-05-02T02:09:22.406811",
+          "last_accessed_at": "2026-05-02T02:09:22.430098",
+          "tags": [
+            "evaluation",
+            "evidence"
+          ],
+          "metadata": {}
+        }
+      ]
+    }
+  },
+  {
+    "name": "monitoring_stats",
+    "body": {
+      "command_stats": {
+        "totals": {
+          "total": 8,
+          "successful": 5,
+          "failed": 3
+        },
+        "by_type": [
+          {
+            "command_type": "bash",
+            "count": 4,
+            "avg_time": 0.3550100326538086,
+            "successful": 4
+          },
+          {
+            "command_type": "write",
+            "count": 1,
+            "avg_time": 0.0018596649169921875,
+            "successful": 1
+          },
+          {
+            "command_type": "validation_failed",
+            "count": 1,
+            "avg_time": 0.00010180473327636719,
+            "successful": 0
+          },
+          {
+            "command_type": "project_scope_mismatch",
+            "count": 1,
+            "avg_time": 0.0013687610626220703,
+            "successful": 0
+          },
+          {
+            "command_type": "authorization_failed",
+            "count": 1,
+            "avg_time": 0.0009765625,
+            "successful": 0
+          }
+        ],
+        "recent": [
+          {
+            "timestamp": "2026-05-02T02:09:21.820742",
+            "command_type": "bash",
+            "command_text": "bash \"python3 -m pytest -q\"",
+            "success": 1,
+            "execution_time": 0.2714402675628662
+          },
+          {
+            "timestamp": "2026-05-02T02:09:21.518765",
+            "command_type": "validation_failed",
+            "command_text": "bash \"rm -rf /tmp/devsynapse-eval-final-2026-05-02/should-not-run\"",
+            "success": 0,
+            "execution_time": 0.00010180473327636719
+          },
+          {
+            "timestamp": "2026-05-02T02:09:21.486867",
+            "command_type": "project_scope_mismatch",
+            "command_text": "write \"../escape.md\" --content=\"This should not leave project scope.\\n\"",
+            "success": 0,
+            "execution_time": 0.0013687610626220703
+          },
+          {
+            "timestamp": "2026-05-02T02:09:21.454090",
+            "command_type": "authorization_failed",
+            "command_text": "write \"DEV_EVIDENCE.md\" --content=\"This should be blocked for eval-user.\\n\"",
+            "success": 0,
+            "execution_time": 0.0009765625
+          },
+          {
+            "timestamp": "2026-05-02T02:09:20.865953",
+            "command_type": "write",
+            "command_text": "write \"DEV_EVIDENCE.md\" --content=\"DevSynapse wrote this file inside an allowed disposable project.\\n\"",
+            "success": 1,
+            "execution_time": 0.0018596649169921875
+          },
+          {
+            "timestamp": "2026-05-02T02:09:20.292652",
+            "command_type": "bash",
+            "command_text": "bash \"npm run build\"",
+            "success": 1,
+            "execution_time": 0.44942259788513184
+          },
+          {
+            "timestamp": "2026-05-02T02:09:19.255629",
+            "command_type": "bash",
+            "command_text": "bash \"npm test\"",
+            "success": 1,
+            "execution_time": 0.6965298652648926
+          },
+          {
+            "timestamp": "2026-05-02T02:09:17.990252",
+            "command_type": "bash",
+            "command_text": "bash \"pwd\"",
+            "success": 1,
+            "execution_time": 0.00264739990234375
+          }
+        ],
+        "timeframe_hours": 24
+      },
+      "api_stats": {
+        "totals": {
+          "total_requests": 25,
+          "avg_response_time": 0.2353852653503418,
+          "unique_endpoints": 7
+        },
+        "by_endpoint": [
+          {
+            "endpoint": "/execute",
+            "method": "POST",
+            "request_count": 16,
+            "avg_response_time": 0.3564366549253464,
+            "error_count": 0
+          },
+          {
+            "endpoint": "/api",
+            "method": "GET",
+            "request_count": 2,
+            "avg_response_time": 0.0011042356491088867,
+            "error_count": 0
+          },
+          {
+            "endpoint": "/auth/login",
+            "method": "POST",
+            "request_count": 2,
+            "avg_response_time": 0.07622897624969482,
+            "error_count": 0
+          },
+          {
+            "endpoint": "/admin/projects",
+            "method": "GET",
+            "request_count": 1,
+            "avg_response_time": 0.002512216567993164,
+            "error_count": 0
+          },
+          {
+            "endpoint": "/admin/users/eval-user/permissions",
+            "method": "PUT",
+            "request_count": 1,
+            "avg_response_time": 0.005552053451538086,
+            "error_count": 0
+          },
+          {
+            "endpoint": "/memories",
+            "method": "GET",
+            "request_count": 1,
+            "avg_response_time": 0.006036281585693359,
+            "error_count": 0
+          },
+          {
+            "endpoint": "/memories",
+            "method": "POST",
+            "request_count": 1,
+            "avg_response_time": 0.010167598724365234,
+            "error_count": 0
+          },
+          {
+            "endpoint": "/projects",
+            "method": "GET",
+            "request_count": 1,
+            "avg_response_time": 0.002710580825805664,
+            "error_count": 0
+          }
+        ],
+        "status_codes": [
+          {
+            "status_code": 200,
+            "count": 25
+          }
+        ],
+        "timeframe_hours": 24
+      },
+      "llm_usage": {
+        "totals": {
+          "request_count": 0,
+          "conversation_count": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 0,
+          "cache_hit_rate_pct": 0.0,
+          "reasoning_tokens": 0,
+          "estimated_cost_usd": 0.0
+        },
+        "by_day": [],
+        "timeframe_hours": 24,
+        "by_project": [],
+        "budget": {
+          "overall_status": "healthy",
+          "daily": {
+            "window": "daily",
+            "budget_usd": 1.0,
+            "actual_cost_usd": 0.0,
+            "usage_pct": 0.0,
+            "warning_threshold_pct": 80.0,
+            "critical_threshold_pct": 100.0,
+            "warning_threshold_cost_usd": 0.8,
+            "critical_threshold_cost_usd": 1.0,
+            "level": "healthy"
+          },
+          "monthly": {
+            "window": "monthly",
+            "budget_usd": 20.0,
+            "actual_cost_usd": 0.0,
+            "usage_pct": 0.0,
+            "warning_threshold_pct": 80.0,
+            "critical_threshold_pct": 100.0,
+            "warning_threshold_cost_usd": 16.0,
+            "critical_threshold_cost_usd": 20.0,
+            "level": "healthy"
+          }
+        },
+        "agent_learning": {
+          "learned_patterns": 0,
+          "success_signals": 0,
+          "failure_signals": 0,
+          "avg_confidence": 0.0,
+          "by_model": []
+        },
+        "knowledge": {
+          "memories": {
+            "total_memories": 1,
+            "avg_confidence": 0.8,
+            "evidence_count": 1,
+            "access_count": 1,
+            "by_type": [
+              {
+                "memory_type": "evaluation",
+                "count": 1
+              }
+            ]
+          },
+          "skills": {
+            "total_skills": 0,
+            "active_skills": 0,
+            "use_count": 0,
+            "by_category": []
+          },
+          "nudges": {
+            "total_events": 0,
+            "by_status": []
+          }
+        }
+      },
+      "active_alerts": [
+        {
+          "id": 3,
+          "timestamp": "2026-05-02T02:09:21.519480",
+          "alert_type": "command_failure",
+          "severity": "warning",
+          "message": "Falha no comando validation_failed: Comando contém padrão não permitido: rm -rf"
+        },
+        {
+          "id": 2,
+          "timestamp": "2026-05-02T02:09:21.487635",
+          "alert_type": "command_failure",
+          "severity": "warning",
+          "message": "Falha no comando project_scope_mismatch: Comando não pode acessar caminho fora do projeto 'react-widget-lab': /tmp/devsynapse-eval-final-2026-05-02/repos/escape.md"
+        },
+        {
+          "id": 1,
+          "timestamp": "2026-05-02T02:09:21.454855",
+          "alert_type": "command_failure",
+          "severity": "warning",
+          "message": "Falha no comando authorization_failed: Ação 'write' não autorizada para o projeto 'python-service-lab'"
+        }
+      ]
+    }
+  },
+  {
+    "name": "audit_logs",
+    "body": {
+      "logs": [
+        {
+          "id": 1,
+          "actor_username": "admin",
+          "target_username": "eval-user",
+          "action": "update_project_permissions",
+          "details": {
+            "previous_allowlist": [],
+            "project_mutation_allowlist": [
+              "react-widget-lab"
+            ]
+          },
+          "created_at": "2026-05-02T02:09:17.960703"
+        }
+      ]
+    }
+  }
+]

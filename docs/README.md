@@ -24,6 +24,7 @@ This directory is the technical documentation entrypoint for contributors and ma
 
 - product showcase and use cases: [product/showcase.md](product/showcase.md)
 - screenshot evidence index: [screenshots/README.md](screenshots/README.md)
+- evaluation evidence and real DeepSeek agent run: [evaluation/README.md](evaluation/README.md)
 
 ## Development
 
@@ -46,7 +47,7 @@ This directory is the technical documentation entrypoint for contributors and ma
 ## Releases
 
 - release checklist: [../RELEASING.md](../RELEASING.md)
-- latest release notes: [releases/v0.6.0.md](releases/v0.6.0.md)
+- latest release notes: [releases/v0.6.3.md](releases/v0.6.3.md)
 
 ## Documentation Rule
 
