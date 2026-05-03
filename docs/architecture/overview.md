@@ -41,6 +41,8 @@ Main files:
 - [api/routes/monitoring.py](../../api/routes/monitoring.py)
 - [api/routes/settings.py](../../api/routes/settings.py)
 - [api/routes/admin.py](../../api/routes/admin.py)
+- [api/routes/bootstrap.py](../../api/routes/bootstrap.py)
+- [api/routes/knowledge.py](../../api/routes/knowledge.py)
 
 Responsibilities:
 - expose HTTP endpoints
@@ -54,15 +56,18 @@ Responsibilities:
 Main files:
 - [core/brain.py](../../core/brain.py)
 - [core/auth.py](../../core/auth.py)
-- [core/memory.py](../../core/memory.py)
+- [core/memory/system.py](../../core/memory/system.py)
+- [core/memory/agent_runs.py](../../core/memory/agent_runs.py)
+- [core/memory/conversations.py](../../core/memory/conversations.py)
+- [core/memory/projects.py](../../core/memory/projects.py)
 - [core/opencode_bridge.py](../../core/opencode_bridge.py)
 - [core/monitoring.py](../../core/monitoring.py)
 - [core/plugin_system.py](../../core/plugin_system.py)
 
 Responsibilities:
-- `brain.py`: prompt construction, DeepSeek API calls with native tool calling (strict mode, thinking mode, reasoning_effort), execution result interpretation, and telemetry
+- `brain.py`: prompt construction, agent-run context, DeepSeek API calls with native tool calling (strict mode, thinking mode, reasoning_effort), execution result interpretation, and telemetry
 - `auth.py`: password hashing and JWT validation
-- `memory.py`: persistence for conversations, users, permissions, telemetry and settings
+- `core/memory/`: persistence for conversations, agent task runs, users, permissions, telemetry, skills, memories and settings
 - `opencode_bridge.py`: validation, authorization and execution of constrained commands
 - `monitoring.py`: command/API metrics and alerts
 - `plugin_system.py`: lifecycle extension points
@@ -89,6 +94,8 @@ Responsibilities:
 - route contracts are authoritative in the backend
 - schema evolution is explicit through migrations
 - mutating command execution is project-aware with working-directory resolution
+- command failures, policy blocks and missing tools are persisted as task-run
+  events so later turns can recover the original objective
 - telemetry is persisted, not just derived on the fly
 - LLM behavior is DeepSeek-first (v4-pro with thinking mode and strict function calling), not a local-model runtime
 - configuration is environment-driven with sensible auto-detection, not hardcoded

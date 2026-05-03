@@ -6,7 +6,7 @@ Do not present planned items as shipped behavior in user-facing documentation.
 
 ## Current Baseline
 
-The current documented baseline is `v0.6.0`, validated on `2026-04-29`.
+The current documented baseline is `v0.8.0`, validated on `2026-05-03`.
 It includes:
 
 - local-first FastAPI, React/Vite and SQLite architecture;
@@ -19,6 +19,8 @@ It includes:
 - dashboard usage reporting and CSV export;
 - DeepSeek cache hit-rate telemetry and Flash/Pro routing controls;
 - persistent agent learning from feedback, command outcomes and route decisions;
+- persistent agent task runs for original goals, command events, blocked/failed
+  outcomes and next actions across turns;
 - configurable daily/monthly LLM budget thresholds with alert emission (enabled by default);
 - contributor documentation, security policy and release notes;
 - DeepSeek-first API-key based LLM integration;
@@ -36,6 +38,8 @@ It includes:
   chips visible in messages and conversation summaries;
 - working directory resolution per project for bash/grep commands;
 - conservative non-admin auto-execution plus trusted admin tool execution;
+- recovery context for missing dependencies, blocked commands and normal command
+  failures in auto-execution flows;
 - local-first security guardrails, localhost CORS defaults and exposed-host warnings;
 - documented local security model and operator checklist;
 - documented release platform support: Debian/Ubuntu-style Linux is the supported
@@ -49,13 +53,14 @@ It includes:
 - portable CI and setup validation for shell scripts, frontend linting and installer/uninstaller smoke tests;
 - Docker delivery with a FastAPI runtime image that serves the production frontend bundle;
 - admin project registration for existing local project directories;
+- generated projects inferred under the configured repositories root can be
+  registered after successful command execution;
 - non-interactive update flow through `devsynapse update`, `update-devsynapse`, `scripts/update.sh` and `make update` without overwriting existing admin passwords.
 
 ## Current Priorities
 
 These items should be treated as the next practical development focus:
 
-- strengthen explicit project attribution across chat, execution and reporting flows; see [project-attribution.md](project-attribution.md)
 - continue sharpening the DeepSeek-first product path around cost visibility, setup clarity and reliable local workflows;
 - implement the remaining DeepSeek cost optimization plan, especially response cache, R1 Harvest and automatic quality scoring; see [deepseek-cost-optimization-plan.md](deepseek-cost-optimization-plan.md)
 - deepen end-to-end coverage around frontend command UX and long-running user sessions;

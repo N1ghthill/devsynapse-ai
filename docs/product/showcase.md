@@ -43,7 +43,7 @@ Screenshot sources:
 - [screenshot evidence index](../screenshots/README.md)
 - [evaluation screenshots](../evaluation/README.md)
 - [testing guide](../development/testing.md)
-- [release notes](../releases/v0.7.0.md)
+- [release notes](../releases/v0.8.0.md)
 
 ## Use Cases
 
@@ -75,6 +75,8 @@ Current support:
 - command execution telemetry by project
 - admin project registration and project permission management
 - audit records for administrative permission and project registration changes
+- durable agent task runs that preserve the original goal and next action after
+  missing dependencies, blocked commands or normal command failures
 
 ### Local coding operator
 
@@ -87,6 +89,8 @@ Current support:
 - command confirmation details for risk, directory and expected effect before execution
 - controlled execution for `bash`, `read`, `glob`, `grep`, `edit` and `write`
 - explicit command status for success, blocked and failed states
+- recovery context for blocked or failed command attempts, so the assistant can
+  continue with a permitted project-scoped next step
 - workflow templates for test runs, failing-test analysis, TODO search, repository summaries, changelog drafts and Docker inspection
 - monitoring dashboard for command/API activity
 - keyboard shortcuts: Enter / Ctrl+Enter to send, Shift+Enter for newline

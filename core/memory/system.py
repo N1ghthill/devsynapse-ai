@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 
 from config.settings import DEFAULT_PREFERENCES, KNOWN_PROJECTS, get_settings
 from core.llm_optimization import ModelRoute, build_task_profile
+from core.memory.agent_runs import AgentRunStore
 from core.memory.conversations import ConversationStore
 from core.memory.learning import AgentLearningStore
 from core.memory.procedural import ProjectMemoryStore
@@ -35,6 +36,7 @@ class MemorySystem:
 
         self.projects = ProjectRegistry(self.db_path)
         self.conversations = ConversationStore(self.db_path)
+        self.agent_runs = AgentRunStore(self.db_path)
         self.settings = SettingsStore(self.db_path)
         self.learning = AgentLearningStore(self.db_path)
         self.project_memories = ProjectMemoryStore(self.db_path)
@@ -185,6 +187,7 @@ class MemorySystem:
         status: Optional[str] = None,
         reason_code: Optional[str] = None,
         project_name: Optional[str] = None,
+        record_agent_event: bool = True,
     ):
         result_value = await self.conversations.save_command_execution(
             conversation_id=conversation_id,
@@ -196,6 +199,18 @@ class MemorySystem:
             reason_code=reason_code,
             project_name=project_name,
         )
+        if record_agent_event:
+            self.record_agent_command_result(
+                conversation_id=conversation_id,
+                goal=f"Executar comando confirmado: {command}",
+                command=command,
+                success=success,
+                result=result,
+                output=output,
+                status=status,
+                reason_code=reason_code,
+                project_name=project_name,
+            )
         self.learning.learn_from_command_outcome(
             conversation_id=conversation_id,
             command=command,
@@ -224,6 +239,92 @@ class MemorySystem:
         result = await self.conversations.save_feedback(conversation_id, feedback, score)
         self.learning.learn_from_feedback(conversation_id, feedback, score)
         return result
+
+    # ── agent task-run delegation ──────────────────────────────────
+
+    def start_or_resume_agent_run(
+        self,
+        conversation_id: Optional[str],
+        goal: str,
+        project_name: Optional[str] = None,
+        next_action: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        return self.agent_runs.start_or_resume_run(
+            conversation_id=conversation_id,
+            goal=goal,
+            project_name=project_name,
+            next_action=next_action,
+        )
+
+    def get_active_agent_run(self, conversation_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        return self.agent_runs.get_active_run(conversation_id)
+
+    def get_agent_run_context(self, conversation_id: Optional[str], limit: int = 8) -> str:
+        return self.agent_runs.get_run_context(conversation_id, limit=limit)
+
+    def record_agent_run_event(
+        self,
+        run_id: int,
+        conversation_id: Optional[str],
+        event_type: str,
+        title: str,
+        status: Optional[str] = None,
+        command: Optional[str] = None,
+        reason_code: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        project_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        return self.agent_runs.record_event(
+            run_id=run_id,
+            conversation_id=conversation_id,
+            event_type=event_type,
+            title=title,
+            status=status,
+            command=command,
+            reason_code=reason_code,
+            details=details,
+            project_name=project_name,
+        )
+
+    def record_agent_command_result(
+        self,
+        conversation_id: Optional[str],
+        goal: str,
+        command: str,
+        success: bool,
+        result: str,
+        output: Optional[str] = None,
+        status: Optional[str] = None,
+        reason_code: Optional[str] = None,
+        project_name: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        return self.agent_runs.record_command_result(
+            conversation_id=conversation_id,
+            goal=goal,
+            command=command,
+            success=success,
+            result=result,
+            output=output,
+            status=status,
+            reason_code=reason_code,
+            project_name=project_name,
+        )
+
+    def record_agent_final_response(
+        self,
+        run_id: int,
+        conversation_id: Optional[str],
+        response: str,
+        has_pending_command: bool,
+        project_name: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        return self.agent_runs.record_final_response(
+            run_id=run_id,
+            conversation_id=conversation_id,
+            response=response,
+            has_pending_command=has_pending_command,
+            project_name=project_name,
+        )
 
     # ── agent learning delegation ───────────────────────────────────
 

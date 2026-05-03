@@ -1,7 +1,7 @@
 {
   "name": "devsynapse-ai",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.8.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,7 +18,7 @@
     "backend:build": "bash ../scripts/build-backend.sh",
     "desktop:dev": "npm run backend:build && npm run tauri:dev",
     "desktop:build": "npm run backend:build && npm run tauri:build",
-    "icons:tauri": "tauri icon ../assets/Favcon.png"
+    "icons:tauri": "tauri icon ../assets/devsynapse-icon-square.png"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

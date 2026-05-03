@@ -8,7 +8,7 @@ devsynapse-ai/
 ├── core/                   # Business logic + memory stores
 │   ├── deepseek.py         # DeepSeekClient (transporte LLM)
 │   ├── brain.py            # DevSynapseBrain (orquestrador)
-│   └── memory/             # Persistence layer (facade + 3 stores)
+│   └── memory/             # Persistence layer (facade + domain stores)
 ├── config/                 # Settings (pydantic-settings)
 ├── frontend/               # React + Vite + TypeScript
 │   ├── src/                # Frontend source
@@ -167,8 +167,10 @@ python3 scripts/generate-tauri-update-manifest.py \
 ### Ícones
 
 Os ícones versionados em `frontend/src-tauri/icons/` já são suficientes para o
-build. Quando trocar o ícone fonte em `assets/Favcon.png`, regenere os formatos
-nativos:
+build. O ícone fonte atual fica em `assets/devsynapse-icon.png`; como o Tauri
+exige imagem quadrada, a versão com padding transparente fica em
+`assets/devsynapse-icon-square.png`. Quando trocar a marca, atualize a versão
+quadrada e regenere os formatos nativos:
 
 ```bash
 cd frontend

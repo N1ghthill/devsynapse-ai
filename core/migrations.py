@@ -304,6 +304,49 @@ MEMORY_MIGRATIONS = (
             """,
         ),
     ),
+    Migration(
+        version=11,
+        description="Agent task runs and execution events",
+        statements=(
+            """
+            CREATE TABLE IF NOT EXISTS agent_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT,
+                goal TEXT NOT NULL,
+                project_name TEXT,
+                status TEXT NOT NULL,
+                next_action TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                completed_at TEXT
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_agent_runs_conversation_status
+            ON agent_runs(conversation_id, status, updated_at)
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS agent_run_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id INTEGER NOT NULL,
+                conversation_id TEXT,
+                event_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                status TEXT,
+                command TEXT,
+                reason_code TEXT,
+                details TEXT,
+                project_name TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_agent_run_events_run_created
+            ON agent_run_events(run_id, created_at)
+            """,
+        ),
+    ),
 )
 
 

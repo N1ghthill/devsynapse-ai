@@ -242,6 +242,7 @@ class DevSynapseBrain:
         current_request = context.get("current_user_message") or ""
         procedural_memory = self._get_project_memory_context(active_project_name, current_request)
         skills_context = self._get_skills_context(current_request, active_project_name)
+        agent_run_context = context.get("agent_run_context") or "Nenhuma tarefa de agente ativa."
         settings = app_settings.get_settings()
         active_project_path = None
         if active_project_name and hasattr(self.memory, "get_project"):
@@ -275,6 +276,9 @@ Blend deep technical skills with natural conversational communication.
 
 ## PROCEDURAL MEMORY
 {procedural_memory}
+
+## CURRENT AGENT RUN
+{agent_run_context}
 
 ## SKILLS
 {skills_context}
@@ -317,7 +321,13 @@ Blend deep technical skills with natural conversational communication.
 - For a small new project, use `write` for the first real file instead of `bash mkdir`;
   the write tool creates parent directories automatically.
 - After a tool result succeeds, keep advancing the same task with the next needed tool call.
-  Stop only when the task is complete, a command is blocked, or you need missing information.
+  Stop only when the task is complete or you need missing information.
+- If a dependency or tool is missing (for example Rust/Cargo for Tauri), do not abandon
+  the whole task. Continue with the parts that are still possible, such as creating the
+  project files, documenting the missing prerequisite, or choosing a supported fallback
+  that stays inside the active project.
+- If a command is blocked by permission or project scope, choose the next allowed action
+  inside the active project, or clearly state the exact permission/project selection needed.
 
 ## EXAMPLES
 User: "Show me the sample app files"
@@ -377,6 +387,12 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         effective_project_name = project_name or context.get("project_name")
         if effective_project_name:
             context["project_name"] = effective_project_name
+        agent_run = self._start_agent_run_if_needed(
+            conversation_id,
+            user_message,
+            effective_project_name,
+            context,
+        )
 
         mem_before = {
             "user_message": user_message,
@@ -435,6 +451,17 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                 user_role=user_role,
                 project_mutation_allowlist=project_mutation_allowlist or [],
             )
+            self._record_agent_command_result(
+                conversation_id=conversation_id,
+                goal=user_message,
+                command=opencode_command,
+                success=success,
+                result=msg,
+                output=output,
+                status=status,
+                reason_code=reason,
+                project_name=proj,
+            )
             autoexecuted_command = {
                 "command": opencode_command,
                 "success": success,
@@ -446,7 +473,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             }
 
             if not success:
-                if self._should_replay_failed_command(auto_execute, user_role, status, reason):
+                if self._should_replay_command_result(auto_execute, user_role, status, reason):
                     messages.extend(
                         self._build_command_result_replay_messages(
                             response_text,
@@ -508,6 +535,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                 status=autoexecuted_command["status"],
                 reason_code=autoexecuted_command["reason_code"],
                 project_name=autoexecuted_command["project_name"],
+                record_agent_event=False,
             )
             if autoexecuted_command["success"]:
                 self._persist_repos_project_if_needed(autoexecuted_command["project_name"])
@@ -527,6 +555,13 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             opencode_command=persisted_command,
             route=route,
             tool_iterations=max(0, round_count - 1) + (1 if persisted_command else 0),
+        )
+        self._record_agent_final_response(
+            agent_run,
+            conversation_id,
+            response_text,
+            has_pending_command=opencode_command is not None,
+            project_name=effective_project_name,
         )
 
         await plugin_manager.emit_event("memory:after_save", {
@@ -648,6 +683,92 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         except Exception:
             logger.debug("Could not load skills context", exc_info=True)
             return "Nenhuma skill registrada ainda."
+
+    def _start_agent_run_if_needed(
+        self,
+        conversation_id: Optional[str],
+        user_message: str,
+        project_name: Optional[str],
+        context: Dict,
+    ) -> Optional[Dict]:
+        if not conversation_id:
+            return None
+
+        active_run = None
+        if hasattr(self.memory, "get_active_agent_run"):
+            try:
+                active_run = self.memory.get_active_agent_run(conversation_id)
+            except Exception:
+                logger.debug("Could not load active agent run", exc_info=True)
+
+        should_track = active_run is not None or self._user_request_expects_tool(user_message)
+        if should_track and hasattr(self.memory, "start_or_resume_agent_run"):
+            try:
+                active_run = self.memory.start_or_resume_agent_run(
+                    conversation_id=conversation_id,
+                    goal=user_message,
+                    project_name=project_name,
+                )
+            except Exception:
+                logger.debug("Could not start agent run", exc_info=True)
+
+        if hasattr(self.memory, "get_agent_run_context"):
+            try:
+                context["agent_run_context"] = self.memory.get_agent_run_context(conversation_id)
+            except Exception:
+                logger.debug("Could not load agent run context", exc_info=True)
+
+        return active_run
+
+    def _record_agent_command_result(
+        self,
+        conversation_id: Optional[str],
+        goal: str,
+        command: str,
+        success: bool,
+        result: str,
+        output: Optional[str],
+        status: str,
+        reason_code: Optional[str],
+        project_name: Optional[str],
+    ) -> None:
+        if not hasattr(self.memory, "record_agent_command_result"):
+            return
+        try:
+            self.memory.record_agent_command_result(
+                conversation_id=conversation_id,
+                goal=goal,
+                command=command,
+                success=success,
+                result=result,
+                output=output,
+                status=status,
+                reason_code=reason_code,
+                project_name=project_name,
+            )
+        except Exception:
+            logger.debug("Could not record agent command result", exc_info=True)
+
+    def _record_agent_final_response(
+        self,
+        agent_run: Optional[Dict],
+        conversation_id: Optional[str],
+        response_text: str,
+        has_pending_command: bool,
+        project_name: Optional[str],
+    ) -> None:
+        if not agent_run or not hasattr(self.memory, "record_agent_final_response"):
+            return
+        try:
+            self.memory.record_agent_final_response(
+                run_id=agent_run["id"],
+                conversation_id=conversation_id,
+                response=response_text,
+                has_pending_command=has_pending_command,
+                project_name=project_name,
+            )
+        except Exception:
+            logger.debug("Could not record agent final response", exc_info=True)
 
     def _review_completed_task(
         self,
@@ -822,6 +943,12 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         effective_project_name = project_name or context.get("project_name")
         if effective_project_name:
             context["project_name"] = effective_project_name
+        agent_run = self._start_agent_run_if_needed(
+            conversation_id,
+            user_message,
+            effective_project_name,
+            context,
+        )
 
         messages = self._prepare_messages(user_message, context)
         route = self._select_llm_route(user_message, context)
@@ -952,6 +1079,17 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                 user_role=user_role,
                 project_mutation_allowlist=project_mutation_allowlist or [],
             )
+            self._record_agent_command_result(
+                conversation_id=conversation_id,
+                goal=user_message,
+                command=opencode_command,
+                success=success,
+                result=msg,
+                output=output,
+                status=status,
+                reason_code=reason,
+                project_name=proj,
+            )
             executed_command = {
                 "command": opencode_command,
                 "success": success,
@@ -974,7 +1112,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             }
 
             if not success:
-                if self._should_replay_failed_command(auto_execute, user_role, status, reason):
+                if self._should_replay_command_result(auto_execute, user_role, status, reason):
                     messages.extend(
                         self._build_command_result_replay_messages(
                             full_response,
@@ -1028,6 +1166,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                 status=executed_command["status"],
                 reason_code=executed_command["reason_code"],
                 project_name=executed_command["project_name"],
+                record_agent_event=False,
             )
             if executed_command["success"]:
                 self._persist_repos_project_if_needed(executed_command["project_name"])
@@ -1047,6 +1186,13 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             opencode_command=persisted_command,
             route=route,
             tool_iterations=max(0, round_count - 1) + (1 if persisted_command else 0),
+        )
+        self._record_agent_final_response(
+            agent_run,
+            conversation_id,
+            final_response,
+            has_pending_command=bool(opencode_command),
+            project_name=review_project_name,
         )
 
         yield {"type": "done", "usage": aggregated_usage, "project_name": persisted_project_name}
@@ -1124,20 +1270,25 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         return 5
 
     @staticmethod
-    def _should_replay_failed_command(
+    def _should_replay_command_result(
         auto_execute: bool,
         user_role: Optional[str],
         status: str,
         reason_code: Optional[str],
     ) -> bool:
-        """Let admin auto mode recover from normal command failures instead of stopping."""
+        """Let auto mode recover from normal failures and explain blocked actions."""
 
-        return (
-            auto_execute
-            and user_role == "admin"
-            and status == "failed"
-            and reason_code == "execution_failed"
-        )
+        if not auto_execute:
+            return False
+
+        if user_role == "admin" and status == "failed" and reason_code == "execution_failed":
+            return True
+
+        return status == "blocked" and reason_code in {
+            "authorization_failed",
+            "project_scope_mismatch",
+            "validation_failed",
+        }
 
     def _should_retry_missing_tool(
         self,
@@ -1209,7 +1360,12 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                     f"Output:\n```\n{result_text[:3000]}\n```\n\n"
                     "Continue the original task. If more filesystem or command work is "
                     "needed, emit exactly one next tool call. If the task is complete, "
-                    "give the final concise result."
+                    "give the final concise result. Do not stop only because a dependency "
+                    "or command is unavailable; continue with any useful project-scoped "
+                    "work that is still possible and mention the missing prerequisite in "
+                    "the final answer. If the command was blocked by permission or project "
+                    "scope, choose an allowed action inside the active project or explain "
+                    "the exact permission/project selection required."
                 ),
             },
         ]

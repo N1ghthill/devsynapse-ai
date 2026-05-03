@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.7.0-blue)
+![Version](https://img.shields.io/badge/version-0.8.0-blue)
 
 **A local-first DeepSeek coding agent with safe command execution, project memory, and cost visibility.**
 
@@ -32,7 +32,9 @@ who want DeepSeek without SaaS lock-in, hidden shell access or surprise API bill
 3. Review the proposed command, risk level, working directory and expected effect.
 4. Confirm the command only when the scope and risk are clear.
 5. Let DevSynapse interpret the result and preserve the conversation context.
-6. Track token usage, estimated cost, alerts and project attribution in the dashboard.
+6. If a command fails, is blocked or hits a missing dependency, let the agent
+   keep the original task goal and continue with an allowed next step.
+7. Track token usage, estimated cost, alerts and project attribution in the dashboard.
 
 ## Use Cases
 
@@ -122,11 +124,11 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Verified Baseline
 
-Local verification refreshed on `2026-05-03` (v0.7.0 repository baseline):
+Local verification refreshed on `2026-05-03` (v0.8.0 repository baseline):
 - full repository verification: `make verify`
 - dependency consistency: `pip check`
 - frontend dependency audit: `npm audit --audit-level=high`
-- backend test suite: `229 passed`
+- backend test suite: `233 passed`
 - Python/Ruff checks, shell syntax checks, Python script compilation and frontend ESLint: passed
 - frontend production build: passed
 - OpenAPI schema generation: passed
@@ -143,10 +145,12 @@ DevSynapse AI provides:
 - SQLite-backed persistence for runtime state and migration-controlled schema evolution;
 - a DeepSeek API orchestration layer with native tool calling (strict function definitions, thinking mode), Flash/Pro routing, local agent learning, streaming token delivery, and execution result interpretation;
 - procedural memory with confidence/decay scoring, learning nudges after complex turns or command outcomes, and Markdown-backed reusable skills;
+- persistent agent task runs that keep the original goal, command events, blocked/failed outcomes and next action across turns;
 - a constrained execution bridge for `bash`, `read`, `glob`, `grep`, `edit` and `write` with per-project working directories;
 - workflow templates for common local coding tasks such as test runs, failing-test analysis, TODO search, repository summaries, changelog drafts and Docker inspection;
 - visible project attribution in conversation summaries, chat messages, command execution and usage reporting;
 - per-user, project-scoped mutation authorization for non-admin users;
+- automatic recovery context for command failures, permission blocks and missing local tools such as Rust/Cargo during Tauri work;
 - token, cache hit-rate and cost telemetry for LLM usage;
 - configurable daily/monthly LLM budgets with warning and critical thresholds, enabled by default.
 
@@ -268,7 +272,7 @@ update-devsynapse
 To pin a specific published release:
 
 ```bash
-devsynapse update --version v0.7.0
+devsynapse update --version v0.8.0
 ```
 
 ### Manual Backend
@@ -334,7 +338,7 @@ Technical guides:
 - development roadmap: [docs/development/roadmap.md](docs/development/roadmap.md)
 - runtime and delivery notes: [docs/deployment/runtime.md](docs/deployment/runtime.md)
 - local security model: [docs/security/local-security-model.md](docs/security/local-security-model.md)
-- latest release notes: [docs/releases/v0.7.0.md](docs/releases/v0.7.0.md)
+- latest release notes: [docs/releases/v0.8.0.md](docs/releases/v0.8.0.md)
 
 Supplementary references:
 - engineering guide: [README_PROFESSIONAL.md](README_PROFESSIONAL.md)

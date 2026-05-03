@@ -27,6 +27,16 @@ def mock_memory():
     memory.get_agent_learning_context.return_value = "Nenhum padrão de agente aprendido ainda."
     memory.get_project_memory_context.return_value = "Nenhuma memória procedural relevante encontrada."
     memory.get_skills_context.return_value = "Nenhuma skill registrada ainda."
+    memory.get_active_agent_run.return_value = None
+    memory.get_agent_run_context.return_value = "Nenhuma tarefa de agente ativa."
+    memory.start_or_resume_agent_run.return_value = {
+        "id": 1,
+        "conversation_id": "test_session",
+        "goal": "test",
+        "status": "running",
+    }
+    memory.record_agent_command_result = Mock()
+    memory.record_agent_final_response = Mock()
     memory.review_completed_task = Mock()
     memory.record_agent_route_decision = Mock()
     memory.save_interaction = AsyncMock()
@@ -69,6 +79,7 @@ class TestDevSynapseBrain:
         assert "DevSynapse" in prompt
         assert "Irving" in prompt or "N1ghthill" in prompt
         assert "tools" in prompt.lower()
+        assert "CURRENT AGENT RUN" in prompt
 
     def test_generate_system_prompt_includes_active_project(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
@@ -267,6 +278,61 @@ class TestDevSynapseBrain:
         assert "tool output" in output_replay["content"]
         assert "tool_calls" not in assistant_replay
         assert output_replay["role"] != "tool"
+        mock_memory.record_agent_command_result.assert_called_once()
+        mock_memory.record_agent_final_response.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_process_message_replays_blocked_auto_command(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        brain.api_key = "test-key"
+        mock_bridge.execute_command = AsyncMock(
+            return_value=(
+                False,
+                "Ação bloqueada por escopo do projeto",
+                None,
+                "blocked",
+                "project_scope_mismatch",
+                "devsynapse-ai",
+            )
+        )
+
+        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+            from core.brain import LLMResult
+
+            mock_call.side_effect = [
+                LLMResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_ls",
+                            "type": "function",
+                            "function": {
+                                "name": "bash",
+                                "arguments": '{"command": "ls -la"}',
+                            },
+                        }
+                    ],
+                ),
+                LLMResult(content="Não consegui sair do escopo; vou manter no projeto ativo."),
+            ]
+
+            response, cmd, usage = await brain.process_message(
+                "Inspecione o projeto",
+                "test_session",
+                user_id="irving",
+                user_role="user",
+                project_name="devsynapse-ai",
+                auto_execute=True,
+            )
+
+        replay_messages = mock_call.await_args_list[1].args[0]
+        assert response == "Não consegui sair do escopo; vou manter no projeto ativo."
+        assert cmd is None
+        assert usage is None
+        assert "blocked" in replay_messages[-1]["content"]
+        assert "exact permission/project selection required" in replay_messages[-1]["content"]
 
     @pytest.mark.asyncio
     async def test_process_message_autoexecutes_admin_mutation_tool(

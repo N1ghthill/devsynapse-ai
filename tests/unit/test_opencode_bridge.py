@@ -601,6 +601,37 @@ class TestOpenCodeBridge:
         assert project_name == "devsynapse-ai"
 
     @pytest.mark.asyncio
+    async def test_execute_command_registers_repos_project_inferred_from_path(
+        self, tmp_path, monkeypatch
+    ):
+        repos_root = tmp_path / "repos"
+        target = repos_root / "tauri-app" / "src" / "main.rs"
+        bridge = OpenCodeBridge(known_projects={}, allowed_directories=[str(tmp_path)])
+        settings = Mock(
+            dev_repos_root=repos_root,
+            dev_workspace_root=tmp_path,
+            default_execution_cwd=tmp_path,
+        )
+        monkeypatch.setattr("core.opencode_bridge.get_settings", lambda: settings)
+
+        with patch.object(bridge, "_execute_write", new_callable=AsyncMock) as mock_write:
+            mock_write.return_value = (True, "created", "ok")
+
+            success, message, output, status, reason_code, project_name = await bridge.execute_command(
+                f'write "{target}" --content="fn main() {{}}"',
+                user_role="admin",
+            )
+
+        assert success is True
+        assert message == "created"
+        assert output == "ok"
+        assert status == "success"
+        assert reason_code is None
+        assert project_name == "tauri-app"
+        assert bridge.get_project_context("tauri-app")["path"] == str(repos_root / "tauri-app")
+        mock_write.assert_awaited_once_with([str(target), '--content="fn main() {}"'])
+
+    @pytest.mark.asyncio
     async def test_execute_command_admin_uses_trusted_shell_for_bash(self):
         bridge = _bridge()
 

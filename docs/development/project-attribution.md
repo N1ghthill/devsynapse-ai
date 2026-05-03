@@ -9,7 +9,9 @@ Project context can come from:
 - explicit request fields such as `project_name`;
 - command paths resolved against known projects;
 - persisted `conversation_project_name`;
+- persisted agent task runs for active conversation goals;
 - administrator-registered project paths;
+- generated project paths inferred under `DEV_REPOS_ROOT`;
 - legacy text inference from messages and commands.
 
 ## Contract Rules
@@ -28,6 +30,8 @@ Project context can come from:
 - Conversation persistence should store explicit project names when available.
 - Reporting should prefer persisted project names over text-only inference.
 - The frontend should display backend-provided project names, not derive them independently.
+- Projects inferred under the configured repositories root after successful
+  execution should be registered so later turns and conversations can find them.
 
 ## Current Gaps
 
@@ -38,6 +42,9 @@ Project context can come from:
 
 - **Frontend project selector** (v0.3.0): the chat UI now includes a dropdown populated from `/projects` that sends the selected project as `project_name` in chat and command-execution requests.
 - **Conversation scope restore**: opening a persisted conversation now restores the saved project selector state, shows project chips in chat history and conversation summaries, and uses backend-resolved project names from streaming `done` events.
+- **Generated project registration**: successful commands that create or target a
+  project under `DEV_REPOS_ROOT` can register that project for later context and
+  command working-directory resolution.
 
 ## Next Implementation Steps
 

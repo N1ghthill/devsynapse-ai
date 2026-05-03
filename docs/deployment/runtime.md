@@ -59,6 +59,12 @@ Command-level blocks and execution failures are represented in the command
 response payload and command telemetry. They should not be counted as API 500
 responses unless the HTTP request itself fails.
 
+Recoverable command outcomes are also recorded in the memory database as agent
+task-run events. This preserves the original goal and next action when a command
+is blocked by project scope, fails normally or discovers a missing local tool.
+The run log is prompt context only; authorization is still enforced by
+`opencode_bridge.py` for every command attempt.
+
 ## Runtime State Separation
 
 The source checkout is treated as code, tests and build artifacts. User-specific

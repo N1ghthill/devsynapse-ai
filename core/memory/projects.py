@@ -148,7 +148,10 @@ class ProjectRegistry:
             )
             last_access = datetime.fromisoformat(row["last_accessed"]).strftime("%d/%m %H:%M")
             text += f"- {priority_emoji} **{row['name']}** ({row['type']}) "
-            text += f"- acessado {row['access_count']}x, último: {last_access}\n"
+            text += (
+                f"- caminho: {row['path']} - acessado {row['access_count']}x, "
+                f"último: {last_access}\n"
+            )
 
         return text
 

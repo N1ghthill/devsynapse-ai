@@ -16,7 +16,7 @@ This document describes the engineering baseline of the repository. It is intent
 
 - expose HTTP routes for auth, chat, command execution, monitoring, settings and administration;
 - orchestrate DeepSeek API requests and inject project/user context;
-- persist conversation history, user state and runtime settings;
+- persist conversation history, agent task runs, user state and runtime settings;
 - validate and execute constrained file and shell operations;
 - emit monitoring events and plugin lifecycle hooks.
 
@@ -53,15 +53,16 @@ Design choices:
 Files:
 - [core/brain.py](core/brain.py)
 - [core/auth.py](core/auth.py)
-- [core/memory.py](core/memory.py)
+- [core/memory/system.py](core/memory/system.py)
+- [core/memory/agent_runs.py](core/memory/agent_runs.py)
 - [core/opencode_bridge.py](core/opencode_bridge.py)
 - [core/monitoring.py](core/monitoring.py)
 - [core/plugin_system.py](core/plugin_system.py)
 
 Responsibilities:
-- `brain.py`: prompt assembly, DeepSeek invocation with native tool calling (strict mode, thinking mode), result interpretation;
+- `brain.py`: prompt assembly, task-run context injection, DeepSeek invocation with native tool calling (strict mode, thinking mode), result interpretation;
 - `auth.py`: password hashing, JWT issuance and token validation;
-- `memory.py`: SQLite persistence for conversations, preferences, users, runtime settings and admin audit events;
+- `core/memory/`: SQLite persistence for conversations, agent runs, preferences, users, runtime settings and admin audit events;
 - `opencode_bridge.py`: command parsing, path validation and constrained execution;
 - `monitoring.py`: command/API telemetry and alert lifecycle;
 - `plugin_system.py`: extension hooks across major lifecycle points.
@@ -75,9 +76,12 @@ Primary persisted concepts:
 - user preferences
 - projects
 - decisions
+- agent learning and route decisions
+- procedural memories and reusable skills
 - users
 - app settings
 - project permissions
+- agent task runs and command/final-response events
 - administrative audit logs
 - command execution telemetry
 - API usage telemetry

@@ -5,6 +5,7 @@ import json
 import logging
 import time
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import PlainTextResponse, StreamingResponse
@@ -27,6 +28,7 @@ from api.models import (
     FeedbackRequest,
     FeedbackResponse,
 )
+from config.settings import get_settings
 from core.brain import DevSynapseBrain
 from core.memory import MemorySystem
 from core.opencode_bridge import OpenCodeBridge
@@ -37,6 +39,48 @@ router = APIRouter(tags=["chat"])
 
 async def _log_api_request_background(monitoring_system, **kwargs):
     monitoring_system.log_api_request(**kwargs)
+
+
+def _refresh_bridge_projects(memory_system: MemorySystem, bridge: OpenCodeBridge) -> None:
+    """Keep long-lived command bridge instances aligned with the project registry."""
+
+    if not hasattr(bridge, "known_projects"):
+        return
+    bridge.known_projects.update(memory_system.get_project_lookup())
+
+
+def _persist_bridge_project_if_needed(
+    memory_system: MemorySystem,
+    bridge: OpenCodeBridge,
+    project_name: str | None,
+) -> None:
+    """Persist a project inferred by command execution under DEV_REPOS_ROOT."""
+
+    if not project_name:
+        return
+    existing_project = memory_system.get_project(project_name, include_missing=True)
+    if existing_project and existing_project["path_exists"]:
+        return
+    project_info = bridge.known_projects.get(project_name)
+    if not project_info:
+        return
+
+    project_path = Path(project_info["path"]).expanduser().resolve()
+    repos_root = get_settings().dev_repos_root.expanduser().resolve()
+    try:
+        project_path.relative_to(repos_root)
+    except ValueError:
+        return
+    if not project_path.is_dir():
+        return
+
+    memory_system.add_project(
+        project_name,
+        str(project_path),
+        project_info.get("type", "project"),
+        project_info.get("priority", "medium"),
+        replace=existing_project is not None,
+    )
 
 
 def _resolve_locked_project(
@@ -69,9 +113,11 @@ async def chat_endpoint(
     user=Depends(require_user),
     brain: DevSynapseBrain = Depends(get_brain),
     memory_system: MemorySystem = Depends(get_memory_system),
+    bridge: OpenCodeBridge = Depends(get_opencode_bridge),
     monitoring_system=Depends(get_monitoring_system),
 ):
     conversation_id = request.conversation_id or str(uuid.uuid4())
+    _refresh_bridge_projects(memory_system, bridge)
     effective_project_name = _resolve_locked_project(
         memory_system,
         conversation_id,
@@ -123,8 +169,10 @@ async def chat_stream_endpoint(
     user=Depends(require_user),
     brain: DevSynapseBrain = Depends(get_brain),
     memory_system: MemorySystem = Depends(get_memory_system),
+    bridge: OpenCodeBridge = Depends(get_opencode_bridge),
 ):
     conversation_id = request.conversation_id or str(uuid.uuid4())
+    _refresh_bridge_projects(memory_system, bridge)
     effective_project_name = _resolve_locked_project(
         memory_system,
         conversation_id,
@@ -259,6 +307,7 @@ async def execute_command(
 
     start_time = time.time()
 
+    _refresh_bridge_projects(memory_system, bridge)
     effective_project_name = _resolve_locked_project(
         memory_system,
         request.conversation_id,
@@ -275,6 +324,8 @@ async def execute_command(
             user_role=user["role"],
             project_mutation_allowlist=project_mutation_allowlist,
         )
+        if success:
+            _persist_bridge_project_if_needed(memory_system, bridge, project_name)
 
         await memory_system.save_command_execution(
             conversation_id=request.conversation_id,

@@ -2,7 +2,6 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   BarChart3,
   CircleDot,
-  Cpu,
   Library,
   LogOut,
   MessageSquare,
@@ -33,7 +32,7 @@ export function Layout() {
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="brand-mark" aria-hidden="true">
-            <Cpu size={22} className="sidebar-logo" />
+            <img src="/devsynapse-favicon.png" className="sidebar-logo" alt="" />
           </div>
           <div className="brand-copy">
             <span className="sidebar-title">DevSynapse</span>

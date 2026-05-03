@@ -12,6 +12,7 @@ Runtime database files are user state, not source files. By default they live un
 Primary implementation files:
 - [core/db.py](../../core/db.py)
 - [core/migrations.py](../../core/migrations.py)
+- [core/memory/agent_runs.py](../../core/memory/agent_runs.py)
 - [core/memory/system.py](../../core/memory/system.py)
 - [scripts/migrate.py](../../scripts/migrate.py)
 
@@ -146,6 +147,20 @@ Stores:
 - structured details
 - timestamp
 
+### Agent runs
+
+Stores:
+- conversation id
+- original goal
+- project scope
+- run status
+- next action
+- event timeline for command results, policy blocks, failures and final responses
+
+This is the durable task state used by the coding agent to continue after missing
+dependencies, blocked commands or resumed conversations without losing the
+original objective.
+
 ### Monitoring schema
 
 Stores:
@@ -181,6 +196,8 @@ Contributors should add a new migration when:
   economy mode still wins over learned Pro preferences
 - skill activation is advisory prompt context; shell/file effects still go through
   the existing command execution and authorization flow
+- agent runs are advisory execution state; command authorization and project
+  scope enforcement remain in the command bridge
 
 ## Current Tradeoff
 

@@ -71,7 +71,10 @@ body {
 }
 
 .sidebar-logo {
-  color: var(--accent);
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  display: block;
 }
 
 .sidebar-title {
@@ -2008,7 +2011,11 @@ body {
 }
 
 .login-logo {
-  color: var(--accent);
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  display: block;
+  margin-inline: auto;
   margin-bottom: 12px;
 }
 
@@ -2246,7 +2253,10 @@ body {
 }
 
 .sidebar-logo {
-  color: var(--accent);
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  display: block;
 }
 
 .brand-copy {

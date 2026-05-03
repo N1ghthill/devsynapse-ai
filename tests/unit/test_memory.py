@@ -48,6 +48,8 @@ class TestMemorySystem:
         assert 'skills' in tables
         assert 'skill_activations' in tables
         assert 'learning_nudge_events' in tables
+        assert 'agent_runs' in tables
+        assert 'agent_run_events' in tables
 
     def test_get_user_preferences(self, tmp_path):
         db_path = tmp_path / "test_prefs.db"
@@ -62,6 +64,7 @@ class TestMemorySystem:
         context = memory.get_projects_context()
         assert isinstance(context, str)
         assert len(context) > 0
+        assert str(PROJECT_ROOT) in context
 
     def test_list_projects_and_lookup_include_persisted_projects(self, tmp_path):
         db_path = tmp_path / "test_project_registry.db"
@@ -297,6 +300,62 @@ class TestMemorySystem:
         assert assistant_message["commandStatus"] == "success"
         assert "file1" in assistant_message["commandResult"]
         assert assistant_message["projectName"] == "devsynapse-ai"
+        run_context = memory.get_agent_run_context("test_cmd_1")
+        assert "Comando executado" in run_context
+        assert "ls -la" in run_context
+
+    def test_agent_run_tracks_goal_events_and_final_response(self, tmp_path):
+        db_path = tmp_path / "test_agent_runs.db"
+        memory = _create_memory(db_path)
+
+        run = memory.start_or_resume_agent_run(
+            conversation_id="conv_agent_run",
+            goal="Criar um app Tauri",
+            project_name="devsynapse-ai",
+        )
+
+        memory.record_agent_command_result(
+            conversation_id="conv_agent_run",
+            goal="Criar um app Tauri",
+            command='bash "cargo --version"',
+            success=False,
+            result="cargo: command not found",
+            output=None,
+            status="failed",
+            reason_code="execution_failed",
+            project_name="devsynapse-ai",
+        )
+        memory.record_agent_final_response(
+            run_id=run["id"],
+            conversation_id="conv_agent_run",
+            response="Scaffold criado; Rust precisa ser instalado.",
+            has_pending_command=False,
+            project_name="devsynapse-ai",
+        )
+
+        active_run = memory.get_active_agent_run("conv_agent_run")
+        run_context = memory.get_agent_run_context("conv_agent_run")
+
+        assert active_run is None
+        assert "Nenhuma tarefa de agente ativa" in run_context
+
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT status, next_action FROM agent_runs WHERE conversation_id = ?",
+            ("conv_agent_run",),
+        )
+        row = cursor.fetchone()
+        cursor.execute(
+            "SELECT event_type, command, reason_code FROM agent_run_events WHERE conversation_id = ?",
+            ("conv_agent_run",),
+        )
+        events = cursor.fetchall()
+        conn.close()
+
+        assert row[0] == "completed"
+        assert "concluída" in row[1].lower()
+        assert ("command_result", 'bash "cargo --version"', "execution_failed") in events
 
     @pytest.mark.asyncio
     async def test_save_interaction_infers_project_name(self, tmp_path):

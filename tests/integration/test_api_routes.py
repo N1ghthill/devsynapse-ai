@@ -471,6 +471,44 @@ async def test_execute_returns_resolved_project_name(route_services):
 
 
 @pytest.mark.asyncio
+async def test_execute_persists_project_inferred_under_repos_root(
+    route_services, tmp_path, monkeypatch
+):
+    from api.models import CommandExecutionRequest
+    from api.routes.chat import execute_command
+
+    repos_root = tmp_path / "repos"
+    target_file = repos_root / "tauri-app" / "src" / "main.rs"
+    settings = SimpleNamespace(
+        dev_repos_root=repos_root,
+        dev_workspace_root=tmp_path,
+        default_execution_cwd=tmp_path,
+    )
+    monkeypatch.setattr("core.opencode_bridge.get_settings", lambda: settings)
+    monkeypatch.setattr("api.routes.chat.get_settings", lambda: settings)
+
+    response = await execute_command(
+        request=CommandExecutionRequest(
+            conversation_id="conv_exec_inferred_project",
+            command=f'write "{target_file}" --content="fn main() {{}}"',
+            confirm=True,
+        ),
+        background_tasks=BackgroundTasks(),
+        user=route_services.admin,
+        bridge=route_services.bridge,
+        memory_system=route_services.memory,
+        monitoring_system=route_services.monitoring,
+    )
+
+    persisted_project = route_services.memory.get_project("tauri-app")
+    assert response.success is True
+    assert response.project_name == "tauri-app"
+    assert target_file.read_text(encoding="utf-8") == "fn main() {}"
+    assert persisted_project is not None
+    assert persisted_project["path"] == str(repos_root / "tauri-app")
+
+
+@pytest.mark.asyncio
 async def test_delete_conversation_returns_404_for_unknown_id(route_services):
     from api.routes.chat import delete_conversation
 

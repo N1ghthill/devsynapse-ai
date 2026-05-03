@@ -8,7 +8,7 @@ from a public landing page.
 Release-candidate checks completed locally:
 
 - `make verify`
-- `cd frontend/src-tauri && cargo check`
+- browser and Tauri icon generation
 
 The tag-driven release workflow generates and signs the Linux and Windows
 desktop artifacts before publishing the GitHub Release.
@@ -17,8 +17,8 @@ Expected artifacts:
 
 | Platform | Artifact | Status |
 | --- | --- | --- |
-| Linux x86_64 | `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.7.0_amd64.deb` | pending release workflow |
-| Linux x86_64 | `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.7.0-1.x86_64.rpm` | pending release workflow |
+| Linux x86_64 | `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.8.0_amd64.deb` | pending release workflow |
+| Linux x86_64 | `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.8.0-1.x86_64.rpm` | pending release workflow |
 | Linux x86_64 | AppImage | opt-in only; not part of the default build because `linuxdeploy` is environment-sensitive |
 | macOS | `.dmg` / `.app` bundle | configured but not validated in this repository yet |
 | Windows x86_64 | NSIS installer | validated in GitHub Actions |
@@ -85,13 +85,13 @@ per supported platform:
 
 ```bash
 python3 scripts/generate-tauri-update-manifest.py \
-  --version 0.7.0 \
+  --version 0.8.0 \
   --platform linux-x86_64 \
-  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.7.0/DevSynapse_AI_0.7.0_amd64.deb" \
-  --signature-file "frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.7.0_amd64.deb.sig" \
+  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.8.0/DevSynapse_AI_0.8.0_amd64.deb" \
+  --signature-file "frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.8.0_amd64.deb.sig" \
   --platform windows-x86_64 \
-  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.7.0/DevSynapse_AI_0.7.0_x64-setup.exe" \
-  --signature-file "frontend/src-tauri/target/release/bundle/nsis/DevSynapse AI_0.7.0_x64-setup.exe.sig" \
+  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.8.0/DevSynapse_AI_0.8.0_x64-setup.exe" \
+  --signature-file "frontend/src-tauri/target/release/bundle/nsis/DevSynapse AI_0.8.0_x64-setup.exe.sig" \
   --notes "Release notes" \
   --output latest.json
 ```

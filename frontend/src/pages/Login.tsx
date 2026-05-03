@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Cpu, Loader2, LogIn } from 'lucide-react';
+import { Loader2, LogIn } from 'lucide-react';
 import { authApi } from '../api/client';
 import { BootstrapForm } from '../components/BootstrapForm';
 import { useAuth } from '../hooks/useAuth';
@@ -77,7 +77,7 @@ export function Login() {
     <div className="login-page">
       <div className="login-card">
         <div className="login-header">
-          <Cpu size={48} className="login-logo" />
+          <img src="/devsynapse-favicon.png" className="login-logo" alt="" />
           <h1>DevSynapse</h1>
           <p>{requiresFirstRunSetup ? 'Configuração inicial' : 'Development Synapse AI'}</p>
         </div>

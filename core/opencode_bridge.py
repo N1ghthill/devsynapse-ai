@@ -144,6 +144,7 @@ class OpenCodeBridge:
 
         args = self._normalize_placeholder_command_args(command_type, args)
         resolved_project_name = self._infer_project_name(command_type, args, project_name)
+        self._register_repos_project_if_needed(resolved_project_name)
         if (
             project_name
             and resolved_project_name

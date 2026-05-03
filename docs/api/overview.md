@@ -125,9 +125,14 @@ Purpose:
 - `/chat/stream` does not expose provider reasoning content to clients; internal reasoning may still be used by the model provider but is not part of the UI contract
 - when `ChatRequest.execute_command` is enabled and an action-oriented request gets either an empty model response or intent text without a tool call, the backend retries that turn with a strict "emit one tool call or final answer" instruction before ending the stream
 - when automatic command execution completes but the model does not emit final prose, `/chat/stream` emits a concise completion text before `done`
-- admin automatic streaming runs supported OpenCode commands without project allowlist confirmation and can continue after ordinary command execution failures by feeding the failure output back to the model; selected conversation project scope, validation, blacklist, plugin and authorization blocks still end the run
+- automatic execution can continue after ordinary command failures and recoverable
+  policy blocks by feeding the result back to the model; blacklisted commands,
+  plugin cancellations and unsupported tool types still do not run
 - `/execute` returns structured execution status, reason code and project context
 - `/execute` normalizes common LLM placeholder paths such as `/home/user/projects`, `~/projects` and `/workspace` to the configured local repository/workspace roots before validation and execution; if a mutating command points outside the selected conversation project, execution is blocked with `project_scope_mismatch`, while read-only reference commands can inspect other allowed or registered repositories
+- chat auto-execution records an agent task run for action-oriented requests;
+  command results, permission blocks, missing dependencies and final responses
+  are persisted as run events and injected into later prompt context
 - `/chat/history`, `/conversations` and `/conversations/{conversation_id}` include persisted `project_name` when available
 - `/monitoring/stats` includes `llm_usage` aggregates, cache hit-rate telemetry, project-level breakdown, agent learning stats and budget status snapshots
 - `/monitoring/stats` also includes `llm_usage.knowledge` with memory, skill and nudge aggregates
