@@ -63,20 +63,22 @@ jobs:
 
           expected = os.environ["RELEASE_VERSION"]
           versions = {
-              "frontend/package.json": json.loads(Path("frontend/package.json").read_text())["version"],
+              "frontend/package.json": json.loads(
+                  Path("frontend/package.json").read_text(encoding="utf-8")
+              )["version"],
               "frontend/src-tauri/tauri.conf.json": json.loads(
-                  Path("frontend/src-tauri/tauri.conf.json").read_text()
+                  Path("frontend/src-tauri/tauri.conf.json").read_text(encoding="utf-8")
               )["version"],
           }
 
-          cargo_toml = Path("frontend/src-tauri/Cargo.toml").read_text()
+          cargo_toml = Path("frontend/src-tauri/Cargo.toml").read_text(encoding="utf-8")
           match = re.search(r'^version\s*=\s*"([^"]+)"', cargo_toml, re.MULTILINE)
           if not match:
               print("Could not find package version in frontend/src-tauri/Cargo.toml", file=sys.stderr)
               sys.exit(1)
           versions["frontend/src-tauri/Cargo.toml"] = match.group(1)
 
-          settings_py = Path("config/settings.py").read_text()
+          settings_py = Path("config/settings.py").read_text(encoding="utf-8")
           match = re.search(r'app_version:\s*str\s*=\s*"([^"]+)"', settings_py)
           if not match:
               print("Could not find app_version in config/settings.py", file=sys.stderr)
@@ -245,20 +247,22 @@ jobs:
 
           expected = os.environ["RELEASE_VERSION"]
           versions = {
-              "frontend/package.json": json.loads(Path("frontend/package.json").read_text())["version"],
+              "frontend/package.json": json.loads(
+                  Path("frontend/package.json").read_text(encoding="utf-8")
+              )["version"],
               "frontend/src-tauri/tauri.conf.json": json.loads(
-                  Path("frontend/src-tauri/tauri.conf.json").read_text()
+                  Path("frontend/src-tauri/tauri.conf.json").read_text(encoding="utf-8")
               )["version"],
           }
 
-          cargo_toml = Path("frontend/src-tauri/Cargo.toml").read_text()
+          cargo_toml = Path("frontend/src-tauri/Cargo.toml").read_text(encoding="utf-8")
           match = re.search(r'^version\s*=\s*"([^"]+)"', cargo_toml, re.MULTILINE)
           if not match:
               print("Could not find package version in frontend/src-tauri/Cargo.toml", file=sys.stderr)
               sys.exit(1)
           versions["frontend/src-tauri/Cargo.toml"] = match.group(1)
 
-          settings_py = Path("config/settings.py").read_text()
+          settings_py = Path("config/settings.py").read_text(encoding="utf-8")
           match = re.search(r'app_version:\s*str\s*=\s*"([^"]+)"', settings_py)
           if not match:
               print("Could not find app_version in config/settings.py", file=sys.stderr)
