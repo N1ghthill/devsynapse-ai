@@ -1,7 +1,7 @@
-PYTHON ?= ./venv/bin/python
-PIP ?= ./venv/bin/pip
-PYTEST ?= ./venv/bin/pytest
-RUFF ?= ./venv/bin/ruff
+PYTHON ?= $(shell if [ -x ./venv/bin/python ]; then printf './venv/bin/python'; else command -v python3 || command -v python; fi)
+PIP ?= $(shell if [ -x ./venv/bin/pip ]; then printf './venv/bin/pip'; else command -v pip3 || command -v pip; fi)
+PYTEST ?= $(shell if [ -x ./venv/bin/pytest ]; then printf './venv/bin/pytest'; else command -v pytest; fi)
+RUFF ?= $(shell if [ -x ./venv/bin/ruff ]; then printf './venv/bin/ruff'; else command -v ruff; fi)
 
 .PHONY: setup dev install install-dev update run test lint frontend-lint frontend-build desktop-backend desktop-build desktop-build-updates desktop-dev script-check ui-smoke eval-agent update-locks verify seed-users migrate migration-status
 
