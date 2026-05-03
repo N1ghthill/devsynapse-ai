@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.6.3-blue)
+![Version](https://img.shields.io/badge/version-0.7.0-blue)
 
 **A local-first DeepSeek coding agent with safe command execution, project memory, and cost visibility.**
 
@@ -122,7 +122,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Verified Baseline
 
-Local verification refreshed on `2026-05-02` (v0.6.3 repository baseline):
+Local verification refreshed on `2026-05-03` (v0.7.0 repository baseline):
 - full repository verification: `make verify`
 - dependency consistency: `pip check`
 - frontend dependency audit: `npm audit --audit-level=high`
@@ -268,7 +268,7 @@ update-devsynapse
 To pin a specific published release:
 
 ```bash
-devsynapse update --version v0.6.3
+devsynapse update --version v0.7.0
 ```
 
 ### Manual Backend
@@ -334,7 +334,7 @@ Technical guides:
 - development roadmap: [docs/development/roadmap.md](docs/development/roadmap.md)
 - runtime and delivery notes: [docs/deployment/runtime.md](docs/deployment/runtime.md)
 - local security model: [docs/security/local-security-model.md](docs/security/local-security-model.md)
-- latest release notes: [docs/releases/v0.6.3.md](docs/releases/v0.6.3.md)
+- latest release notes: [docs/releases/v0.7.0.md](docs/releases/v0.7.0.md)
 
 Supplementary references:
 - engineering guide: [README_PROFESSIONAL.md](README_PROFESSIONAL.md)

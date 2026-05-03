@@ -43,7 +43,7 @@ Screenshot sources:
 - [screenshot evidence index](../screenshots/README.md)
 - [evaluation screenshots](../evaluation/README.md)
 - [testing guide](../development/testing.md)
-- [release notes](../releases/v0.6.3.md)
+- [release notes](../releases/v0.7.0.md)
 
 ## Use Cases
 

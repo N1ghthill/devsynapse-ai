@@ -6,6 +6,27 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+## [v0.7.0] - 2026-05-03
+
+### Added
+- Added reproducible agent evaluation docs, fixtures and screenshots for local
+  appraisal, no-LLM benchmarks and a real DeepSeek repair run.
+- Added `make eval-agent` and `scripts/eval_agent.py` for disposable,
+  project-scoped agent evaluations.
+- Added API and UI smoke coverage for chat command completion, monitoring,
+  settings and project-scoped execution contracts.
+
+### Changed
+- Expanded API response models so frontend types and client helpers can rely on
+  structured project, settings, monitoring and command-completion payloads.
+- Improved chat command completion stability and project-aware execution result
+  handling.
+- Refreshed product evidence, testing guidance and public showcase references.
+
+### Fixed
+- Stabilized chat command completion parsing and validation paths covered by
+  backend and smoke UI tests.
+
 ## [v0.6.3] - 2026-05-01
 
 ### Added
