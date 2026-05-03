@@ -50,6 +50,51 @@ jobs:
           echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
           echo "RELEASE_NOTES=$notes_file" >> "$GITHUB_ENV"
 
+      - name: Check release version consistency
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          expected = os.environ["RELEASE_VERSION"]
+          versions = {
+              "frontend/package.json": json.loads(Path("frontend/package.json").read_text())["version"],
+              "frontend/src-tauri/tauri.conf.json": json.loads(
+                  Path("frontend/src-tauri/tauri.conf.json").read_text()
+              )["version"],
+          }
+
+          cargo_toml = Path("frontend/src-tauri/Cargo.toml").read_text()
+          match = re.search(r'^version\s*=\s*"([^"]+)"', cargo_toml, re.MULTILINE)
+          if not match:
+              print("Could not find package version in frontend/src-tauri/Cargo.toml", file=sys.stderr)
+              sys.exit(1)
+          versions["frontend/src-tauri/Cargo.toml"] = match.group(1)
+
+          settings_py = Path("config/settings.py").read_text()
+          match = re.search(r'app_version:\s*str\s*=\s*"([^"]+)"', settings_py)
+          if not match:
+              print("Could not find app_version in config/settings.py", file=sys.stderr)
+              sys.exit(1)
+          versions["config/settings.py"] = match.group(1)
+
+          mismatches = {
+              path: version
+              for path, version in versions.items()
+              if version != expected
+          }
+          if mismatches:
+              print(f"Release tag resolves to version {expected}, but these files differ:", file=sys.stderr)
+              for path, version in mismatches.items():
+                  print(f"- {path}: {version}", file=sys.stderr)
+              sys.exit(1)
+          PY
+
       - name: Check updater configuration
         run: |
           set -euo pipefail
@@ -186,6 +231,51 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+
+      - name: Check release version consistency
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          expected = os.environ["RELEASE_VERSION"]
+          versions = {
+              "frontend/package.json": json.loads(Path("frontend/package.json").read_text())["version"],
+              "frontend/src-tauri/tauri.conf.json": json.loads(
+                  Path("frontend/src-tauri/tauri.conf.json").read_text()
+              )["version"],
+          }
+
+          cargo_toml = Path("frontend/src-tauri/Cargo.toml").read_text()
+          match = re.search(r'^version\s*=\s*"([^"]+)"', cargo_toml, re.MULTILINE)
+          if not match:
+              print("Could not find package version in frontend/src-tauri/Cargo.toml", file=sys.stderr)
+              sys.exit(1)
+          versions["frontend/src-tauri/Cargo.toml"] = match.group(1)
+
+          settings_py = Path("config/settings.py").read_text()
+          match = re.search(r'app_version:\s*str\s*=\s*"([^"]+)"', settings_py)
+          if not match:
+              print("Could not find app_version in config/settings.py", file=sys.stderr)
+              sys.exit(1)
+          versions["config/settings.py"] = match.group(1)
+
+          mismatches = {
+              path: version
+              for path, version in versions.items()
+              if version != expected
+          }
+          if mismatches:
+              print(f"Release tag resolves to version {expected}, but these files differ:", file=sys.stderr)
+              for path, version in mismatches.items():
+                  print(f"- {path}: {version}", file=sys.stderr)
+              sys.exit(1)
+          PY
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
