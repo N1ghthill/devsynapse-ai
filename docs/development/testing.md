@@ -3,7 +3,7 @@
 ## Current Verification Baseline
 
 At the latest documentation refresh on `2026-05-04`, local verification produced:
-- `240` passing backend tests
+- `242` passing backend tests
 - successful script checks
 - successful frontend lint and production build
 - successful browser UI smoke validation with Playwright
@@ -93,7 +93,10 @@ temporary non-admin user so the Admin permission workflow is exercised without
 touching local developer data. It also exercises a rapid chat command stream
 where `command`, `running`, `command_result` and `done` arrive together, then
 asserts that the chat shows a final completion summary, a successful command
-badge and command output instead of staying in a pending state.
+badge, command timeline and command output instead of staying in a pending
+state. It also checks desktop and mobile chat layouts for horizontal overflow
+and verifies compact UI controls such as nav items, buttons, chips, pills and
+badges keep single-line labels.
 
 Install the Chromium browser once with:
 

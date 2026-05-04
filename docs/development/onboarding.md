@@ -123,7 +123,7 @@ Default local URLs:
 
 The local setup seeds one admin user by default. The installer prompts for this password during setup; change it immediately for any non-local environment.
 
-- `admin` / value from `DEFAULT_ADMIN_PASSWORD` in the runtime config
+- `admin` / configured admin password
 
 To add a non-admin user, set `DEFAULT_USER_USERNAME` and `DEFAULT_USER_PASSWORD`
 in the runtime config.

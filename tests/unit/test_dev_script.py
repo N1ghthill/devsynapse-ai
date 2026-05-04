@@ -43,8 +43,5 @@ def test_stop_processes_terminates_child_process_group(tmp_path: Path) -> None:
 
 
 def test_format_admin_password_for_display_hides_custom_password() -> None:
-    assert dev.format_admin_password_for_display("admin") == "admin"
-    assert (
-        dev.format_admin_password_for_display("custom-secret")
-        == "value from DEFAULT_ADMIN_PASSWORD in runtime config"
-    )
+    assert dev.format_admin_password_for_display("admin") == "configured admin password"
+    assert dev.format_admin_password_for_display("custom-secret") == "configured admin password"

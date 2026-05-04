@@ -40,9 +40,8 @@ def _read_env(key: str, default: str = "") -> str:
 
 
 def format_admin_password_for_display(password: str) -> str:
-    if password == "admin":
-        return "admin"
-    return "value from DEFAULT_ADMIN_PASSWORD in runtime config"
+    del password
+    return "configured admin password"
 
 
 def is_port_in_use(port: int) -> bool:

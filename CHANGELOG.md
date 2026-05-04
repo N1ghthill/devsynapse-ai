@@ -6,6 +6,47 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+## [v0.8.4] - 2026-05-04
+
+### Added
+- Added agent completion guard tracking for expected file edits and pytest
+  validation so auto-execution repairs incomplete development runs before
+  returning a final answer.
+- Added command execution timeline rendering in chat and expanded Playwright UI
+  smoke coverage for long text, command status and compact controls.
+
+### Changed
+- Split chat and layout styling into dedicated CSS modules and tightened text
+  wrapping across desktop and mobile chat surfaces.
+- Updated local development startup guidance so generated admin credentials do
+  not imply a stale default password.
+
+### Fixed
+- Fixed assistant messages, code blocks, command cards and sidebar content that
+  could overflow or force broken wrapping with long project output.
+- Fixed incomplete response detection for trailing task markers such as "Agora o
+  README.md:" so the agent continues the next required step.
+
+## [v0.8.3] - 2026-05-04
+
+### Added
+- Added prerequisite revalidation through `GET /prerequisites` for common local
+  project tooling.
+- Added OpenRouter, OpenCode Go and OpenCode Zen settings, model discovery and
+  OpenAI-compatible provider routing.
+- Added persistent LLM model catalog storage and per-user/per-model request
+  telemetry.
+
+### Changed
+- Added adaptive model selection that can prefer cheaper discovered models for
+  simple or budget-sensitive tasks while keeping the configured model for
+  critical work.
+
+### Fixed
+- Classified privileged and interactive setup failures as manual setup work so
+  chat does not retry commands that need a human terminal.
+- Trusted admin shell execution now uses `pipefail` for piped commands.
+
 ## [v0.8.2] - 2026-05-04
 
 ### Added

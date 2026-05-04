@@ -36,7 +36,7 @@ export function Layout() {
           </div>
           <div className="brand-copy">
             <span className="sidebar-title">DevSynapse</span>
-            <span className="sidebar-kicker">Workspace local de IA</span>
+            <span className="sidebar-kicker">Workspace local</span>
           </div>
         </div>
 

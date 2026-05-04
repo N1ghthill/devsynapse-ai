@@ -54,6 +54,16 @@ GitHub Releases are published from pushed `v*.*.*` tags by reading `docs/release
 Desktop artifacts for landing-page downloads are tracked in
 [../deployment/desktop-distribution.md](../deployment/desktop-distribution.md).
 
+## Agent Completion Guard
+
+Automatic execution keeps a lightweight task checklist for implementation
+requests. When the prompt explicitly names files such as `pyproject.toml`,
+`README.md` or `src/app.py`, or asks for `pytest`, the backend tracks successful
+`write` commands and passing pytest output before accepting a final response.
+If the model emits prose like "now the README" without a tool call, or tries to
+summarize before the checklist is complete, the brain feeds back the missing
+items and asks for exactly one next tool call.
+
 ## Updating An Existing Install
 
 Installed users should prefer the updater instead of rerunning the interactive installer:

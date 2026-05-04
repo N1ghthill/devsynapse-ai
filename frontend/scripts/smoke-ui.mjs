@@ -35,6 +35,65 @@ async function expectHidden(locator, label) {
   }
 }
 
+async function expectNoHorizontalOverflow(page, label) {
+  const overflow = await page.evaluate(() => ({
+    document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    body: document.body.scrollWidth - document.body.clientWidth,
+    header: (document.querySelector('.chat-header')?.scrollWidth || 0)
+      - (document.querySelector('.chat-header')?.clientWidth || 0),
+    input: (document.querySelector('.chat-input-wrapper')?.scrollWidth || 0)
+      - (document.querySelector('.chat-input-wrapper')?.clientWidth || 0),
+  }));
+  const failures = Object.entries(overflow).filter(([, value]) => value > 1);
+  if (failures.length > 0) {
+    throw new Error(`${label} has horizontal overflow: ${JSON.stringify(overflow)}`);
+  }
+}
+
+async function expectCompactTextControls(page, label) {
+  const wrappingControls = await page.evaluate(() => {
+    const selectors = [
+      '.nav-item',
+      '.logout-btn',
+      '.new-chat-btn',
+      '.top-new-chat-btn',
+      '.project-manager-open',
+      '.project-create-toggle',
+      '.project-action-btn',
+      '.project-status-tabs button',
+      '.dashboard-filter-btn',
+      '.save-btn',
+      '.auto-approve-toggle',
+      '.command-status-badge',
+      '.context-pill',
+      '.scope-chip',
+      '.status-badge',
+      '.model-chip',
+    ];
+    return selectors.flatMap((selector) =>
+      Array.from(document.querySelectorAll(selector))
+        .filter((element) => {
+          const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
+          if (!text) return false;
+          return getComputedStyle(element).whiteSpace !== 'nowrap';
+        })
+        .map((element) => ({
+          selector,
+          text: (element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+          className: element.className?.toString?.() || '',
+        }))
+    );
+  });
+  if (wrappingControls.length > 0) {
+    throw new Error(`${label} has wrapping compact controls: ${JSON.stringify(wrappingControls)}`);
+  }
+}
+
+async function checkLayout(page, label) {
+  await expectNoHorizontalOverflow(page, label);
+  await expectCompactTextControls(page, label);
+}
+
 async function runSmoke() {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
@@ -52,6 +111,7 @@ async function runSmoke() {
     ]);
     await expectVisible(page.getByText('Workspace local'), 'chat workspace header');
     await expectVisible(page.getByRole('heading', { name: 'Escolha um fluxo' }), 'chat empty state');
+    await checkLayout(page, 'chat desktop');
 
     let interceptedChatStream = false;
     await page.route('**/chat/stream', async (route) => {
@@ -116,10 +176,49 @@ async function runSmoke() {
       page.locator('.command-status-badge.status-success', { hasText: 'Executado' }).first(),
       'chat command success badge'
     );
+    await expectVisible(page.locator('.command-timeline-row.status-success').first(), 'command timeline success');
     await expectVisible(page.getByText('smoke-chat-ok', { exact: true }), 'chat command output');
     await expectHidden(page.locator('.typing-indicator'), 'chat typing indicator');
     if (!interceptedChatStream) {
       throw new Error('chat stream was not exercised during smoke');
+    }
+    await page.unroute('**/chat/stream');
+
+    const longToken = 'x'.repeat(260);
+    await page.route('**/chat/stream', async (route) => {
+      const events = [
+        {
+          type: 'text',
+          content: `Texto longo sem espaços ${longToken}\n\nhttps://example.com/${longToken}`,
+        },
+        {
+          type: 'done',
+          usage: null,
+          project_name: null,
+        },
+      ];
+      await route.fulfill({
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+        },
+        body: events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''),
+      });
+    });
+    await page.getByRole('button', { name: 'Nova conversa' }).click();
+    await page
+      .getByPlaceholder('Peça uma análise, refatoração, teste ou comando local...')
+      .fill('responda com texto grande');
+    await page.getByTitle('Enviar mensagem').click();
+    await expectVisible(page.getByText('Texto longo sem espaços'), 'long unbroken chat text');
+    const chatOverflow = await page.locator('.message-ai .message-content').last().evaluate((el) => ({
+      message: el.scrollWidth - el.clientWidth,
+      body: (el.querySelector('.message-body')?.scrollWidth || 0)
+        - (el.querySelector('.message-body')?.clientWidth || 0),
+    }));
+    if (chatOverflow.message > 1 || chatOverflow.body > 1) {
+      throw new Error(`long chat content overflows horizontally: ${JSON.stringify(chatOverflow)}`);
     }
     await page.unroute('**/chat/stream');
 
@@ -132,19 +231,28 @@ async function runSmoke() {
       page.getByRole('button', { name: 'Adicionar projeto' }).click(),
     ]);
     await expectVisible(page.getByText('smoke-ui-project').first(), 'created project selection');
+    await checkLayout(page, 'project manager desktop');
 
     await page.getByRole('link', { name: 'Painel' }).click();
     await expectVisible(page.getByRole('heading', { name: 'Painel' }), 'dashboard heading');
     await expectVisible(page.locator('.stat-label', { hasText: 'Comandos' }).first(), 'dashboard totals');
+    await checkLayout(page, 'dashboard desktop');
 
     await page.getByRole('link', { name: 'Ajustes' }).click();
     await expectVisible(page.getByRole('heading', { name: 'Ajustes' }), 'settings heading');
     await page.getByRole('button', { name: 'Salvar alterações' }).click();
     await expectVisible(page.getByText('Ajustes salvos com sucesso'), 'settings save confirmation');
+    await checkLayout(page, 'settings desktop');
 
     await page.getByRole('link', { name: 'Admin' }).click();
     await expectVisible(page.getByRole('heading', { name: 'Administração', exact: true }), 'admin heading');
     await expectVisible(page.getByRole('button', { name: 'Salvar permissões' }).first(), 'admin permissions');
+    await checkLayout(page, 'admin desktop');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${baseURL}/chat`, { waitUntil: 'domcontentloaded' });
+    await expectVisible(page.getByRole('heading', { name: 'Escolha um fluxo' }), 'mobile chat empty state');
+    await checkLayout(page, 'chat mobile');
 
     if (failedResponses.length > 0) {
       throw new Error(`HTTP 5xx responses during smoke: ${failedResponses.join(', ')}`);

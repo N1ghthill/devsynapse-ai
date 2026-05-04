@@ -80,6 +80,7 @@ class TestDevSynapseBrain:
         assert "Irving" in prompt or "N1ghthill" in prompt
         assert "tools" in prompt.lower()
         assert "CURRENT AGENT RUN" in prompt
+        assert 'Do not ask "should I continue?"' in prompt
 
     def test_generate_system_prompt_includes_active_project(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
@@ -625,6 +626,39 @@ class TestDevSynapseBrain:
             'write "/tmp/calculadora/main.py" --content="print(\'ok\')"'
         )
         mock_bridge.execute_command.assert_awaited_once()
+
+    def test_response_promises_pending_action_detects_trailing_next_file_marker(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        assert brain._response_promises_pending_action("Agora o README curto:")
+        assert brain._response_promises_pending_action("`pyproject.toml` criado. Agora o `README.md`:")
+        assert brain._response_promises_pending_action("Next the test file:")
+        assert not brain._response_promises_pending_action("Resumo: arquivos criados e testes ok.")
+
+    def test_task_checklist_tracks_files_and_pytest(self, mock_memory, mock_bridge):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        checklist = brain._build_task_checklist(
+            "Crie pyproject.toml, README.md, src/app.py e rode pytest até passar."
+        )
+
+        assert checklist is not None
+        assert checklist.expected_files == {"pyproject.toml", "README.md", "src/app.py"}
+        assert checklist.requires_pytest is True
+        assert not brain._task_checklist_complete(checklist)
+
+        brain._update_task_checklist(checklist, 'write "/tmp/probe/pyproject.toml"', "ok")
+        brain._update_task_checklist(checklist, 'write "/tmp/probe/README.md"', "ok")
+        brain._update_task_checklist(checklist, 'write "/tmp/probe/src/app.py"', "ok")
+        assert not brain._task_checklist_complete(checklist)
+
+        brain._update_task_checklist(
+            checklist,
+            'bash "cd /tmp/probe && python3 -m pytest -q"',
+            ". 1 passed in 0.01s",
+        )
+        assert brain._task_checklist_complete(checklist)
 
     @pytest.mark.asyncio
     async def test_streaming_admin_auto_mode_replays_execution_failure(

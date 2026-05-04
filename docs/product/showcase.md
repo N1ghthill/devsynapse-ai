@@ -21,8 +21,9 @@ This page maps the current product surface to concrete use cases and evidence ca
 ## Current Evidence
 
 Repository baseline validated on `2026-05-04`:
-- `make verify` passed with `240` backend tests, script checks, frontend lint and frontend build
-- `make ui-smoke` verified login, project management, dashboard, settings and admin navigation
+- `make verify` passed with `242` backend tests, script checks, frontend lint and frontend build
+- `make ui-smoke` verified login, project management, dashboard, settings,
+  admin navigation, long chat text wrapping and command timeline rendering
 - release workflow checks cover version consistency and desktop artifact publishing
 - previous published baseline had GitHub Actions CI passing on `main`
 - portable runtime configuration via environment variables verified
@@ -43,7 +44,7 @@ Screenshot sources:
 - [screenshot evidence index](../screenshots/README.md)
 - [evaluation screenshots](../evaluation/README.md)
 - [testing guide](../development/testing.md)
-- [release notes](../releases/v0.8.3.md)
+- [release notes](../releases/v0.8.4.md)
 
 ## Use Cases
 
@@ -86,11 +87,14 @@ Current support:
 - authenticated operator UI
 - chat with real-time streaming responses
 - command proposals with execution confirmation
+- command execution timeline for successful, blocked and failed tool runs
 - command confirmation details for risk, directory and expected effect before execution
 - controlled execution for `bash`, `read`, `glob`, `grep`, `edit` and `write`
 - explicit command status for success, blocked and failed states
 - recovery context for blocked or failed command attempts, so the assistant can
   continue with a permitted project-scoped next step
+- completion guard tracking for expected edits and pytest validation before
+  ending trusted development runs
 - workflow templates for test runs, failing-test analysis, TODO search, repository summaries, changelog drafts and Docker inspection
 - monitoring dashboard for command/API activity
 - keyboard shortcuts: Enter / Ctrl+Enter to send, Shift+Enter for newline
@@ -104,6 +108,7 @@ Relevant screenshot:
 - The UI is integrated with the authenticated backend.
 - Command execution is visible to the user instead of hidden behind chat text.
 - Blocked commands and failed/unsafe actions have explicit status.
+- Long assistant text and command output remain contained in the chat layout.
 - LLM usage and cost telemetry are part of the operator workflow.
 - DeepSeek settings, budget controls and project mutation scope are exposed in the product UI.
 - Admin users can inspect and manage project mutation permissions.

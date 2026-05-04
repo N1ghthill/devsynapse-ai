@@ -661,6 +661,7 @@ body {
   display: flex;
   gap: 12px;
   max-width: 800px;
+  min-width: 0;
   contain: layout style;
 }
 
@@ -710,6 +711,8 @@ body {
   border-radius: var(--radius-lg);
   padding: 12px 16px;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .message-user .message-content {
@@ -740,10 +743,61 @@ body {
 .message-body {
   font-size: 14px;
   line-height: 1.7;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.message-body > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.message-body a,
+.reasoning-body a {
+  color: var(--accent-hover);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.message-body ul,
+.message-body ol,
+.reasoning-body ul,
+.reasoning-body ol {
+  padding-left: 18px;
+}
+
+.message-body li,
+.reasoning-body li {
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+}
+
+.markdown-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
+.markdown-table-scroll table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+.markdown-table-scroll th,
+.markdown-table-scroll td {
+  padding: 6px 8px;
+  border: 1px solid var(--border-light);
+  vertical-align: top;
+  overflow-wrap: anywhere;
 }
 
 .message-body p {
   margin-bottom: 8px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .message-body p:last-child {
@@ -826,6 +880,10 @@ body {
   gap: 8px;
   max-width: 100%;
   min-width: 0;
+}
+
+.message-command-main svg {
+  flex: 0 0 auto;
 }
 
 .message-command-text {
@@ -1035,6 +1093,8 @@ body {
   background: var(--bg-primary);
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
 }
 
@@ -1053,6 +1113,7 @@ body {
   font-size: 12px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  word-break: break-word;
   color: var(--text-primary);
 }
 
@@ -1093,6 +1154,7 @@ body {
   font-size: 13px;
   line-height: 1.5;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
 .message-reasoning {
@@ -1128,7 +1190,10 @@ body {
   background: var(--bg-input);
   border-top: 1px solid var(--border-light);
   max-height: 400px;
-  overflow-y: auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: auto;
+  overflow-wrap: anywhere;
 }
 
 .reasoning-body p {
@@ -2949,6 +3014,7 @@ body {
 .message {
   width: min(860px, 100%);
   max-width: 860px;
+  min-width: 0;
 }
 
 .message-ai {
@@ -2978,6 +3044,9 @@ body {
 
 .message-content {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.14);
   border-radius: 8px;
   background: #121822;
@@ -2991,6 +3060,7 @@ body {
 
 .message-header {
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .message-role {
@@ -2999,6 +3069,10 @@ body {
 
 .message-body {
   color: var(--text-primary);
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .message-body code,
@@ -3028,11 +3102,14 @@ body {
   border-radius: 8px;
   background: rgba(15, 20, 27, 0.86);
   border-color: rgba(148, 163, 184, 0.16);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .message-command-header {
   align-items: center;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .message-command-main {
@@ -3154,6 +3231,7 @@ body {
 
 .chat-input-wrapper {
   min-height: 56px;
+  min-width: 0;
   border-color: rgba(148, 163, 184, 0.18);
   border-radius: 8px;
   background: var(--bg-input);
@@ -3392,7 +3470,7 @@ body {
 
 .message-content {
   position: relative;
-  overflow: visible;
+  overflow: hidden;
   padding: 16px 18px;
   contain: layout;
 }
@@ -3456,6 +3534,7 @@ body {
 
 .markdown-code-block {
   min-width: 0;
+  max-width: 100%;
   margin: 12px 0;
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.16);
@@ -3478,6 +3557,14 @@ body {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 800;
+  min-width: 0;
+}
+
+.markdown-code-header span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .markdown-code-header button {
@@ -3503,6 +3590,7 @@ body {
 .message-body .markdown-code-pre,
 .reasoning-body .markdown-code-pre {
   width: 100%;
+  max-width: 100%;
   max-height: min(54vh, 520px);
   margin: 0;
   padding: 14px;
@@ -3516,6 +3604,7 @@ body {
 .markdown-code-pre code {
   display: block;
   width: max-content;
+  max-width: none;
   min-width: 100%;
   padding: 0;
   background: transparent;
@@ -4188,6 +4277,7 @@ body {
 /* Chat composition cleanup */
 .message {
   width: min(900px, 100%);
+  min-width: 0;
 }
 
 .message-avatar {
@@ -4198,6 +4288,9 @@ body {
 .message-content {
   padding: 14px 16px;
   box-shadow: none;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .message-ai .message-content,
@@ -4221,6 +4314,16 @@ body {
 .message-body {
   font-size: 14px;
   line-height: 1.68;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.message-body img,
+.reasoning-body img {
+  max-width: 100%;
+  height: auto;
 }
 
 @media (max-width: 900px) {

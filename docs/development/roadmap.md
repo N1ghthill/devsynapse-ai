@@ -6,7 +6,7 @@ Do not present planned items as shipped behavior in user-facing documentation.
 
 ## Current Baseline
 
-The current documented baseline is `v0.8.3`, validated on `2026-05-04`.
+The current documented baseline is `v0.8.4`, validated on `2026-05-04`.
 It includes:
 
 - local-first FastAPI, React/Vite and SQLite architecture;
@@ -47,7 +47,11 @@ It includes:
 - recovery context for missing dependencies, blocked commands and normal command
   failures in auto-execution flows;
 - stuck-context awareness after repeated blocked or failed command outcomes;
+- completion guard tracking for expected edits and pytest validation during
+  trusted development-agent runs;
 - chat UI recovery through an error boundary and collapsible long command output;
+- contained chat wrapping for long assistant text, code blocks and command
+  output, with a command execution timeline in messages;
 - local-first security guardrails, localhost CORS defaults and exposed-host warnings;
 - documented local security model and operator checklist;
 - documented release platform support: Debian/Ubuntu-style Linux is the supported
@@ -72,6 +76,8 @@ These items should be treated as the next practical development focus:
 - continue sharpening the DeepSeek-first product path around cost visibility, setup clarity and reliable local workflows;
 - implement the remaining DeepSeek cost optimization plan, especially response cache, R1 Harvest and automatic quality scoring; see [deepseek-cost-optimization-plan.md](deepseek-cost-optimization-plan.md)
 - deepen end-to-end coverage around frontend command UX and long-running user sessions;
+- keep extending visual regression checks for dense chat output, project
+  workspaces and narrow desktop windows;
 - improve dashboard clarity for budget, usage, project cost and alert state;
 - tighten linting and formatting policy enforcement across backend and frontend;
 - improve contributor ergonomics for issues, pull requests and release preparation.

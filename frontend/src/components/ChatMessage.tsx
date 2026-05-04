@@ -120,10 +120,44 @@ function MarkdownCode({
 const markdownComponents = {
   pre: MarkdownPre,
   code: MarkdownCode,
+  a: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a {...props} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  ),
+  table: ({ children, ...props }: React.TableHTMLAttributes<HTMLTableElement>) => (
+    <div className="markdown-table-scroll">
+      <table {...props}>{children}</table>
+    </div>
+  ),
 };
 
 function getCommandType(command: string): string {
   return command.match(/^([a-z_][\w-]*)/i)?.[1]?.toLowerCase() || 'command';
+}
+
+function summarizeCommand(command: string): string {
+  const normalized = command.replace(/\s+/g, ' ').trim();
+  const writeMatch = normalized.match(/^write\s+"([^"]+)"/);
+  if (writeMatch?.[1]) return `Criar ${writeMatch[1].split('/').pop()}`;
+  const editMatch = normalized.match(/^edit\s+"([^"]+)"/);
+  if (editMatch?.[1]) return `Editar ${editMatch[1].split('/').pop()}`;
+  const readMatch = normalized.match(/^read\s+"([^"]+)"/);
+  if (readMatch?.[1]) return `Ler ${readMatch[1].split('/').pop()}`;
+  if (/pytest|npm test|vitest|cargo test/i.test(normalized)) return 'Rodar testes';
+  if (/npm run build|vite build|cargo build|make build/i.test(normalized)) return 'Gerar build';
+  if (/ls |find |rg |grep |git status/i.test(normalized)) return 'Inspecionar projeto';
+  return getCommandType(command);
+}
+
+function getTimelineStatus(status: Message['commandStatus']) {
+  if (status === 'success') return 'Concluído';
+  if (status === 'running') return 'Rodando';
+  if (status === 'failed') return 'Falhou';
+  if (status === 'blocked') return 'Bloqueado';
+  if (status === 'needs_manual_setup') return 'Setup manual';
+  if (status === 'ready_to_retry') return 'Pronto';
+  return 'Planejado';
 }
 
 function getCommandReview(command: string, projectName?: string | null): CommandReview {
@@ -288,6 +322,36 @@ export function ChatMessage({ message, onExecute, onRevalidate }: ChatMessagePro
     );
   };
 
+  const renderTimeline = () => {
+    if (toolRuns.length === 0) return null;
+    return (
+      <div className="command-timeline" aria-label="Linha do tempo da execução">
+        {toolRuns.map((toolRun) => {
+          const status = toolRun.status || 'proposed';
+          return (
+            <div key={toolRun.id} className={`command-timeline-row status-${status}`}>
+              <span className="command-timeline-icon" aria-hidden="true">
+                {status === 'success' && <CheckCircle2 size={13} />}
+                {status === 'running' && <Loader2 size={13} className="spinner" />}
+                {(status === 'failed' ||
+                  status === 'blocked' ||
+                  status === 'needs_manual_setup') && <ShieldAlert size={13} />}
+                {(status === 'proposed' || status === 'ready_to_retry') && <Terminal size={13} />}
+              </span>
+              <span className="command-timeline-main">
+                <span className="command-timeline-label">
+                  {summarizeCommand(toolRun.command)}
+                </span>
+                <span className="command-timeline-command">{toolRun.command}</span>
+              </span>
+              <span className="command-timeline-status">{getTimelineStatus(status)}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div
       className={`message ${isUser ? 'message-user' : 'message-ai'} ${
@@ -370,6 +434,8 @@ export function ChatMessage({ message, onExecute, onRevalidate }: ChatMessagePro
             )}
           </div>
         )}
+
+        {renderTimeline()}
 
         {toolRuns.map((toolRun) => {
           const status = toolRun.status || 'proposed';

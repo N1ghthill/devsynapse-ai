@@ -30,6 +30,14 @@ class LLMResult:
     reasoning_content: Optional[str] = None
 
 
+@dataclass
+class TaskChecklist:
+    expected_files: set[str]
+    completed_files: set[str]
+    requires_pytest: bool = False
+    pytest_passed: bool = False
+
+
 OPENCODE_TOOLS = [
     {
         "type": "function",
@@ -342,6 +350,10 @@ Blend deep technical skills with natural conversational communication.
 - Propose at most one tool call per response
 - When the user asks you to create, change, inspect, run, or continue implementation work,
   do not stop at "I'll do it". Emit exactly one tool call in that same response.
+- For implementation work, keep ownership of the task after each tool result: inspect,
+  edit, test, and summarize only when the requested work is genuinely complete or blocked.
+- Do not ask "should I continue?" after setup discovery, file listing, or a successful
+  intermediate command. Continue with the next useful project-scoped tool call.
 - For a small new project, use `write` for the first real file instead of `bash mkdir`;
   the write tool creates parent directories automatically.
 - After a tool result succeeds, keep advancing the same task with the next needed tool call.
@@ -1170,6 +1182,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
 
         messages = self._prepare_messages(user_message, context)
         route = self._select_llm_route(user_message, context)
+        checklist = self._build_task_checklist(user_message)
 
         if not self.deepseek.configured:
             fallback = self._get_fallback_response(messages)
@@ -1314,6 +1327,16 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                 messages = self._build_tool_repair_messages(user_message, context, full_response)
                 continue
 
+            if (
+                auto_execute
+                and checklist
+                and not opencode_command
+                and not self._task_checklist_complete(checklist)
+                and round_count < max_autoexec_rounds
+            ):
+                messages.extend(self._build_checklist_repair_messages(full_response, checklist))
+                continue
+
             if opencode_command:
                 yield {
                     "type": "command",
@@ -1370,6 +1393,8 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                 "reason_code": reason,
                 "project_name": proj,
             }
+            if success and checklist:
+                self._update_task_checklist(checklist, opencode_command, output)
             persisted_command = opencode_command
             yield {
                 "type": "command_result",
@@ -1642,6 +1667,85 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         return self._user_request_expects_tool(user_message)
 
     @staticmethod
+    def _build_task_checklist(user_message: str) -> Optional[TaskChecklist]:
+        """Extract a small objective completion checklist from implementation requests."""
+
+        text = user_message or ""
+        file_matches = re.findall(
+            r"(?<![\w./-])([\w.-]+(?:/[\w.-]+)*\.(?:py|tsx|ts|js|jsx|json|toml|md|css|html|rs|yml|yaml))(?![\w./-])",
+            text,
+            flags=re.IGNORECASE,
+        )
+        expected_files = {
+            match.strip("`'\".,;:()[]{}").lstrip("./")
+            for match in file_matches
+            if match.strip("`'\".,;:()[]{}")
+        }
+        requires_pytest = bool(re.search(r"\b(pytest|testes?\s+passar|tests?\s+pass)\b", text, re.I))
+        if not expected_files and not requires_pytest:
+            return None
+        return TaskChecklist(
+            expected_files=expected_files,
+            completed_files=set(),
+            requires_pytest=requires_pytest,
+        )
+
+    @staticmethod
+    def _update_task_checklist(
+        checklist: TaskChecklist,
+        command: str,
+        output: Optional[str],
+    ) -> None:
+        write_match = re.match(r'write\s+"([^"]+)"', command)
+        if write_match:
+            written_path = write_match.group(1).lstrip("./")
+            for expected_file in checklist.expected_files:
+                if written_path.endswith(expected_file):
+                    checklist.completed_files.add(expected_file)
+
+        if "pytest" in command.lower():
+            result_text = f"{output or ''}".lower()
+            if re.search(r"\b\d+\s+passed\b", result_text) or "passed" in result_text:
+                checklist.pytest_passed = True
+
+    @staticmethod
+    def _task_checklist_complete(checklist: TaskChecklist) -> bool:
+        files_done = checklist.expected_files.issubset(checklist.completed_files)
+        tests_done = not checklist.requires_pytest or checklist.pytest_passed
+        return files_done and tests_done
+
+    @staticmethod
+    def _task_checklist_status(checklist: TaskChecklist) -> str:
+        missing_files = sorted(checklist.expected_files - checklist.completed_files)
+        lines = []
+        if checklist.expected_files:
+            done = sorted(checklist.completed_files)
+            lines.append(f"Files done: {', '.join(done) if done else '(none)'}")
+            lines.append(f"Files missing: {', '.join(missing_files) if missing_files else '(none)'}")
+        if checklist.requires_pytest:
+            lines.append(f"Pytest passed: {'yes' if checklist.pytest_passed else 'no'}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_checklist_repair_messages(
+        assistant_text: str,
+        checklist: TaskChecklist,
+    ) -> List[Dict[str, str]]:
+        return [
+            {"role": "assistant", "content": assistant_text or "Continuing the task."},
+            {
+                "role": "user",
+                "content": (
+                    "The original task is not complete according to this objective checklist:\n"
+                    f"{DevSynapseBrain._task_checklist_status(checklist)}\n\n"
+                    "Continue the original task now. Emit exactly one next tool call. "
+                    "Do not provide a final summary until every listed file exists and "
+                    "the required test command has passed."
+                ),
+            },
+        ]
+
+    @staticmethod
     def _user_request_expects_tool(user_message: str) -> bool:
         normalized = " ".join((user_message or "").strip().lower().split())
         if not normalized:
@@ -1670,6 +1774,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         pending_action_patterns = [
             r"\b(vou|irei|vamos)\s+(criar|escrever|gerar|montar|adicionar|editar|salvar|rodar|executar|ler|listar|inspecionar)\b",
             r"\b(agora|em seguida)\s+(vou|vamos)\s+(criar|escrever|gerar|montar|adicionar|editar|salvar|rodar|executar|ler|listar|inspecionar)\b",
+            r"\b(agora|em seguida|pr[oó]ximo|next)\s+(?:o|a|os|as|the)?\s*[`'\"*_]*(arquivo|readme(?:\.md)?|teste|testes|c[oó]digo|pacote|m[oó]dulo|pyproject(?:\.toml)?|file|test|tests|code|package|module)\b[^.!?]*:?\s*$",
             r"\b(i'?ll|i will|let me|i am going to|i'm going to)\s+(create|write|generate|add|edit|save|run|execute|read|list|inspect)\b",
         ]
         return any(re.search(pattern, normalized) for pattern in pending_action_patterns)

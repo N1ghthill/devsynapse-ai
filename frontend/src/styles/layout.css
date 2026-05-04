@@ -1,0 +1,132 @@
+/* Cross-page compact controls and labels. Loaded after index.css. */
+
+.sidebar-kicker,
+.nav-section-label,
+.sidebar-status span,
+.nav-item,
+.nav-item span,
+.logout-btn,
+.logout-btn span,
+.new-chat-btn,
+.new-chat-btn span,
+.top-new-chat-btn,
+.project-manager-open,
+.project-menu-manage,
+.project-create-toggle,
+.project-action-btn,
+.project-status-tabs button,
+.dashboard-filter-btn,
+.save-btn,
+.auto-approve-toggle,
+.auto-approve-toggle span,
+.command-status-badge,
+.execute-btn,
+.usage-pill,
+.scope-chip,
+.conversation-project-chip,
+.message-project-chip,
+.context-pill,
+.project-status-chip,
+.status-badge,
+.model-chip {
+  white-space: nowrap;
+}
+
+.sidebar-kicker,
+.nav-section-label,
+.sidebar-status span,
+.nav-item span,
+.user-role,
+.conversation-project-chip,
+.message-project-chip,
+.scope-chip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-item,
+.logout-btn,
+.new-chat-btn,
+.top-new-chat-btn,
+.project-manager-open,
+.project-menu-manage,
+.project-create-toggle,
+.project-action-btn,
+.project-status-tabs button,
+.dashboard-filter-btn,
+.save-btn,
+.auto-approve-toggle,
+.execute-btn {
+  flex-wrap: nowrap;
+}
+
+.nav-item svg,
+.logout-btn svg,
+.new-chat-btn svg,
+.top-new-chat-btn svg,
+.project-manager-open svg,
+.project-action-btn svg,
+.dashboard-filter-btn svg,
+.save-btn svg,
+.auto-approve-toggle svg,
+.execute-btn svg {
+  flex: 0 0 auto;
+}
+
+.conversation-title {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
+.conversation-preview {
+  -webkit-line-clamp: 2;
+  line-height: 1.42;
+}
+
+.conversation-project-chip,
+.message-project-chip,
+.scope-chip {
+  max-width: 100%;
+}
+
+.conversation-metrics {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.conversation-metrics span {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.context-metrics {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.context-metrics::-webkit-scrollbar {
+  display: none;
+}
+
+.context-pill {
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.context-pill span,
+.context-pill strong {
+  white-space: nowrap;
+}
+
+.auto-approve-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
