@@ -3,7 +3,7 @@
 This document is the source of truth for desktop artifacts that can be linked
 from a public landing page.
 
-## Status As Of 2026-05-03
+## Status As Of 2026-05-04
 
 Release-candidate checks completed locally:
 
@@ -17,8 +17,8 @@ Expected artifacts:
 
 | Platform | Artifact | Status |
 | --- | --- | --- |
-| Linux x86_64 | `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.8.2_amd64.deb` | pending release workflow |
-| Linux x86_64 | `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.8.2-1.x86_64.rpm` | pending release workflow |
+| Linux x86_64 | `frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.8.3_amd64.deb` | pending release workflow |
+| Linux x86_64 | `frontend/src-tauri/target/release/bundle/rpm/DevSynapse AI-0.8.3-1.x86_64.rpm` | pending release workflow |
 | Linux x86_64 | AppImage | opt-in only; not part of the default build because `linuxdeploy` is environment-sensitive |
 | macOS | `.dmg` / `.app` bundle | configured but not validated in this repository yet |
 | Windows x86_64 | NSIS installer | validated in GitHub Actions |
@@ -85,13 +85,13 @@ per supported platform:
 
 ```bash
 python3 scripts/generate-tauri-update-manifest.py \
-  --version 0.8.2 \
+  --version 0.8.3 \
   --platform linux-x86_64 \
-  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.8.2/DevSynapse_AI_0.8.2_amd64.deb" \
-  --signature-file "frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.8.2_amd64.deb.sig" \
+  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.8.3/DevSynapse_AI_0.8.3_amd64.deb" \
+  --signature-file "frontend/src-tauri/target/release/bundle/deb/DevSynapse AI_0.8.3_amd64.deb.sig" \
   --platform windows-x86_64 \
-  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.8.2/DevSynapse_AI_0.8.2_x64-setup.exe" \
-  --signature-file "frontend/src-tauri/target/release/bundle/nsis/DevSynapse AI_0.8.2_x64-setup.exe.sig" \
+  --url "https://github.com/N1ghthill/devsynapse-ai/releases/download/v0.8.3/DevSynapse_AI_0.8.3_x64-setup.exe" \
+  --signature-file "frontend/src-tauri/target/release/bundle/nsis/DevSynapse AI_0.8.3_x64-setup.exe.sig" \
   --notes "Release notes" \
   --output latest.json
 ```

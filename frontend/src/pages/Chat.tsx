@@ -26,9 +26,11 @@ import type {
   BudgetWindowStatus,
   ConversationSummary,
   Message,
+  PrerequisiteCheckList,
   ProjectInfo,
   TokenUsage,
   ToolRun,
+  CommandExecutionStatus,
 } from '../types';
 
 const CONVERSATION_STORAGE_KEY = 'devsynapse_conversation_id';
@@ -84,8 +86,27 @@ const reasonLabels: Record<string, string> = {
   validation_failed: 'Bloqueado por regra de segurança do comando.',
   authorization_failed: 'Bloqueado por permissão ou escopo de projeto.',
   execution_failed: 'O comando foi aceito, mas falhou durante a execução.',
+  interactive_sudo_required:
+    'Este comando exige senha ou terminal interativo para sudo. Execute essa etapa manualmente no terminal e depois continue o chat.',
+  privileged_setup_required:
+    'Esta etapa precisa de setup privilegiado fora do chat. Execute no terminal e use Revalidar para continuar.',
   plugin_cancelled: 'A execução foi cancelada por uma regra interna do sistema.',
   project_scope_mismatch: 'Bloqueado porque o comando tentou sair do projeto da conversa.',
+};
+
+const manualSetupReasonCodes = new Set([
+  'interactive_sudo_required',
+  'privileged_setup_required',
+]);
+
+const displayStatusForCommandResult = (
+  status: 'success' | 'blocked' | 'failed',
+  reasonCode?: string | null
+): CommandExecutionStatus => {
+  if (reasonCode && manualSetupReasonCodes.has(reasonCode)) {
+    return 'needs_manual_setup';
+  }
+  return status;
 };
 
 export function Chat() {
@@ -405,6 +426,12 @@ export function Chat() {
 
   const completionTextForToolRuns = (toolRuns: ToolRun[]) => {
     if (toolRuns.length === 0) return '';
+    if (toolRuns.some((toolRun) => toolRun.status === 'needs_manual_setup')) {
+      return 'A execução parou em uma etapa de setup manual. Execute os pré-requisitos no terminal e use Revalidar para continuar.';
+    }
+    if (toolRuns.some((toolRun) => toolRun.status === 'ready_to_retry')) {
+      return 'Pré-requisitos revalidados. O chat pode continuar a partir daqui.';
+    }
     if (toolRuns.some((toolRun) => toolRun.status === 'blocked')) {
       return 'A execução foi interrompida por uma regra de segurança ou escopo. Revise o resultado do comando abaixo.';
     }
@@ -630,6 +657,9 @@ export function Chat() {
     if (rawMessage && /tempo|timeout|expirou/i.test(rawMessage)) {
       return `A execução excedeu o tempo limite.${projectSuffix}`;
     }
+    if (rawMessage && /sudo:|terminal.*senha|password.*required|askpass|no tty/i.test(rawMessage)) {
+      return `Este comando exige senha ou terminal interativo para sudo. Execute essa etapa manualmente no terminal e depois continue o chat.${projectSuffix}`;
+    }
     return `A execução falhou e precisa de revisão.${projectSuffix}`;
   };
 
@@ -713,13 +743,14 @@ export function Chat() {
         },
         (command, result) => {
           flushStreamBuffer();
+          const displayStatus = displayStatusForCommandResult(result.status, result.reason_code);
           updateToolRun(assistantMessageId, command, {
-            status: result.status,
+            status: displayStatus,
             result: result.output || result.message,
             message: describeExecution(
               result.status,
               result.reason_code,
-              result.message,
+              `${result.message}\n${result.output || ''}`,
               result.project_name
             ),
             reasonCode: result.reason_code,
@@ -839,6 +870,7 @@ export function Chat() {
       });
 
       if (targetToolRun) {
+        const displayStatus = displayStatusForCommandResult(response.status, response.reason_code);
         setMessages((prev) =>
           prev.map((message) =>
             message.id === messageId
@@ -848,12 +880,12 @@ export function Chat() {
                     toolRun.id === toolRunId
                       ? {
                           ...toolRun,
-                          status: response.status,
+                          status: displayStatus,
                           result: response.output || response.message,
                           message: describeExecution(
                             response.status,
                             response.reason_code,
-                            response.message,
+                            `${response.message}\n${response.output || ''}`,
                             response.project_name
                           ),
                           reasonCode: response.reason_code,
@@ -866,8 +898,9 @@ export function Chat() {
           )
         );
       } else {
+        const displayStatus = displayStatusForCommandResult(response.status, response.reason_code);
         updateMessage(messageId, {
-          commandStatus: response.status,
+          commandStatus: displayStatus,
           commandResult: response.output || response.message,
           reasonCode: response.reason_code,
           projectName: response.project_name,
@@ -875,7 +908,7 @@ export function Chat() {
           commandNote: describeExecution(
             response.status,
             response.reason_code,
-            response.message,
+            `${response.message}\n${response.output || ''}`,
             response.project_name
           ),
         });
@@ -922,6 +955,85 @@ export function Chat() {
           commandNote: describeExecution('failed', undefined, detail),
         });
       }
+    }
+  };
+
+  const formatPrerequisiteSummary = (result: PrerequisiteCheckList) => {
+    const rows = result.checks.map((check) => {
+      const marker = check.installed ? 'OK' : 'Falta';
+      const hint = check.installed || !check.install_hint ? '' : `\n  ${check.install_hint}`;
+      return `${marker} ${check.name}: ${check.detail}${hint}`;
+    });
+    return rows.join('\n');
+  };
+
+  const updateManualSetupRun = (
+    messageId: string,
+    toolRunId: string | undefined,
+    updates: Partial<ToolRun> & Pick<ToolRun, 'status'>
+  ) => {
+    if (toolRunId) {
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                toolRuns: (message.toolRuns || []).map((toolRun) =>
+                  toolRun.id === toolRunId ? { ...toolRun, ...updates } : toolRun
+                ),
+              }
+            : message
+        )
+      );
+      return;
+    }
+
+    updateMessage(messageId, {
+      commandStatus: updates.status,
+      commandResult: updates.result,
+      commandNote: updates.message,
+    });
+  };
+
+  const handleRevalidatePrerequisites = async (messageId: string, toolRunId?: string) => {
+    const targetMessage = messages.find((message) => message.id === messageId);
+    if (!targetMessage || isLoading) return;
+
+    updateManualSetupRun(messageId, toolRunId, {
+      status: 'running',
+      result: 'Revalidando pré-requisitos seguros...',
+      message: 'Verificando ferramentas disponíveis sem executar comandos privilegiados.',
+    });
+
+    try {
+      const result = await chatApi.checkPrerequisites(conversationId, currentScopeProject);
+      const summary = formatPrerequisiteSummary(result);
+      const missing = result.checks
+        .filter((check) => !check.installed)
+        .map((check) => check.name);
+
+      updateManualSetupRun(messageId, toolRunId, {
+        status: result.ready ? 'ready_to_retry' : 'needs_manual_setup',
+        result: summary,
+        message: result.ready
+          ? 'Pré-requisitos revalidados. Continuando o fluxo.'
+          : `Ainda faltam: ${missing.join(', ')}. Instale no terminal e revalide novamente.`,
+      });
+
+      if (result.ready) {
+        await handleSend(
+          `Pré-requisitos revalidados para ${
+            result.project_name || currentScopeProject || 'a conversa atual'
+          }:\n\n${summary}\n\nContinue o trabalho a partir do ponto onde parou, sem usar sudo.`
+        );
+      }
+    } catch (error) {
+      const detail = getRequestError(error, 'Falha ao revalidar pré-requisitos');
+      updateManualSetupRun(messageId, toolRunId, {
+        status: 'needs_manual_setup',
+        result: detail,
+        message: detail,
+      });
     }
   };
 
@@ -1157,6 +1269,7 @@ export function Chat() {
             key={msg.id}
             message={msg}
             onExecute={handleExecute}
+            onRevalidate={handleRevalidatePrerequisites}
           />
         ))}
 

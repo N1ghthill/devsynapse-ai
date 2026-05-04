@@ -13,6 +13,7 @@ import {
   Folder,
   Loader2,
   Play,
+  RefreshCw,
   ShieldAlert,
   Terminal,
   User,
@@ -22,6 +23,7 @@ import type { Message } from '../types';
 interface ChatMessageProps {
   message: Message;
   onExecute: (messageId: string, toolRunId?: string) => void;
+  onRevalidate?: (messageId: string, toolRunId?: string) => void;
 }
 
 const statusLabels = {
@@ -30,6 +32,8 @@ const statusLabels = {
   success: 'Executado',
   blocked: 'Bloqueado',
   failed: 'Falhou',
+  needs_manual_setup: 'Setup manual',
+  ready_to_retry: 'Pronto',
 } as const;
 
 type CommandRisk = 'low' | 'medium' | 'high';
@@ -185,7 +189,10 @@ function getCommandReview(command: string, projectName?: string | null): Command
   };
 }
 
-export function ChatMessage({ message, onExecute }: ChatMessageProps) {
+const needsManualSetup = (reasonCode?: string | null) =>
+  reasonCode === 'privileged_setup_required' || reasonCode === 'interactive_sudo_required';
+
+export function ChatMessage({ message, onExecute, onRevalidate }: ChatMessageProps) {
   const [copied, setCopied] = React.useState(false);
   const [reasoningOpen, setReasoningOpen] = React.useState(false);
   const [expandedResults, setExpandedResults] = React.useState<Set<string>>(new Set());
@@ -208,7 +215,11 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const canExecute = Boolean(message.command) && commandStatus !== 'running' && commandStatus !== 'success';
+  const canExecute =
+    Boolean(message.command) &&
+    commandStatus !== 'running' &&
+    commandStatus !== 'success' &&
+    commandStatus !== 'needs_manual_setup';
   const renderCommandReview = (command: string, projectName?: string | null) => {
     const review = getCommandReview(command, projectName);
     return (
@@ -362,7 +373,9 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
 
         {toolRuns.map((toolRun) => {
           const status = toolRun.status || 'proposed';
-          const canRunTool = status !== 'running' && status !== 'success';
+          const showRevalidate = needsManualSetup(toolRun.reasonCode);
+          const canRunTool =
+            status !== 'running' && status !== 'success' && status !== 'needs_manual_setup';
 
           return (
             <div key={toolRun.id} className={`message-command command-${status}`}>
@@ -378,21 +391,35 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
                   {status === 'running' && <Loader2 size={12} className="spinner" />}
                   {status === 'success' && <CheckCircle2 size={12} />}
                   {status === 'blocked' && <ShieldAlert size={12} />}
+                  {status === 'needs_manual_setup' && <ShieldAlert size={12} />}
+                  {status === 'ready_to_retry' && <CheckCircle2 size={12} />}
                   {statusLabels[status]}
                 </span>
-                <button
-                  className="execute-btn"
-                  onClick={() => onExecute(message.id, toolRun.id)}
-                  disabled={!canRunTool}
-                  aria-label="Executar comando"
-                >
-                  {status === 'running' ? (
-                    <Loader2 size={14} className="spinner" />
-                  ) : (
-                    <Play size={14} />
-                  )}
-                  {status === 'running' ? 'Executando...' : 'Executar'}
-                </button>
+                {showRevalidate ? (
+                  <button
+                    className="execute-btn"
+                    onClick={() => onRevalidate?.(message.id, toolRun.id)}
+                    disabled={!onRevalidate || status === 'running'}
+                    aria-label="Revalidar pré-requisitos"
+                  >
+                    <RefreshCw size={14} />
+                    Revalidar
+                  </button>
+                ) : (
+                  <button
+                    className="execute-btn"
+                    onClick={() => onExecute(message.id, toolRun.id)}
+                    disabled={!canRunTool}
+                    aria-label="Executar comando"
+                  >
+                    {status === 'running' ? (
+                      <Loader2 size={14} className="spinner" />
+                    ) : (
+                      <Play size={14} />
+                    )}
+                    {status === 'running' ? 'Executando...' : 'Executar'}
+                  </button>
+                )}
               </div>
               {renderCommandReview(toolRun.command, toolRun.projectName || message.projectName)}
               {renderCommandResult(toolRun.id, status, toolRun.result, toolRun.message)}
@@ -414,21 +441,35 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
                 {commandStatus === 'running' && <Loader2 size={12} className="spinner" />}
                 {commandStatus === 'success' && <CheckCircle2 size={12} />}
                 {commandStatus === 'blocked' && <ShieldAlert size={12} />}
+                {commandStatus === 'needs_manual_setup' && <ShieldAlert size={12} />}
+                {commandStatus === 'ready_to_retry' && <CheckCircle2 size={12} />}
                 {statusLabels[commandStatus]}
               </span>
-              <button
-                className="execute-btn"
-                onClick={() => onExecute(message.id)}
-                disabled={!canExecute}
-                aria-label="Executar comando"
-              >
-                {commandStatus === 'running' ? (
-                  <Loader2 size={14} className="spinner" />
-                ) : (
-                  <Play size={14} />
-                )}
-                {commandStatus === 'running' ? 'Executando...' : 'Executar'}
-              </button>
+              {needsManualSetup(message.reasonCode) ? (
+                <button
+                  className="execute-btn"
+                  onClick={() => onRevalidate?.(message.id)}
+                  disabled={!onRevalidate || commandStatus === 'running'}
+                  aria-label="Revalidar pré-requisitos"
+                >
+                  <RefreshCw size={14} />
+                  Revalidar
+                </button>
+              ) : (
+                <button
+                  className="execute-btn"
+                  onClick={() => onExecute(message.id)}
+                  disabled={!canExecute}
+                  aria-label="Executar comando"
+                >
+                  {commandStatus === 'running' ? (
+                    <Loader2 size={14} className="spinner" />
+                  ) : (
+                    <Play size={14} />
+                  )}
+                  {commandStatus === 'running' ? 'Executando...' : 'Executar'}
+                </button>
+              )}
             </div>
             {commandReview && (
               renderCommandReview(message.command, message.projectName)

@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 POLICY_BLOCKED_COMMAND_TYPES = {
     "authorization_failed",
     "plugin_cancelled",
+    "privileged_setup_required",
     "project_scope_mismatch",
     "validation_failed",
 }

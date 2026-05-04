@@ -438,6 +438,61 @@ async def test_execute_returns_structured_success_status(route_services, tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_prerequisites_endpoint_returns_safe_checks(route_services):
+    from api.routes.chat import check_prerequisites
+
+    response = await check_prerequisites(
+        conversation_id=None,
+        project_name=PROJECT_NAME,
+        user=route_services.user,
+        memory_system=route_services.memory,
+    )
+
+    assert response.project_name == PROJECT_NAME
+    assert response.checks
+    assert all("sudo" not in check.command for check in response.checks)
+    assert isinstance(response.ready, bool)
+
+
+@pytest.mark.asyncio
+async def test_discover_llm_models_persists_catalog(route_services, monkeypatch):
+    from api.routes import settings as settings_routes
+
+    monkeypatch.setattr(
+        settings_routes,
+        "fetch_openrouter_models",
+        lambda url: [
+            {
+                "provider": "openrouter",
+                "model_id": "vendor/cheap-model",
+                "name": "Cheap Model",
+                "context_length": 64000,
+                "input_cost_per_token": 0.00000001,
+                "output_cost_per_token": 0.00000002,
+                "cache_read_cost_per_token": None,
+                "raw_pricing": {"prompt": "0.00000001"},
+                "capabilities": {"supported_parameters": ["tools"]},
+                "source_url": url,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        settings_routes,
+        "fetch_openai_compatible_models",
+        lambda *args, **kwargs: [],
+    )
+
+    response = await settings_routes.discover_llm_models(
+        admin=route_services.admin,
+        memory_system=route_services.memory,
+    )
+
+    assert response.discovered >= 3
+    model = route_services.memory.get_llm_model("openrouter", "vendor/cheap-model")
+    assert model["context_length"] == 64000
+
+
+@pytest.mark.asyncio
 async def test_execute_returns_resolved_project_name(route_services):
     from api.models import CommandExecutionRequest
     from api.routes.chat import execute_command

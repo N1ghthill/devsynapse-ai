@@ -15,7 +15,9 @@ import type {
   DashboardStats,
   ExecuteCommandRequest,
   KnowledgeStats,
+  LlmModelCatalogEntry,
   Message,
+  PrerequisiteCheckList,
   ProjectMemory,
   ProjectMemoryCreateRequest,
   ProjectCreateRequest,
@@ -204,6 +206,19 @@ export const chatApi = {
 
   executeCommand: async (data: ExecuteCommandRequest): Promise<CommandResult> => {
     const response = await api.post<CommandResult>('/execute', data);
+    return response.data;
+  },
+
+  checkPrerequisites: async (
+    conversationId?: string,
+    projectName?: string | null
+  ): Promise<PrerequisiteCheckList> => {
+    const response = await api.get<PrerequisiteCheckList>('/prerequisites', {
+      params: {
+        ...(conversationId ? { conversation_id: conversationId } : {}),
+        ...(projectName ? { project_name: projectName } : {}),
+      },
+    });
     return response.data;
   },
 
@@ -425,8 +440,25 @@ export const settingsApi = {
     ) {
       delete payload.deepseek_api_key;
     }
+    for (const key of ['openrouter_api_key', 'opencode_zen_api_key', 'opencode_go_api_key'] as const) {
+      if (typeof payload[key] !== 'string' || payload[key].trim() === '') {
+        delete payload[key];
+      }
+    }
     const response = await api.put<SettingsData>('/settings', payload);
     return response.data;
+  },
+
+  discoverLlmModels: async (): Promise<{ discovered: number; providers: string[]; errors: Record<string, string> }> => {
+    const response = await api.post<{ discovered: number; providers: string[]; errors: Record<string, string> }>('/settings/llm/discover');
+    return response.data;
+  },
+
+  listLlmModels: async (provider?: string): Promise<LlmModelCatalogEntry[]> => {
+    const response = await api.get<{ models: LlmModelCatalogEntry[] }>('/settings/llm/models', {
+      params: provider ? { provider } : {},
+    });
+    return response.data.models || [];
   },
 
   listProjects: async (): Promise<ProjectInfo[]> => {

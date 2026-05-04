@@ -51,9 +51,10 @@ Stores:
 
 Stores:
 - mutable application settings
-- DeepSeek model and generation parameters
+- DeepSeek/OpenRouter/OpenCode credential presence and model parameters
 - daily/monthly budget controls
 - budget threshold percentages
+- adaptive routing controls
 
 These values back `/settings` and supplement environment defaults.
 
@@ -84,6 +85,36 @@ Stores:
 This lets the agent use prior local outcomes when choosing Flash or Pro, instead
 of treating every request as a stateless prompt. Learned patterns are local
 SQLite state and are surfaced in monitoring stats.
+
+### LLM model catalog
+
+Stores:
+- provider id (`deepseek`, `openrouter`, `opencode-go`, etc.)
+- provider model id and display name
+- context length when discovered
+- input, output and cache-read cost per token when available
+- raw provider pricing/capability metadata
+- source URL and discovery timestamps
+- enabled flag for routing eligibility
+
+The catalog is populated by deterministic provider adapters rather than model
+memory in the assistant. OpenRouter entries come from its Models API, OpenCode Go
+entries come from the OpenAI-compatible models endpoint when available, and
+direct DeepSeek entries are seeded from runtime pricing configuration.
+
+### LLM request telemetry
+
+Stores:
+- user id and conversation id
+- provider and model actually requested
+- routing reason, task type and complexity
+- success/error status
+- token usage, cache hit/miss tokens, reasoning tokens and estimated cost
+- first-token latency and total latency
+
+This table is separate from conversation history so the dashboard can report
+per-user/per-model cost, latency and error rate even when a conversation row is
+summarized or exported separately.
 
 ### Procedural memories
 
@@ -194,6 +225,9 @@ Contributors should add a new migration when:
   `done` event when attribution is available
 - agent learning is advisory: it can influence model routing, but budget-critical
   economy mode still wins over learned Pro preferences
+- adaptive LLM routing is advisory: it may choose a cheaper discovered model for
+  simple or budget-constrained work, but only when the provider is configured and
+  the catalog contains usable pricing
 - skill activation is advisory prompt context; shell/file effects still go through
   the existing command execution and authorization flow
 - agent runs are advisory execution state; command authorization and project

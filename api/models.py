@@ -140,6 +140,20 @@ class CommandExecutionResponse(BaseModel):
     interpretation: Optional[str] = None
 
 
+class PrerequisiteCheckResponse(BaseModel):
+    name: str
+    command: str
+    installed: bool
+    detail: str
+    install_hint: Optional[str] = None
+
+
+class PrerequisiteCheckListResponse(BaseModel):
+    project_name: Optional[str] = None
+    ready: bool
+    checks: list[PrerequisiteCheckResponse] = Field(default_factory=list)
+
+
 class FeedbackRequest(BaseModel):
     conversation_id: str
     feedback: str
@@ -413,6 +427,22 @@ class AgentLearningStatsResponse(BaseModel):
     by_model: list[AgentLearningModelCountResponse] = Field(default_factory=list)
 
 
+class LlmTelemetryUserModelResponse(BaseModel):
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    user_id: Optional[str] = None
+    request_count: int
+    error_count: int
+    error_rate: float
+    avg_first_token_latency_ms: Optional[float] = None
+    avg_total_latency_ms: Optional[float] = None
+    estimated_cost_usd: float
+
+
+class LlmTelemetryStatsResponse(BaseModel):
+    by_user_model: list[LlmTelemetryUserModelResponse] = Field(default_factory=list)
+
+
 class LlmUsageStatsResponse(BaseModel):
     totals: LlmUsageTotalsResponse
     by_day: list[LlmUsageDayResponse] = Field(default_factory=list)
@@ -421,6 +451,7 @@ class LlmUsageStatsResponse(BaseModel):
     budget: LlmBudgetStatusResponse
     agent_learning: AgentLearningStatsResponse
     knowledge: KnowledgeStatsResponse
+    telemetry: LlmTelemetryStatsResponse = Field(default_factory=LlmTelemetryStatsResponse)
 
 
 class SystemHealthResponse(BaseModel):
@@ -462,10 +493,14 @@ class DashboardStats(BaseModel):
 
 class SettingsResponse(BaseModel):
     deepseek_api_key: bool | str
+    openrouter_api_key: bool | str
+    opencode_zen_api_key: bool | str
+    opencode_go_api_key: bool | str
     deepseek_model: str
     deepseek_flash_model: str
     deepseek_pro_model: str
     llm_model_routing_enabled: bool
+    llm_adaptive_routing_enabled: bool
     llm_auto_economy_enabled: bool
     llm_cache_hit_warning_threshold_pct: float
     temperature: float
@@ -482,10 +517,14 @@ class SettingsResponse(BaseModel):
 
 class SettingsUpdateRequest(BaseModel):
     deepseek_api_key: Optional[str] = None
+    openrouter_api_key: Optional[str] = None
+    opencode_zen_api_key: Optional[str] = None
+    opencode_go_api_key: Optional[str] = None
     deepseek_model: Optional[str] = None
     deepseek_flash_model: Optional[str] = Field(default=None, min_length=1, max_length=120)
     deepseek_pro_model: Optional[str] = Field(default=None, min_length=1, max_length=120)
     llm_model_routing_enabled: Optional[bool] = None
+    llm_adaptive_routing_enabled: Optional[bool] = None
     llm_auto_economy_enabled: Optional[bool] = None
     llm_cache_hit_warning_threshold_pct: Optional[float] = Field(default=None, ge=0, le=100)
     temperature: Optional[float] = Field(default=None, ge=0, le=2)
@@ -495,6 +534,31 @@ class SettingsUpdateRequest(BaseModel):
     llm_monthly_budget_usd: Optional[float] = Field(default=None, ge=0)
     llm_budget_warning_threshold_pct: Optional[float] = Field(default=None, ge=0, le=100)
     llm_budget_critical_threshold_pct: Optional[float] = Field(default=None, ge=0, le=200)
+
+
+class LlmModelCatalogEntry(BaseModel):
+    provider: str
+    model_id: str
+    name: Optional[str] = None
+    context_length: Optional[int] = None
+    input_cost_per_token: Optional[float] = None
+    output_cost_per_token: Optional[float] = None
+    cache_read_cost_per_token: Optional[float] = None
+    capabilities: dict[str, Any] = Field(default_factory=dict)
+    source_url: Optional[str] = None
+    last_seen_at: str
+    enabled: bool
+
+
+class LlmModelCatalogResponse(BaseModel):
+    models: list[LlmModelCatalogEntry] = Field(default_factory=list)
+    count: int
+
+
+class LlmModelDiscoveryResponse(BaseModel):
+    discovered: int
+    providers: list[str] = Field(default_factory=list)
+    errors: dict[str, str] = Field(default_factory=dict)
 
 
 class ProjectSummaryResponse(BaseModel):

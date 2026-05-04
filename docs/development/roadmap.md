@@ -6,7 +6,7 @@ Do not present planned items as shipped behavior in user-facing documentation.
 
 ## Current Baseline
 
-The current documented baseline is `v0.8.2`, validated on `2026-05-04`.
+The current documented baseline is `v0.8.3`, validated on `2026-05-04`.
 It includes:
 
 - local-first FastAPI, React/Vite and SQLite architecture;
@@ -17,6 +17,8 @@ It includes:
 - conversation persistence, rehydration, rename and delete flows;
 - LLM token and cost telemetry;
 - dashboard usage reporting and CSV export;
+- per-user and per-model LLM request telemetry for token counts, cache hits,
+  latency, error rate and real or estimated cost;
 - DeepSeek cache hit-rate telemetry and Flash/Pro routing controls;
 - persistent agent learning from feedback, command outcomes and route decisions;
 - persistent agent task runs for original goals, command events, blocked/failed
@@ -24,6 +26,10 @@ It includes:
 - configurable daily/monthly LLM budget thresholds with alert emission (enabled by default);
 - contributor documentation, security policy and release notes;
 - DeepSeek-first API-key based LLM integration;
+- OpenRouter, OpenCode Go and OpenCode Zen API key configuration;
+- model discovery from OpenRouter, OpenCode Go and seeded direct providers;
+- adaptive routing that can prefer cheaper discovered models for simple work
+  while keeping stronger configured models for critical tasks;
 - native DeepSeek tool calling with strict function definitions and regex fallback;
 - configurable DeepSeek thinking mode and reasoning effort;
 - execution result interpretation after confirmed commands;

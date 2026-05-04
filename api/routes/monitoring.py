@@ -72,6 +72,7 @@ async def get_monitoring_stats(
             "budget": budget_status,
             "agent_learning": memory_system.get_agent_learning_stats(),
             "knowledge": memory_system.get_knowledge_stats(),
+            "telemetry": memory_system.get_llm_telemetry_stats(hours=hours),
         },
         active_alerts=monitoring_system.get_active_alerts(),
     )

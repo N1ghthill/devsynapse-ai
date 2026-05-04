@@ -87,6 +87,7 @@ export function Dashboard() {
   const budget = stats?.llm_usage?.budget;
   const agentLearning = stats?.llm_usage?.agent_learning;
   const knowledge = stats?.llm_usage?.knowledge;
+  const telemetry = stats?.llm_usage?.telemetry?.by_user_model || [];
   const maxDailyCost = Math.max(...costSeries.map((item) => item.estimated_cost_usd), 0.000001);
   const maxProjectCost = Math.max(
     ...projectSeries.map((item) => item.estimated_cost_usd),
@@ -493,6 +494,33 @@ export function Dashboard() {
               <p>Nenhum alerta ativo</p>
             </div>
           )}
+        </div>
+
+        <div className="dashboard-card full-width">
+          <h3>Telemetria por Usuário e Modelo</h3>
+          <div className="chart-container">
+            {telemetry.length ? (
+              telemetry.slice(0, 8).map((item) => (
+                <div
+                  key={`${item.user_id || 'anon'}:${item.provider || 'n/a'}:${item.model || 'n/a'}`}
+                  className="chart-bar"
+                >
+                  <div className="chart-bar-label">
+                    {(item.user_id || 'sem usuário')} · {item.provider}/{item.model}
+                  </div>
+                  <div className="chart-bar-value">
+                    {item.request_count} req · erro {(item.error_rate * 100).toFixed(1)}% · TTFT{' '}
+                    {Math.round(item.avg_first_token_latency_ms || 0)}ms · total{' '}
+                    {Math.round(item.avg_total_latency_ms || 0)}ms · {formatUsd(item.estimated_cost_usd)}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="empty-section">
+                <p>Sem telemetria de modelo suficiente para o período.</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

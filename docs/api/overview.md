@@ -45,6 +45,7 @@ Purpose:
 - `DELETE /conversations/{conversation_id}`
 - `GET /conversations/export/usage.csv`
 - `POST /execute`
+- `GET /prerequisites`
 - `POST /feedback`
 
 Purpose:
@@ -89,12 +90,17 @@ Purpose:
 
 - `GET /settings`
 - `PUT /settings`
+- `GET /settings/llm/models`
+- `POST /settings/llm/discover`
 - `GET /projects`
 
 Purpose:
 - inspect runtime-adjustable settings
 - update global runtime-adjustable settings as an admin
-- configure the DeepSeek API key, default/Flash/Pro models, routing mode, cache threshold and generation limits
+- configure DeepSeek, OpenRouter, OpenCode Zen and OpenCode Go API keys,
+  default/Flash/Pro models, routing mode, cache threshold and generation limits
+- discover and list LLM model offers from provider model endpoints, including
+  pricing metadata when providers expose it
 - list project metadata for user-facing project selection without exposing local paths
 
 ### Admin
@@ -128,6 +134,13 @@ Purpose:
 - automatic execution can continue after ordinary command failures and recoverable
   policy blocks by feeding the result back to the model; blacklisted commands,
   plugin cancellations and unsupported tool types still do not run
+- command failures that require an interactive `sudo` password or TTY return
+  `reason_code=interactive_sudo_required` so clients can show a manual terminal
+  instruction instead of treating the failure as recoverable agent work
+- commands containing `sudo` are blocked before execution with
+  `reason_code=privileged_setup_required`; `/prerequisites` runs fixed,
+  non-privileged version checks such as `node --version`, `rustc --version` and
+  `cargo tauri --version` so the UI can revalidate manual setup and continue
 - `/execute` returns structured execution status, reason code and project context
 - `/execute` normalizes common LLM placeholder paths such as `/home/user/projects`, `~/projects` and `/workspace` to the configured local repository/workspace roots before validation and execution; if a mutating command points outside the selected conversation project, execution is blocked with `project_scope_mismatch`, while read-only reference commands can inspect other allowed or registered repositories
 - chat auto-execution records an agent task run for action-oriented requests;
@@ -135,7 +148,16 @@ Purpose:
   are persisted as run events and injected into later prompt context
 - `/chat/history`, `/conversations` and `/conversations/{conversation_id}` include persisted `project_name` when available
 - `/monitoring/stats` includes `llm_usage` aggregates, cache hit-rate telemetry, project-level breakdown, agent learning stats and budget status snapshots
+- `/monitoring/stats` also includes `llm_usage.telemetry.by_user_model` with
+  per-user/per-provider/per-model request counts, error rate, average first-token
+  latency, average total latency and estimated cost
 - `/monitoring/stats` also includes `llm_usage.knowledge` with memory, skill and nudge aggregates
+- `/settings/llm/discover` persists model catalog entries in
+  `llm_model_catalog`. OpenRouter discovery reads
+  `https://openrouter.ai/api/v1/models`; OpenCode Go discovery reads
+  `https://opencode.ai/zen/go/v1/models` when available. The direct DeepSeek
+  entries are seeded from runtime pricing configuration so routing can compare
+  direct and brokered models through one catalog.
 - alert list, alert resolution, settings updates and skill deletion use explicit response models in `api/models.py`
 - `/memories` returns both base `confidence_score` and computed `effective_confidence`; the effective score applies `memory_decay_score`, evidence and access signals
 - skill writes create `SKILL.md` files under the local DevSynapse data directory by default; explicit project skills use `.devsynapse/skills` inside the registered project

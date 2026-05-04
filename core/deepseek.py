@@ -26,6 +26,7 @@ class DeepSeekClient:
         request_timeout: int,
         flash_pricing: Optional[Dict[str, Decimal]] = None,
         pro_pricing: Optional[Dict[str, Decimal]] = None,
+        provider_configs: Optional[Dict[str, Dict[str, Optional[str]]]] = None,
     ):
         self.api_key = api_key
         self.model = model
@@ -37,16 +38,39 @@ class DeepSeekClient:
         self.request_timeout = request_timeout
         self.flash_pricing = flash_pricing or {}
         self.pro_pricing = pro_pricing or {}
+        self.provider_configs = provider_configs or {}
 
     @property
     def configured(self) -> bool:
-        return bool(self.api_key)
+        return bool(self.api_key or any(cfg.get("api_key") for cfg in self.provider_configs.values()))
 
-    def _build_headers(self) -> Dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self.api_key}",
+    def _resolve_provider_model(self, model: Optional[str]) -> tuple[str, str, str, Optional[str]]:
+        selected = model or self.model
+        if ":" in selected:
+            provider, provider_model = selected.split(":", 1)
+        else:
+            provider, provider_model = "deepseek", selected
+
+        if provider == "deepseek":
+            return provider, provider_model, self.base_url, self.api_key
+
+        config = self.provider_configs.get(provider) or {}
+        return (
+            provider,
+            provider_model,
+            str(config.get("base_url") or ""),
+            config.get("api_key"),
+        )
+
+    def _build_headers(self, provider: str, api_key: Optional[str]) -> Dict[str, str]:
+        headers = {
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+        if provider == "openrouter":
+            headers["HTTP-Referer"] = "http://127.0.0.1"
+            headers["X-Title"] = "DevSynapse AI"
+        return headers
 
     def _build_payload(
         self,
@@ -55,21 +79,25 @@ class DeepSeekClient:
         stream: bool,
         model: Optional[str] = None,
         tool_choice: Any = "auto",
+        provider: str = "deepseek",
     ) -> Dict:
-        thinking_config = {"type": "enabled" if self.thinking_enabled else "disabled"}
         payload: Dict[str, Any] = {
             "model": model or self.model,
             "messages": messages,
             "max_tokens": self.max_tokens,
             "stream": stream,
             "tools": tools,
-            "reasoning_effort": self.reasoning_effort,
-            "thinking": thinking_config,
         }
+        if provider == "deepseek":
+            thinking_config = {"type": "enabled" if self.thinking_enabled else "disabled"}
+            payload["reasoning_effort"] = self.reasoning_effort
+            payload["thinking"] = thinking_config
+            if not self.thinking_enabled:
+                payload["temperature"] = self.temperature
+        else:
+            payload["temperature"] = self.temperature
         if tools:
             payload["tool_choice"] = tool_choice
-        if not self.thinking_enabled:
-            payload["temperature"] = self.temperature
         return payload
 
     def chat_completion(
@@ -82,14 +110,17 @@ class DeepSeekClient:
         tool_choice: Any = "auto",
     ) -> Dict[str, Any]:
         """Non-streaming chat completion call."""
-        url = f"{self.base_url}/chat/completions"
-        request_model = model or self.model
+        provider, provider_model, base_url, api_key = self._resolve_provider_model(model)
+        if (provider != "deepseek" and not api_key) or not base_url:
+            raise RuntimeError(f"LLM provider not configured: {provider}")
+        url = f"{base_url}/chat/completions"
         payload = self._build_payload(
             messages,
             tools or [],
             stream=False,
-            model=request_model,
+            model=provider_model,
             tool_choice=tool_choice,
+            provider=provider,
         )
 
         if max_tokens is not None:
@@ -101,7 +132,7 @@ class DeepSeekClient:
 
         response = requests.post(
             url,
-            headers=self._build_headers(),
+            headers=self._build_headers(provider, api_key),
             json=payload,
             timeout=(5, self.request_timeout),
         )
@@ -111,14 +142,14 @@ class DeepSeekClient:
         choice = result["choices"][0]
         message = choice.get("message", {})
         usage = self._build_usage_snapshot(
-            provider="deepseek",
-            model=result.get("model") or request_model,
+            provider=provider,
+            model=result.get("model") or provider_model,
             usage=result.get("usage") or {},
         )
         return {
             "content": message.get("content") or "",
-            "provider": "deepseek",
-            "model": result.get("model") or request_model,
+            "provider": provider,
+            "model": result.get("model") or provider_model,
             "usage": usage,
             "tool_calls": message.get("tool_calls"),
             "reasoning_content": message.get("reasoning_content"),
@@ -134,14 +165,17 @@ class DeepSeekClient:
         """Streaming chat completion, yielding delta chunks."""
         import httpx
 
-        url = f"{self.base_url}/chat/completions"
-        request_model = model or self.model
+        provider, provider_model, base_url, api_key = self._resolve_provider_model(model)
+        if (provider != "deepseek" and not api_key) or not base_url:
+            raise RuntimeError(f"LLM provider not configured: {provider}")
+        url = f"{base_url}/chat/completions"
         payload = self._build_payload(
             messages,
             tools,
             stream=True,
-            model=request_model,
+            model=provider_model,
             tool_choice=tool_choice,
+            provider=provider,
         )
 
         collected_content = ""
@@ -153,7 +187,7 @@ class DeepSeekClient:
             async with client.stream(
                 "POST",
                 url,
-                headers=self._build_headers(),
+                headers=self._build_headers(provider, api_key),
                 json=payload,
                 timeout=httpx.Timeout(5.0, read=self.request_timeout),
             ) as response:
@@ -212,8 +246,8 @@ class DeepSeekClient:
         )
 
         usage = self._build_usage_snapshot(
-            provider="deepseek",
-            model=request_model,
+            provider=provider,
+            model=provider_model,
             usage=collected_usage or {},
         )
         yield {
@@ -232,6 +266,9 @@ class DeepSeekClient:
         total_tokens = int(usage.get("total_tokens") or (prompt_tokens + completion_tokens))
         prompt_cache_hit_tokens = int(usage.get("prompt_cache_hit_tokens") or 0)
         prompt_cache_miss_tokens = int(usage.get("prompt_cache_miss_tokens") or 0)
+        prompt_details = usage.get("prompt_tokens_details") or {}
+        if not prompt_cache_hit_tokens:
+            prompt_cache_hit_tokens = int(prompt_details.get("cached_tokens") or 0)
         reasoning_tokens = int(
             (usage.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
         )
@@ -239,13 +276,17 @@ class DeepSeekClient:
         if prompt_tokens and not prompt_cache_hit_tokens and not prompt_cache_miss_tokens:
             prompt_cache_miss_tokens = prompt_tokens
 
-        estimated_cost_usd = self._calculate_usage_cost(
-            provider=provider,
-            model=model,
-            prompt_cache_hit_tokens=prompt_cache_hit_tokens,
-            prompt_cache_miss_tokens=prompt_cache_miss_tokens,
-            completion_tokens=completion_tokens,
-        )
+        estimated_cost_usd = usage.get("cost")
+        if estimated_cost_usd is None:
+            estimated_cost_usd = self._calculate_usage_cost(
+                provider=provider,
+                model=model,
+                prompt_cache_hit_tokens=prompt_cache_hit_tokens,
+                prompt_cache_miss_tokens=prompt_cache_miss_tokens,
+                completion_tokens=completion_tokens,
+            )
+        elif estimated_cost_usd is not None:
+            estimated_cost_usd = float(estimated_cost_usd)
 
         return {
             "provider": provider,

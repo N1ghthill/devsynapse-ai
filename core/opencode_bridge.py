@@ -143,6 +143,23 @@ class OpenCodeBridge:
             return False, error_msg, None, "blocked", "authorization_failed", project_name
 
         args = self._normalize_placeholder_command_args(command_type, args)
+        if command_type == "bash" and self._requires_privileged_setup(args[0] if args else ""):
+            error_msg = (
+                "Comandos com sudo não são executados pelo chat. Execute a etapa privilegiada "
+                "manualmente no terminal e use Revalidar pré-requisitos para continuar."
+            )
+            execution_time = time.time() - start_time
+            self.monitoring_system.log_command_execution(
+                command_type="privileged_setup_required",
+                command_text=command[:200],
+                success=False,
+                execution_time=execution_time,
+                user_id=user_id,
+                project_name=project_name,
+                error_message=error_msg,
+            )
+            return False, error_msg, None, "blocked", "privileged_setup_required", project_name
+
         resolved_project_name = self._infer_project_name(command_type, args, project_name)
         self._register_repos_project_if_needed(resolved_project_name)
         if (
@@ -258,6 +275,8 @@ class OpenCodeBridge:
         success, message, output = result
         status = "success" if success else "failed"
         reason_code = None if success else "execution_failed"
+        if not success and self._looks_like_interactive_sudo_failure(message, output):
+            reason_code = "interactive_sudo_required"
         
         # Log da execução
         self.monitoring_system.log_command_execution(
@@ -290,6 +309,33 @@ class OpenCodeBridge:
         )
 
         return success, message, output, status, reason_code, effective_project_name
+
+    @staticmethod
+    def _looks_like_interactive_sudo_failure(
+        message: Optional[str],
+        output: Optional[str],
+    ) -> bool:
+        """Detect sudo failures that require a terminal/password outside the app."""
+
+        text = f"{message or ''}\n{output or ''}".lower()
+        sudo_markers = [
+            "sudo:",
+            "a terminal is required",
+            "um terminal é necessário",
+            "a password is required",
+            "uma senha é necessária",
+            "no tty present",
+            "askpass",
+        ]
+        return "sudo" in text and any(marker in text for marker in sudo_markers)
+
+    @staticmethod
+    def _requires_privileged_setup(command: str) -> bool:
+        try:
+            parts = shlex.split(command)
+        except ValueError:
+            return bool(re.search(r"(^|[;&|]\s*)sudo(\s|$)", command))
+        return "sudo" in {part.lower() for part in parts}
 
     def _normalize_placeholder_command_args(
         self,
@@ -860,7 +906,7 @@ class OpenCodeBridge:
             if trusted_shell:
                 if not command.strip():
                     return False, "Comando vazio", None
-                command_to_run = command
+                command_to_run = ["/bin/bash", "-o", "pipefail", "-c", command]
             else:
                 parts = shlex.split(command)
                 if not parts:
@@ -881,7 +927,7 @@ class OpenCodeBridge:
                 text=True,
                 timeout=OPENCODE_TIMEOUT,
                 cwd=exec_cwd,
-                shell=trusted_shell,
+                shell=False,
             )
             
             output = result.stdout

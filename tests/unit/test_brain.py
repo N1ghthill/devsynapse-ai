@@ -723,6 +723,80 @@ class TestDevSynapseBrain:
         assert mock_bridge.execute_command.await_count == 2
 
     @pytest.mark.asyncio
+    async def test_streaming_admin_auto_mode_stops_on_interactive_sudo_failure(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        brain.api_key = "test-key"
+        mock_bridge.execute_command = AsyncMock(
+            return_value=(
+                False,
+                "Comando falhou (exit code: 1)",
+                (
+                    "STDERR:\n"
+                    "sudo: um terminal é necessário para ler a senha; use a opção -S\n"
+                    "sudo: uma senha é necessária"
+                ),
+                "failed",
+                "interactive_sudo_required",
+                "llama-player",
+            )
+        )
+
+        async def stream_sudo_command(*args, **kwargs):
+            del args, kwargs
+            yield {"type": "text", "content": "Vou instalar as dependências."}
+            yield {
+                "type": "done",
+                "content": "Vou instalar as dependências.",
+                "usage": None,
+                "tool_calls": [
+                    {
+                        "id": "call_apt",
+                        "type": "function",
+                        "function": {
+                            "name": "bash",
+                            "arguments": json.dumps({
+                                "command": "sudo apt-get update -qq | tail -3",
+                            }),
+                        },
+                    }
+                ],
+            }
+
+        with patch.object(
+            brain.deepseek,
+            "chat_completion_streaming",
+            side_effect=[stream_sudo_command()],
+        ) as mock_stream:
+            events = [
+                event
+                async for event in brain.process_message_streaming(
+                    "Instale o Rust",
+                    "test_session",
+                    user_id="irving",
+                    user_role="admin",
+                    project_name="llama-player",
+                    auto_execute=True,
+                )
+            ]
+
+        assert [event["type"] for event in events] == [
+            "text",
+            "command",
+            "command_status",
+            "command_result",
+            "text",
+            "done",
+        ]
+        assert events[3]["status"] == "failed"
+        assert events[3]["reason_code"] == "interactive_sudo_required"
+        assert "exige senha ou terminal interativo" in events[4]["content"]
+        assert "Execute essa etapa manualmente" in events[4]["content"]
+        assert mock_stream.call_count == 1
+        mock_bridge.execute_command.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_streaming_recovers_when_action_request_gets_empty_response(
         self, mock_memory, mock_bridge
     ):
@@ -951,6 +1025,27 @@ class TestDevSynapseBrain:
 
         assert route.model == "deepseek-v4-pro"
         assert route.learned_preference == "deepseek-v4-pro"
+
+    def test_select_llm_route_can_use_discovered_cheaper_model(
+        self, mock_memory, mock_bridge
+    ):
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        brain.deepseek.provider_configs["openrouter"]["api_key"] = "or-key"
+        mock_memory.list_llm_models.return_value = [
+            {
+                "provider": "openrouter",
+                "model_id": "vendor/cheap-model",
+                "enabled": True,
+                "input_cost_per_token": 0.00000001,
+                "output_cost_per_token": 0.00000002,
+            }
+        ]
+
+        route = brain._select_llm_route("Explique dependency injection", {})
+
+        assert route.model == "openrouter:vendor/cheap-model"
+        assert route.fallback_model == "deepseek-v4-flash"
+        assert route.reason.startswith("adaptive_cheapest:")
 
     @pytest.mark.asyncio
     async def test_call_llm_api_falls_back_from_flash_to_pro(self, mock_memory, mock_bridge):

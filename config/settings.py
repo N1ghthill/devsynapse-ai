@@ -82,6 +82,9 @@ API_HOST=127.0.0.1
 API_PORT=8000
 API_DEBUG=true
 DEEPSEEK_API_KEY=
+OPENROUTER_API_KEY=
+OPENCODE_ZEN_API_KEY=
+OPENCODE_GO_API_KEY=
 JWT_SECRET_KEY=change-this-in-production
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
@@ -182,7 +185,7 @@ class AppSettings(BaseSettings):
     )
 
     app_name: str = "DevSynapse AI"
-    app_version: str = "0.8.2"
+    app_version: str = "0.8.3"
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     api_debug: bool = True
@@ -190,8 +193,16 @@ class AppSettings(BaseSettings):
     cors_allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
 
     deepseek_api_key: Optional[str] = None
+    openrouter_api_key: Optional[str] = None
+    opencode_zen_api_key: Optional[str] = None
+    opencode_go_api_key: Optional[str] = None
     deepseek_model: str = "deepseek-v4-pro"
     deepseek_base_url: str = "https://api.deepseek.com/beta"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_models_url: str = "https://openrouter.ai/api/v1/models"
+    opencode_zen_base_url: str = "https://opencode.ai/zen/v1"
+    opencode_go_base_url: str = "https://opencode.ai/zen/go/v1"
+    opencode_go_models_url: str = "https://opencode.ai/zen/go/v1/models"
     deepseek_flash_model: str = "deepseek-v4-flash"
     deepseek_pro_model: str = "deepseek-v4-pro"
     deepseek_reasoner_model: str = "deepseek-reasoner"
@@ -293,8 +304,14 @@ _settings = get_settings()
 
 # Legacy module-level aliases kept for compatibility with the existing code/tests.
 DEEPSEEK_API_KEY: Optional[str] = _settings.deepseek_api_key
+OPENROUTER_API_KEY: Optional[str] = _settings.openrouter_api_key
+OPENCODE_ZEN_API_KEY: Optional[str] = _settings.opencode_zen_api_key
+OPENCODE_GO_API_KEY: Optional[str] = _settings.opencode_go_api_key
 DEEPSEEK_MODEL = _settings.deepseek_model
 DEEPSEEK_BASE_URL = _settings.deepseek_base_url
+OPENROUTER_BASE_URL = _settings.openrouter_base_url
+OPENCODE_ZEN_BASE_URL = _settings.opencode_zen_base_url
+OPENCODE_GO_BASE_URL = _settings.opencode_go_base_url
 DEEPSEEK_FLASH_MODEL = _settings.deepseek_flash_model
 DEEPSEEK_PRO_MODEL = _settings.deepseek_pro_model
 DEEPSEEK_REASONER_MODEL = _settings.deepseek_reasoner_model

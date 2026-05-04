@@ -347,6 +347,62 @@ MEMORY_MIGRATIONS = (
             """,
         ),
     ),
+    Migration(
+        version=12,
+        description="LLM model catalog and per-request telemetry",
+        statements=(
+            """
+            CREATE TABLE IF NOT EXISTS llm_model_catalog (
+                provider TEXT NOT NULL,
+                model_id TEXT NOT NULL,
+                name TEXT,
+                context_length INTEGER,
+                input_cost_per_token REAL,
+                output_cost_per_token REAL,
+                cache_read_cost_per_token REAL,
+                raw_pricing TEXT,
+                capabilities TEXT,
+                source_url TEXT,
+                discovered_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (provider, model_id)
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_llm_model_catalog_provider
+            ON llm_model_catalog(provider, enabled, last_seen_at)
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS llm_request_telemetry (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                user_id TEXT,
+                conversation_id TEXT,
+                provider TEXT,
+                model TEXT,
+                routing_reason TEXT,
+                task_type TEXT,
+                complexity TEXT,
+                success INTEGER NOT NULL,
+                error_message TEXT,
+                prompt_tokens INTEGER,
+                completion_tokens INTEGER,
+                total_tokens INTEGER,
+                prompt_cache_hit_tokens INTEGER,
+                prompt_cache_miss_tokens INTEGER,
+                reasoning_tokens INTEGER,
+                estimated_cost_usd REAL,
+                first_token_latency_ms REAL,
+                total_latency_ms REAL
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_llm_request_telemetry_user_model
+            ON llm_request_telemetry(user_id, provider, model, timestamp)
+            """,
+        ),
+    ),
 )
 
 

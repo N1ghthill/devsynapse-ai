@@ -497,6 +497,52 @@ class TestMemorySystem:
         assert breakdown[0]["total_tokens"] == 220
         assert breakdown[0]["estimated_cost_usd"] == pytest.approx(0.0000336)
 
+    def test_llm_model_catalog_and_request_telemetry(self, tmp_path):
+        db_path = tmp_path / "test_llm_catalog.db"
+        memory = _create_memory(db_path)
+
+        count = memory.upsert_llm_models([
+            {
+                "provider": "openrouter",
+                "model_id": "test/model",
+                "name": "Test Model",
+                "context_length": 128000,
+                "input_cost_per_token": 0.0000001,
+                "output_cost_per_token": 0.0000002,
+                "cache_read_cost_per_token": 0.00000001,
+                "raw_pricing": {"prompt": "0.0000001"},
+                "capabilities": {"supported_parameters": ["tools"]},
+                "source_url": "https://openrouter.ai/api/v1/models",
+            }
+        ])
+
+        assert count == 1
+        model = memory.get_llm_model("openrouter", "test/model")
+        assert model["context_length"] == 128000
+        assert model["input_cost_per_token"] == 0.0000001
+
+        memory.record_llm_request_telemetry(
+            user_id="irving",
+            conversation_id="conv",
+            provider="openrouter",
+            model="test/model",
+            route=None,
+            success=True,
+            usage={
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+                "estimated_cost_usd": 0.000002,
+            },
+            first_token_latency_ms=120.0,
+            total_latency_ms=450.0,
+        )
+
+        stats = memory.get_llm_telemetry_stats(hours=24)
+        assert stats["by_user_model"][0]["user_id"] == "irving"
+        assert stats["by_user_model"][0]["request_count"] == 1
+        assert stats["by_user_model"][0]["avg_first_token_latency_ms"] == 120.0
+
     def test_project_memory_confidence_decay_and_feedback(self, tmp_path):
         db_path = tmp_path / "test_project_memory.db"
         memory = _create_memory(db_path)

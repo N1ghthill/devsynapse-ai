@@ -3,6 +3,8 @@ Chat and execution routes.
 """
 import json
 import logging
+import shutil
+import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -27,6 +29,8 @@ from api.models import (
     ConversationRenameRequest,
     FeedbackRequest,
     FeedbackResponse,
+    PrerequisiteCheckListResponse,
+    PrerequisiteCheckResponse,
 )
 from config.settings import get_settings
 from core.brain import DevSynapseBrain
@@ -105,6 +109,108 @@ def _resolve_locked_project(
             detail=f"Projeto não registrado: {effective_project}",
         )
     return effective_project
+
+
+PREREQUISITE_CHECKS = [
+    {
+        "name": "Git",
+        "command": "git --version",
+        "args": ["git", "--version"],
+        "install_hint": "Instale o Git pelo gerenciador de pacotes do sistema.",
+    },
+    {
+        "name": "Python 3",
+        "command": "python3 --version",
+        "args": ["python3", "--version"],
+        "install_hint": "Instale Python 3 pelo gerenciador de pacotes do sistema.",
+    },
+    {
+        "name": "Node.js",
+        "command": "node --version",
+        "args": ["node", "--version"],
+        "install_hint": "Instale Node.js via nvm, Volta ou gerenciador de pacotes.",
+    },
+    {
+        "name": "npm",
+        "command": "npm --version",
+        "args": ["npm", "--version"],
+        "install_hint": "Instale npm junto com Node.js ou pelo gerenciador de pacotes.",
+    },
+    {
+        "name": "Rust",
+        "command": "rustc --version",
+        "args": ["rustc", "--version"],
+        "install_hint": "Instale Rust pelo rustup ou pelo gerenciador de pacotes.",
+    },
+    {
+        "name": "Cargo",
+        "command": "cargo --version",
+        "args": ["cargo", "--version"],
+        "install_hint": "Instale Cargo junto com Rust.",
+    },
+    {
+        "name": "Tauri CLI",
+        "command": "cargo tauri --version",
+        "args": ["cargo", "tauri", "--version"],
+        "install_hint": "Instale com `cargo install tauri-cli` depois de instalar Rust/Cargo.",
+    },
+]
+
+
+def _run_prerequisite_check(check: dict, cwd: str | None = None) -> PrerequisiteCheckResponse:
+    args = check["args"]
+    executable = args[0]
+    if shutil.which(executable) is None:
+        return PrerequisiteCheckResponse(
+            name=check["name"],
+            command=check["command"],
+            installed=False,
+            detail=f"{executable} não encontrado no PATH",
+            install_hint=check["install_hint"],
+        )
+
+    try:
+        result = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=8,
+            cwd=cwd,
+            shell=False,
+        )
+    except subprocess.TimeoutExpired:
+        return PrerequisiteCheckResponse(
+            name=check["name"],
+            command=check["command"],
+            installed=False,
+            detail="Verificação excedeu o tempo limite",
+            install_hint=check["install_hint"],
+        )
+    except Exception as exc:
+        return PrerequisiteCheckResponse(
+            name=check["name"],
+            command=check["command"],
+            installed=False,
+            detail=str(exc),
+            install_hint=check["install_hint"],
+        )
+
+    output = (result.stdout or result.stderr or "").strip()
+    if result.returncode == 0:
+        return PrerequisiteCheckResponse(
+            name=check["name"],
+            command=check["command"],
+            installed=True,
+            detail=output or "Disponível",
+            install_hint=None,
+        )
+    return PrerequisiteCheckResponse(
+        name=check["name"],
+        command=check["command"],
+        installed=False,
+        detail=output or f"Falhou com exit code {result.returncode}",
+        install_hint=check["install_hint"],
+    )
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -390,6 +496,35 @@ async def execute_command(
             status_code=500,
             detail=f"Erro executando comando: {exc}",
         ) from exc
+
+
+@router.get("/prerequisites", response_model=PrerequisiteCheckListResponse)
+async def check_prerequisites(
+    conversation_id: str | None = None,
+    project_name: str | None = None,
+    user=Depends(require_user),
+    memory_system: MemorySystem = Depends(get_memory_system),
+):
+    del user
+    effective_project_name = None
+    cwd = None
+    if conversation_id or project_name:
+        effective_project_name = _resolve_locked_project(
+            memory_system,
+            conversation_id or "",
+            project_name,
+        )
+        if effective_project_name:
+            project = memory_system.get_project(effective_project_name)
+            if project and project.get("path"):
+                cwd = project["path"]
+
+    checks = [_run_prerequisite_check(check, cwd=cwd) for check in PREREQUISITE_CHECKS]
+    return PrerequisiteCheckListResponse(
+        project_name=effective_project_name,
+        ready=all(check.installed for check in checks),
+        checks=checks,
+    )
 
 
 @router.post("/feedback", response_model=FeedbackResponse)

@@ -127,7 +127,7 @@ class TestOpenCodeBridge:
             assert "sucesso" in message
 
     @pytest.mark.asyncio
-    async def test_execute_bash_trusted_shell_uses_shell_mode(self):
+    async def test_execute_bash_trusted_shell_uses_bash_pipefail(self):
         bridge = _bridge()
 
         with patch('core.opencode_bridge.subprocess.run') as mock_run:
@@ -143,11 +143,56 @@ class TestOpenCodeBridge:
             )
 
         mock_run.assert_called_once()
-        assert mock_run.call_args.kwargs["shell"] is True
-        assert mock_run.call_args.args[0] == 'printf "x" | wc -c'
+        assert mock_run.call_args.kwargs["shell"] is False
+        assert mock_run.call_args.args[0] == [
+            "/bin/bash",
+            "-o",
+            "pipefail",
+            "-c",
+            'printf "x" | wc -c',
+        ]
         assert success is True
         assert "sucesso" in message
         assert output == "1\n"
+
+    @pytest.mark.asyncio
+    async def test_execute_bash_trusted_shell_reports_pipeline_failure(self):
+        bridge = _bridge()
+
+        with patch('core.opencode_bridge.subprocess.run') as mock_run:
+            mock_result = Mock()
+            mock_result.returncode = 1
+            mock_result.stdout = ""
+            mock_result.stderr = "sudo: a terminal is required to read the password\n"
+            mock_run.return_value = mock_result
+
+            success, message, output = await bridge._execute_bash(
+                ["sudo apt-get update | tail -3"],
+                trusted_shell=True,
+            )
+
+        assert success is False
+        assert "exit code: 1" in message
+        assert "sudo: a terminal is required" in output
+
+    @pytest.mark.asyncio
+    async def test_execute_command_blocks_sudo_before_execution(self):
+        bridge = _bridge()
+
+        with patch.object(bridge, "_execute_bash", new_callable=AsyncMock) as mock_bash:
+            success, message, output, status, reason_code, project_name = await bridge.execute_command(
+                'bash "sudo apt-get update | tail -3"',
+                user_role="admin",
+                project_name=PROJECT_NAME,
+            )
+
+        mock_bash.assert_not_awaited()
+        assert success is False
+        assert "sudo não são executados pelo chat" in message
+        assert output is None
+        assert status == "blocked"
+        assert reason_code == "privileged_setup_required"
+        assert project_name == PROJECT_NAME
 
     @pytest.mark.asyncio
     async def test_execute_bash_failure(self):

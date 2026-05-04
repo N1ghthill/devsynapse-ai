@@ -801,6 +801,8 @@ body {
   gap: 10px;
   margin-top: 8px;
   padding: 10px 12px;
+  max-width: 100%;
+  min-width: 0;
   background: var(--bg-tertiary);
   border-radius: var(--radius);
   font-family: var(--font-mono);
@@ -810,18 +812,20 @@ body {
 }
 
 .message-command-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: flex-start;
   gap: 8px;
   width: 100%;
+  min-width: 0;
 }
 
 .message-command-main {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  max-width: 100%;
   min-width: 0;
-  flex: 1 1 auto;
 }
 
 .message-command-text {
@@ -842,8 +846,12 @@ body {
 }
 
 .message-command code {
+  display: block;
+  max-width: 100%;
   min-width: 0;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
   color: var(--text-primary);
 }
 
@@ -879,6 +887,21 @@ body {
   background: rgba(234, 179, 8, 0.08);
 }
 
+.command-needs_manual_setup {
+  border-color: var(--warning);
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.command-failed {
+  border-color: var(--danger);
+  background: rgba(251, 113, 133, 0.08);
+}
+
+.command-ready_to_retry {
+  border-color: var(--success);
+  background: rgba(74, 222, 128, 0.08);
+}
+
 .command-status-badge {
   display: inline-flex;
   align-items: center;
@@ -909,6 +932,21 @@ body {
 .status-failed {
   background: rgba(234, 179, 8, 0.14);
   color: var(--warning);
+}
+
+.status-needs_manual_setup {
+  background: rgba(251, 191, 36, 0.16);
+  color: var(--warning);
+}
+
+.status-failed {
+  background: rgba(251, 113, 133, 0.14);
+  color: var(--danger);
+}
+
+.status-ready_to_retry {
+  background: rgba(74, 222, 128, 0.14);
+  color: var(--success);
 }
 
 .command-review-grid {
@@ -967,7 +1005,6 @@ body {
 }
 
 .execute-btn {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1015,6 +1052,7 @@ body {
   font-family: var(--font-mono);
   font-size: 12px;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   color: var(--text-primary);
 }
 
@@ -1301,6 +1339,16 @@ body {
 
   .command-review-grid {
     grid-template-columns: 1fr;
+  }
+
+  .message-command-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .message-command-header .execute-btn {
+    grid-column: 1 / -1;
+    justify-content: center;
+    width: 100%;
   }
 
   .workflow-templates {
@@ -1867,6 +1915,25 @@ body {
 .key-status.configured {
   background: rgba(34, 197, 94, 0.14);
   color: var(--success);
+}
+
+.model-catalog-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.model-chip {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: var(--bg-input);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 .setting-field input[type="text"],

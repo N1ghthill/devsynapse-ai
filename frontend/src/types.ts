@@ -3,7 +3,9 @@ export type CommandExecutionStatus =
   | 'running'
   | 'success'
   | 'blocked'
-  | 'failed';
+  | 'failed'
+  | 'needs_manual_setup'
+  | 'ready_to_retry';
 
 export interface ProjectInfo {
   name: string;
@@ -53,6 +55,20 @@ export interface ToolRun {
   message?: string;
   reasonCode?: string | null;
   projectName?: string | null;
+}
+
+export interface PrerequisiteCheck {
+  name: string;
+  command: string;
+  installed: boolean;
+  detail: string;
+  install_hint?: string | null;
+}
+
+export interface PrerequisiteCheckList {
+  project_name?: string | null;
+  ready: boolean;
+  checks: PrerequisiteCheck[];
 }
 
 export interface Conversation {
@@ -166,6 +182,19 @@ export interface DashboardStats {
       by_model: Array<{ selected_model: string; count: number }>;
     };
     knowledge?: KnowledgeStats;
+    telemetry?: {
+      by_user_model: Array<{
+        provider?: string | null;
+        model?: string | null;
+        user_id?: string | null;
+        request_count: number;
+        error_count: number;
+        error_rate: number;
+        avg_first_token_latency_ms?: number | null;
+        avg_total_latency_ms?: number | null;
+        estimated_cost_usd: number;
+      }>;
+    };
     timeframe_hours: number;
   };
   system_health: {
@@ -267,10 +296,14 @@ export interface BootstrapCompleteResponse {
 
 export interface SettingsData {
   deepseek_api_key: boolean | string;
+  openrouter_api_key: boolean | string;
+  opencode_zen_api_key: boolean | string;
+  opencode_go_api_key: boolean | string;
   deepseek_model: string;
   deepseek_flash_model: string;
   deepseek_pro_model: string;
   llm_model_routing_enabled: boolean;
+  llm_adaptive_routing_enabled: boolean;
   llm_auto_economy_enabled: boolean;
   llm_cache_hit_warning_threshold_pct: number;
   temperature: number;
@@ -283,6 +316,20 @@ export interface SettingsData {
   api_host: string;
   api_port: number;
   project_mutation_allowlist: string[];
+}
+
+export interface LlmModelCatalogEntry {
+  provider: string;
+  model_id: string;
+  name?: string | null;
+  context_length?: number | null;
+  input_cost_per_token?: number | null;
+  output_cost_per_token?: number | null;
+  cache_read_cost_per_token?: number | null;
+  capabilities: Record<string, unknown>;
+  source_url?: string | null;
+  last_seen_at: string;
+  enabled: boolean;
 }
 
 export interface AdminUser {

@@ -6,7 +6,7 @@ import {
   settingsApi,
   type DesktopUpdateStatus,
 } from '../api/client';
-import type { SettingsData } from '../types';
+import type { LlmModelCatalogEntry, SettingsData } from '../types';
 import { useAuth } from '../hooks/useAuth';
 
 export function Settings() {
@@ -21,6 +21,8 @@ export function Settings() {
   const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [discoveringModels, setDiscoveringModels] = useState(false);
+  const [modelCatalog, setModelCatalog] = useState<LlmModelCatalogEntry[]>([]);
   const canEditSettings = auth.user?.role === 'admin';
 
   useEffect(() => {
@@ -49,6 +51,27 @@ export function Settings() {
     }
 
     setSaving(false);
+  };
+
+  const discoverModels = async () => {
+    if (!canEditSettings) return;
+    setDiscoveringModels(true);
+    setMessage(null);
+    try {
+      const result = await settingsApi.discoverLlmModels();
+      const models = await settingsApi.listLlmModels();
+      setModelCatalog(models.slice(0, 12));
+      const errors = Object.keys(result.errors || {}).length;
+      setMessage({
+        type: errors ? 'error' : 'success',
+        text: `Descoberta concluída: ${result.discovered} modelos atualizados${
+          errors ? `, ${errors} fonte(s) com erro` : ''
+        }.`,
+      });
+    } catch {
+      setMessage({ type: 'error', text: 'Falha ao descobrir modelos' });
+    }
+    setDiscoveringModels(false);
   };
 
   const checkForUpdate = async () => {
@@ -125,6 +148,41 @@ export function Settings() {
               )}
             </div>
           </div>
+          {[
+            ['openrouter_api_key', 'Chave da API OpenRouter'],
+            ['opencode_zen_api_key', 'Chave da API OpenCode Zen'],
+            ['opencode_go_api_key', 'Chave da API OpenCode Go'],
+          ].map(([key, label]) => (
+            <div className="setting-field" key={key}>
+              <label>{label}</label>
+              <div className="key-input-row">
+                <input
+                  type="password"
+                  placeholder={
+                    typeof settings?.[key as keyof SettingsData] === 'boolean' &&
+                    settings?.[key as keyof SettingsData]
+                      ? '•••••••• (configurada)'
+                      : 'Informe a chave'
+                  }
+                  value={
+                    typeof settings?.[key as keyof SettingsData] === 'string'
+                      ? String(settings?.[key as keyof SettingsData])
+                      : ''
+                  }
+                  disabled={!canEditSettings}
+                  onChange={(e) =>
+                    setSettings((prev) =>
+                      prev ? { ...prev, [key]: e.target.value } : prev
+                    )
+                  }
+                />
+                {typeof settings?.[key as keyof SettingsData] === 'boolean' &&
+                  settings?.[key as keyof SettingsData] && (
+                    <span className="key-status configured">Configurada</span>
+                  )}
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="settings-card">
@@ -198,6 +256,44 @@ export function Settings() {
               Modo econômico automático
             </label>
           </div>
+          <div className="setting-field checkbox-field">
+            <label>
+              <input
+                type="checkbox"
+                checked={settings?.llm_adaptive_routing_enabled ?? true}
+                disabled={!canEditSettings}
+                onChange={(e) =>
+                  setSettings((prev) =>
+                    prev ? { ...prev, llm_adaptive_routing_enabled: e.target.checked } : prev
+                  )
+                }
+              />
+              Roteamento adaptativo por telemetria/catálogo
+            </label>
+          </div>
+          <div className="setting-field">
+            <button
+              className="save-btn"
+              type="button"
+              onClick={discoverModels}
+              disabled={!canEditSettings || discoveringModels}
+            >
+              <RefreshCw size={16} className={discoveringModels ? 'spinner' : ''} />
+              {discoveringModels ? 'Descobrindo...' : 'Descobrir modelos'}
+            </button>
+          </div>
+          {modelCatalog.length > 0 && (
+            <div className="setting-field">
+              <label>Catálogo recente</label>
+              <div className="model-catalog-list">
+                {modelCatalog.map((model) => (
+                  <span key={`${model.provider}:${model.model_id}`} className="model-chip">
+                    {model.provider}:{model.model_id}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="setting-field">
             <label>Aviso de cache hit (%)</label>
             <input

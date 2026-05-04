@@ -36,10 +36,14 @@ only projects in their allowlist.
 
 Admin users are treated as trusted local operators. Admin chat tool calls may
 auto-execute supported OpenCode tools, including `edit` and `write`; admin `bash`
-uses shell mode so pipelines, redirects and chained commands work as expected.
-Admin file tools are not constrained to registered project roots or the normal
-allowed-directory list. The bridge still rejects configured blacklist patterns and
-records command telemetry, but this is not a sandbox boundary.
+uses Bash with `pipefail` enabled so pipelines, redirects and chained commands
+work as expected while still surfacing a failed command inside a pipeline. Chat
+commands containing `sudo` are blocked before execution with
+`privileged_setup_required`; privileged OS setup must happen manually in a
+terminal or through a future dedicated installer flow. Admin file tools are not
+constrained to registered project roots or the normal allowed-directory list. The
+bridge still rejects configured blacklist patterns and records command telemetry,
+but this is not a sandbox boundary.
 
 The chat UI can enable an "Aprovar tudo" fast path. This sends
 `execute_command=true` on streaming chat turns so authorized tool calls run
@@ -50,14 +54,21 @@ checks, command telemetry or command execution records.
 For admin users, "Aprovar tudo" is an operator mode rather than a project
 allowlist mode. Supported OpenCode tools run directly, admin `bash` uses shell
 syntax, and ordinary command failures are replayed to the model so it can keep
-fixing and validating. When a conversation is scoped to a registered project,
-that project remains the mutation boundary: write/edit and mutating bash actions
-that point outside it are blocked with `project_scope_mismatch`. Read-only
-reference commands can still inspect other allowed or registered repositories so
-the agent can compare code and gather context without switching the working
-project. Global admin sessions without a selected project remain trusted
-local-operator sessions. To constrain what a person or agent can mutate more
-narrowly, create a non-admin user and grant only the intended project allowlist.
+fixing and validating. Privileged setup is routed out of the agent loop:
+commands containing `sudo` are classified with `privileged_setup_required`, and
+unexpected failures that require an interactive `sudo` password or TTY are
+classified with `interactive_sudo_required`. These are not replayed as
+recoverable work because the chat process cannot provide that credential; the UI
+shows a manual terminal instruction and a revalidation action. Revalidation uses
+fixed non-privileged version checks rather than model-generated shell commands.
+When a conversation is scoped to a registered project, that project remains the
+mutation boundary: write/edit and mutating bash actions that point outside it are
+blocked with `project_scope_mismatch`. Read-only reference commands can still
+inspect other allowed or registered repositories so the agent can compare code
+and gather context without switching the working project. Global admin sessions
+without a selected project remain trusted local-operator sessions. To constrain
+what a person or agent can mutate more narrowly, create a non-admin user and
+grant only the intended project allowlist.
 
 LLMs sometimes produce placeholder filesystem paths such as `/home/user/projects`,
 `~/projects` or `/workspace`. Before validation and execution, the command bridge

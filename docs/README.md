@@ -48,7 +48,7 @@ This directory is the technical documentation entrypoint for contributors and ma
 ## Releases
 
 - release checklist: [../RELEASING.md](../RELEASING.md)
-- latest release notes: [releases/v0.8.2.md](releases/v0.8.2.md)
+- latest release notes: [releases/v0.8.3.md](releases/v0.8.3.md)
 
 ## Documentation Rule
 

@@ -3,7 +3,7 @@
 ## Current Verification Baseline
 
 At the latest documentation refresh on `2026-05-04`, local verification produced:
-- `233` passing backend tests
+- `240` passing backend tests
 - successful script checks
 - successful frontend lint and production build
 - successful browser UI smoke validation with Playwright
