@@ -6,6 +6,60 @@ The format follows a simple Keep a Changelog style and uses human-readable relea
 
 ## [Unreleased]
 
+## [v0.8.2] - 2026-05-04
+
+### Added
+- Added a React error boundary so UI render failures show a recovery screen
+  instead of leaving the application blank.
+- Added collapsible command output blocks for long command results in chat.
+- Added stable release asset aliases for landing-page downloads so the public
+  site can point at `releases/latest/download/...` without hardcoded versions.
+- Added `make install-ui-smoke` and clearer Playwright browser installation
+  guidance when UI smoke tests cannot find Chromium.
+
+### Changed
+- Improved streaming chat scroll behavior and abort handling so stale streams
+  are cancelled when the chat view unmounts or a new request starts.
+- Moved synchronous DeepSeek calls behind thread offloading to avoid blocking
+  the async FastAPI event loop.
+- Added stuck-context awareness after repeated blocked or failed command
+  outcomes, and widened auto-execution recovery replay for normal command
+  failures.
+- Updated release workflow checks and download aliases for `.deb`, `.rpm` and
+  Windows installer artifacts.
+
+### Fixed
+- Fixed a malformed CSS block that broke the frontend production build after UI
+  styling changes.
+
+## [v0.8.1] - 2026-05-03
+
+### Changed
+- Aligned FastAPI runtime, frontend package and Tauri package metadata to
+  `0.8.1`.
+- Added release workflow checks for version consistency across runtime,
+  frontend and desktop package metadata.
+
+### Fixed
+- Fixed Linux desktop release packaging so generated `.deb` and `.rpm`
+  artifact names match the release tag version.
+
+## [v0.8.0] - 2026-05-03
+
+### Added
+- Added persistent agent task runs for original goals, command events,
+  blocked/failed outcomes and next actions across turns.
+- Added SQLite migration `11` for agent run and agent run event persistence.
+- Added refreshed DevSynapse browser and desktop icon assets.
+
+### Changed
+- Refreshed bridge project lookup from the persisted project registry before
+  chat and command execution.
+- Registered generated projects inferred under the configured repositories root
+  after successful command execution.
+- Improved recovery context for missing dependencies, blocked commands and
+  normal command failures in auto-execution flows.
+
 ## [v0.7.0] - 2026-05-03
 
 ### Added

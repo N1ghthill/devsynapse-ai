@@ -3,7 +3,7 @@ PIP ?= $(shell if [ -x ./venv/bin/pip ]; then printf './venv/bin/pip'; else comm
 PYTEST ?= $(shell if [ -x ./venv/bin/pytest ]; then printf './venv/bin/pytest'; else command -v pytest; fi)
 RUFF ?= $(shell if [ -x ./venv/bin/ruff ]; then printf './venv/bin/ruff'; else command -v ruff; fi)
 
-.PHONY: setup dev install install-dev update run test lint frontend-lint frontend-build desktop-backend desktop-build desktop-build-updates desktop-dev script-check ui-smoke eval-agent update-locks verify seed-users migrate migration-status
+.PHONY: setup dev install install-dev update run test lint frontend-lint frontend-build desktop-backend desktop-build desktop-build-updates desktop-dev script-check install-ui-smoke ui-smoke eval-agent update-locks verify seed-users migrate migration-status
 
 setup:
 	python3 -m venv venv
@@ -79,6 +79,9 @@ script-check:
 	else \
 		echo "shellcheck not installed; skipping shell script lint"; \
 	fi
+
+install-ui-smoke:
+	cd frontend && npx playwright install chromium
 
 ui-smoke:
 	bash scripts/ui_smoke.sh

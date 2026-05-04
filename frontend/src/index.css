@@ -585,7 +585,6 @@ body {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scroll-behavior: smooth;
   scrollbar-gutter: stable;
   padding: 20px;
   display: flex;
@@ -662,6 +661,23 @@ body {
   display: flex;
   gap: 12px;
   max-width: 800px;
+  contain: layout style;
+}
+
+@keyframes messageBlockFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-command,
+.markdown-code-block {
+  animation: messageBlockFadeIn 0.25s ease-out;
 }
 
 .message-user {
@@ -791,30 +807,6 @@ body {
   font-size: 12px;
   color: var(--text-secondary);
   border: 1px solid transparent;
-}
-
-.message-usage {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.usage-pill {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(156, 156, 184, 0.14);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.usage-pill-cost {
-  background: rgba(34, 197, 94, 0.14);
-  color: var(--success);
 }
 
 .message-command-header {
@@ -1006,6 +998,17 @@ body {
   background: var(--bg-primary);
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.command-result .command-result-content {
+  max-height: 360px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.command-result-content.expanded {
+  max-height: none;
 }
 
 .command-result pre {
@@ -1013,6 +1016,27 @@ body {
   font-size: 12px;
   white-space: pre-wrap;
   color: var(--text-primary);
+}
+
+.command-result-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.command-result-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
 }
 
 .command-note {
@@ -4181,5 +4205,81 @@ body {
   .project-manager-create {
     order: -1;
   }
+}
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .message-command,
+  .markdown-code-block {
+    animation: none;
+  }
+}
+
+.error-boundary-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 32px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.error-boundary-card {
+  max-width: 480px;
+  width: 100%;
+  padding: 32px;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  text-align: center;
+}
+
+.error-boundary-card h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  color: var(--warning);
+}
+
+.error-boundary-card p {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.error-boundary-detail {
+  margin: 0 0 20px;
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-input);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.error-boundary-card button {
+  padding: 10px 24px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.error-boundary-card button:hover {
+  background: var(--accent);
+  color: var(--bg-primary);
 }

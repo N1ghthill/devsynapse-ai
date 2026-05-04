@@ -2,10 +2,11 @@
 
 ## Current Verification Baseline
 
-At the latest documentation refresh on `2026-05-02`, local verification produced:
-- `229` passing backend tests
+At the latest documentation refresh on `2026-05-04`, local verification produced:
+- `233` passing backend tests
 - successful script checks
 - successful frontend lint and production build
+- successful browser UI smoke validation with Playwright
 - valid OpenAPI schema generation for the documented route set
 
 ## Test Layout
@@ -97,8 +98,7 @@ badge and command output instead of staying in a pending state.
 Install the Chromium browser once with:
 
 ```bash
-cd frontend
-npx playwright install chromium
+make install-ui-smoke
 ```
 
 Screenshot evidence:

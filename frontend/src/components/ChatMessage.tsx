@@ -188,6 +188,7 @@ function getCommandReview(command: string, projectName?: string | null): Command
 export function ChatMessage({ message, onExecute }: ChatMessageProps) {
   const [copied, setCopied] = React.useState(false);
   const [reasoningOpen, setReasoningOpen] = React.useState(false);
+  const [expandedResults, setExpandedResults] = React.useState<Set<string>>(new Set());
   const isUser = message.role === 'user';
   const commandStatus = message.commandStatus ?? 'proposed';
   const commandReview = message.command
@@ -234,6 +235,7 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
   };
 
   const renderCommandResult = (
+    resultKey: string,
     status: Message['commandStatus'],
     result?: string,
     messageText?: string
@@ -241,9 +243,36 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
     const resultText = result || messageText;
     if (!resultText) return null;
 
+    const lineCount = (resultText.match(/\n/g) || []).length + 1;
+    const isExpanded = expandedResults.has(resultKey);
+    const needsCollapse = lineCount > 20;
+
+    const toggleExpand = () => {
+      setExpandedResults((prev) => {
+        const next = new Set(prev);
+        if (next.has(resultKey)) {
+          next.delete(resultKey);
+        } else {
+          next.add(resultKey);
+        }
+        return next;
+      });
+    };
+
     return (
       <div className={`command-result result-${status || 'proposed'}`}>
-        <pre>{resultText}</pre>
+        <div className={`command-result-content${isExpanded || !needsCollapse ? ' expanded' : ''}`}>
+          <pre>{resultText}</pre>
+        </div>
+        {needsCollapse && (
+          <button
+            type="button"
+            className="command-result-toggle"
+            onClick={toggleExpand}
+          >
+            {isExpanded ? 'Recolher saída ▴' : `Mostrar saída completa (${lineCount} linhas) ▾`}
+          </button>
+        )}
       </div>
     );
   };
@@ -366,7 +395,7 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
                 </button>
               </div>
               {renderCommandReview(toolRun.command, toolRun.projectName || message.projectName)}
-              {renderCommandResult(status, toolRun.result, toolRun.message)}
+              {renderCommandResult(toolRun.id, status, toolRun.result, toolRun.message)}
             </div>
           );
         })}
@@ -408,15 +437,18 @@ export function ChatMessage({ message, onExecute }: ChatMessageProps) {
         )}
 
         {message.commandResult && (
-          <div className={`command-result result-${commandStatus}`}>
-            <pre>{message.commandResult}</pre>
-            {message.commandNote && (
-              <div className="command-note">{message.commandNote}</div>
-            )}
-            {message.commandInterpretation && (
-              <div className="command-interpretation">{message.commandInterpretation}</div>
-            )}
-          </div>
+          renderCommandResult(
+            `legacy-${message.id}`,
+            commandStatus,
+            message.commandResult,
+            undefined
+          )
+        )}
+        {message.commandNote && (
+          <div className="command-note">{message.commandNote}</div>
+        )}
+        {message.commandInterpretation && (
+          <div className="command-interpretation">{message.commandInterpretation}</div>
         )}
 
         <div className="message-actions">

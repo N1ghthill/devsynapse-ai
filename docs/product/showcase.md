@@ -20,11 +20,11 @@ This page maps the current product surface to concrete use cases and evidence ca
 
 ## Current Evidence
 
-Repository baseline validated on `2026-05-01`:
-- `make verify` passed with `225` backend tests, script checks, frontend lint and frontend build
-- `make desktop-build` verified the desktop packaging flow
+Repository baseline validated on `2026-05-04`:
+- `make verify` passed with `233` backend tests, script checks, frontend lint and frontend build
 - `make ui-smoke` verified login, project management, dashboard, settings and admin navigation
-- GitHub Actions CI passed on `main`
+- release workflow checks cover version consistency and desktop artifact publishing
+- previous published baseline had GitHub Actions CI passing on `main`
 - portable runtime configuration via environment variables verified
 
 Real DeepSeek agent evidence captured on `2026-05-02`:
@@ -43,7 +43,7 @@ Screenshot sources:
 - [screenshot evidence index](../screenshots/README.md)
 - [evaluation screenshots](../evaluation/README.md)
 - [testing guide](../development/testing.md)
-- [release notes](../releases/v0.8.0.md)
+- [release notes](../releases/v0.8.2.md)
 
 ## Use Cases
 

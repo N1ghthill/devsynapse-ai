@@ -2,6 +2,7 @@
 Núcleo do DevSynapse - Integração com DeepSeek API
 """
 
+import asyncio
 import logging
 import re
 import shlex
@@ -243,6 +244,7 @@ class DevSynapseBrain:
         procedural_memory = self._get_project_memory_context(active_project_name, current_request)
         skills_context = self._get_skills_context(current_request, active_project_name)
         agent_run_context = context.get("agent_run_context") or "Nenhuma tarefa de agente ativa."
+        stuck_context = self._detect_stuck_context(context)
         settings = app_settings.get_settings()
         active_project_path = None
         if active_project_name and hasattr(self.memory, "get_project"):
@@ -286,7 +288,7 @@ Blend deep technical skills with natural conversational communication.
 ## CURRENT PROJECTS
 {projects_info}
 {active_project_section}
-
+{stuck_context}
 ## LOCAL WORKSPACE PATHS
 - Workspace root: {settings.dev_workspace_root}
 - Repositories root: {settings.dev_repos_root}
@@ -658,6 +660,41 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             logger.debug("Could not load agent learning context", exc_info=True)
             return "Nenhum padrão de agente aprendido ainda."
 
+    def _detect_stuck_context(self, context: Dict) -> str:
+        conversation_messages = context.get("conversation_messages") or []
+        if not conversation_messages:
+            return ""
+
+        consecutive_blocked = 0
+        reason_codes: List[str] = []
+        for msg in reversed(conversation_messages):
+            if msg.get("role") != "assistant":
+                continue
+            status = msg.get("commandStatus")
+            if status in ("blocked", "failed"):
+                consecutive_blocked += 1
+                rc = msg.get("reasonCode")
+                if rc and rc not in reason_codes:
+                    reason_codes.append(rc)
+            else:
+                break
+
+        if consecutive_blocked < 2:
+            return ""
+
+        details = ""
+        if reason_codes:
+            details = f" Razões dos bloqueios: {', '.join(reason_codes)}."
+
+        return (
+            f"\n## STUCK AWARENESS\n"
+            f"- As últimas {consecutive_blocked} tentativas de execução falharam ou foram bloqueadas."
+            f"{details}\n"
+            "- O usuário pode estar travado. NÃO repita a mesma ação.\n"
+            "- Proponha uma alternativa com outro tipo de ferramenta, ou explique o bloqueio "
+            "e pergunte se o usuário quer ajustar permissões ou projeto.\n"
+        )
+
     def _get_project_memory_context(
         self,
         project_name: Optional[str],
@@ -870,7 +907,8 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         if self.deepseek.configured:
             model = route.model if route else self.deepseek.model
             try:
-                result = self.deepseek.chat_completion(
+                result = await asyncio.to_thread(
+                    self.deepseek.chat_completion,
                     messages,
                     OPENCODE_TOOLS,
                     model=model,
@@ -894,7 +932,8 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                             e,
                             fallback_model,
                         )
-                        result = self.deepseek.chat_completion(
+                        result = await asyncio.to_thread(
+                            self.deepseek.chat_completion,
                             messages,
                             OPENCODE_TOOLS,
                             model=fallback_model,
@@ -1124,10 +1163,11 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                     )
                     opencode_command = None
                     continue
-                final_response = (
-                    f"{full_response}\n\n"
-                    f"The command `{opencode_command}` could not be executed: {msg}"
+                error_text = (
+                    f"\n\nThe command `{opencode_command}` could not be executed: {msg}"
                 )
+                final_response = f"{full_response}{error_text}"
+                yield {"type": "text", "content": error_text}
                 break
 
             messages.extend(
@@ -1281,7 +1321,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         if not auto_execute:
             return False
 
-        if user_role == "admin" and status == "failed" and reason_code == "execution_failed":
+        if status == "failed" and reason_code == "execution_failed":
             return True
 
         return status == "blocked" and reason_code in {
@@ -1736,7 +1776,8 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                     ),
                 })
 
-            result = self.deepseek.chat_completion(
+            result = await asyncio.to_thread(
+                self.deepseek.chat_completion,
                 messages,
                 max_tokens=400,
                 thinking={"type": "disabled"},

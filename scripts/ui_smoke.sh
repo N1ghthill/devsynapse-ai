@@ -99,11 +99,16 @@ then
 fi
 
 echo "Running Playwright UI smoke..."
-(
+if ! (
     cd "$ROOT_DIR/frontend"
     DEVSYNAPSE_SMOKE_BASE_URL="$BASE_URL" \
     DEVSYNAPSE_SMOKE_USERNAME="${DEVSYNAPSE_SMOKE_USERNAME:-admin}" \
     DEVSYNAPSE_SMOKE_PASSWORD="${DEVSYNAPSE_SMOKE_PASSWORD:-$DEFAULT_ADMIN_PASSWORD}" \
     DEVSYNAPSE_SMOKE_SCREENSHOT="$TMP_DIR/smoke-ui-failure.png" \
     npm run smoke:ui
-)
+); then
+    echo
+    echo "UI smoke failed. If Playwright reports a missing browser executable,"
+    echo "install the local Chromium test browser with: make install-ui-smoke"
+    exit 1
+fi

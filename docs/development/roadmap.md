@@ -6,7 +6,7 @@ Do not present planned items as shipped behavior in user-facing documentation.
 
 ## Current Baseline
 
-The current documented baseline is `v0.8.0`, validated on `2026-05-03`.
+The current documented baseline is `v0.8.2`, validated on `2026-05-04`.
 It includes:
 
 - local-first FastAPI, React/Vite and SQLite architecture;
@@ -40,6 +40,8 @@ It includes:
 - conservative non-admin auto-execution plus trusted admin tool execution;
 - recovery context for missing dependencies, blocked commands and normal command
   failures in auto-execution flows;
+- stuck-context awareness after repeated blocked or failed command outcomes;
+- chat UI recovery through an error boundary and collapsible long command output;
 - local-first security guardrails, localhost CORS defaults and exposed-host warnings;
 - documented local security model and operator checklist;
 - documented release platform support: Debian/Ubuntu-style Linux is the supported

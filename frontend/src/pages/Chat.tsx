@@ -117,6 +117,7 @@ export function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const pinnedToLatestRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const messageIdSequenceRef = useRef(0);
   const toolRunSequenceRef = useRef(0);
   const streamBufferRef = useRef<Record<string, string>>({});
@@ -125,22 +126,72 @@ export function Chat() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
+  const scrollFrameRef = useRef<number | null>(null);
+  const scrollBusyRef = useRef(false);
+
   useEffect(() => {
-    if (pinnedToLatestRef.current) {
-      const frame = window.requestAnimationFrame(() => {
-        messagesEndRef.current?.scrollIntoView({
-          behavior: isLoading ? 'auto' : 'smooth',
-          block: 'end',
+    if (!isLoading) return;
+
+    let running = true;
+    const scrollLoop = () => {
+      if (!running || !pinnedToLatestRef.current || !messagesContainerRef.current) return;
+
+      const container = messagesContainerRef.current;
+      const maxScroll = container.scrollHeight - container.clientHeight;
+      const remaining = maxScroll - container.scrollTop;
+
+      if (remaining > 4) {
+        container.scrollTo({
+          top: maxScroll,
+          behavior: 'auto',
         });
+      }
+      scrollFrameRef.current = window.requestAnimationFrame(scrollLoop);
+    };
+
+    scrollFrameRef.current = window.requestAnimationFrame(scrollLoop);
+    return () => {
+      running = false;
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+        scrollFrameRef.current = null;
+      }
+    };
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (isLoading || !pinnedToLatestRef.current || scrollBusyRef.current) return;
+
+    scrollBusyRef.current = true;
+    const frame = window.requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'end',
       });
-      return () => window.cancelAnimationFrame(frame);
-    }
+      window.setTimeout(() => {
+        scrollBusyRef.current = false;
+      }, 400);
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      scrollBusyRef.current = false;
+    };
   }, [messages, isLoading]);
 
   useEffect(
     () => () => {
       if (streamFlushTimerRef.current !== null) {
         window.clearTimeout(streamFlushTimerRef.current);
+      }
+    },
+    []
+  );
+
+  useEffect(
+    () => () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
     },
     []
@@ -586,6 +637,11 @@ export function Chat() {
     const prompt = content.trim();
     if (!prompt || isLoading) return;
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
     const userMessageId = createMessageId();
     const assistantMessageId = createMessageId();
     const userMessage: Message = {
@@ -608,7 +664,7 @@ export function Chat() {
     setIsLoading(true);
 
     try {
-      chatApi.sendMessageStreaming(
+      abortControllerRef.current = chatApi.sendMessageStreaming(
         {
           message: prompt,
           conversation_id: conversationId,
@@ -705,6 +761,7 @@ export function Chat() {
             setSelectedProject(projectName);
           }
           setIsLoading(false);
+          abortControllerRef.current = null;
           void loadConversationList();
         },
         (error) => {
@@ -717,10 +774,12 @@ export function Chat() {
             )
           );
           setIsLoading(false);
+          abortControllerRef.current = null;
           void loadConversationList();
         }
       );
     } catch {
+      abortControllerRef.current = null;
       const errorMessage: Message = {
         id: createMessageId(),
         role: 'system',

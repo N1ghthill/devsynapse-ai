@@ -411,10 +411,21 @@ jobs:
             echo "Linux updater signature not found: ${linux_updater}.sig" >&2
             exit 1
           fi
+          linux_rpm="DevSynapse_AI-${RELEASE_VERSION}-1.x86_64.rpm"
+          if [ ! -f "$release_dir/$linux_rpm" ]; then
+            echo "Linux RPM bundle not found: $linux_rpm" >&2
+            exit 1
+          fi
+          if [ ! -f "$release_dir/${linux_rpm}.sig" ]; then
+            echo "Linux RPM signature not found: ${linux_rpm}.sig" >&2
+            exit 1
+          fi
 
-          windows_updater="$(find "$release_dir" -maxdepth 1 -type f -name "*setup.exe" -printf "%f\n" | sort | head -n 1)"
+          windows_setup="$(find "$release_dir" -maxdepth 1 -type f -name "*setup.exe" -printf "%f\n" | sort | head -n 1)"
+          windows_msi="$(find "$release_dir" -maxdepth 1 -type f -name "*.msi" -printf "%f\n" | sort | head -n 1)"
+          windows_updater="$windows_setup"
           if [ -z "$windows_updater" ]; then
-            windows_updater="$(find "$release_dir" -maxdepth 1 -type f -name "*.msi" -printf "%f\n" | sort | head -n 1)"
+            windows_updater="$windows_msi"
           fi
           if [ -z "$windows_updater" ]; then
             echo "Windows updater bundle not found." >&2
@@ -424,6 +435,23 @@ jobs:
           if [ ! -f "$release_dir/${windows_updater}.sig" ]; then
             echo "Windows updater signature not found: ${windows_updater}.sig" >&2
             exit 1
+          fi
+          if [ -z "$windows_setup" ]; then
+            echo "Windows setup.exe not found; required for landing-page download alias." >&2
+            exit 1
+          fi
+
+          cp "$release_dir/$linux_updater" "$release_dir/DevSynapse_AI_latest_amd64.deb"
+          cp "$release_dir/${linux_updater}.sig" "$release_dir/DevSynapse_AI_latest_amd64.deb.sig"
+          cp "$release_dir/$linux_rpm" "$release_dir/DevSynapse_AI_latest_x86_64.rpm"
+          cp "$release_dir/${linux_rpm}.sig" "$release_dir/DevSynapse_AI_latest_x86_64.rpm.sig"
+          cp "$release_dir/$windows_setup" "$release_dir/DevSynapse_AI_latest_x64-setup.exe"
+          cp "$release_dir/${windows_setup}.sig" "$release_dir/DevSynapse_AI_latest_x64-setup.exe.sig"
+          if [ -n "$windows_msi" ]; then
+            cp "$release_dir/$windows_msi" "$release_dir/DevSynapse_AI_latest_x64_en-US.msi"
+            if [ -f "$release_dir/${windows_msi}.sig" ]; then
+              cp "$release_dir/${windows_msi}.sig" "$release_dir/DevSynapse_AI_latest_x64_en-US.msi.sig"
+            fi
           fi
 
           python3 scripts/generate-tauri-update-manifest.py \
