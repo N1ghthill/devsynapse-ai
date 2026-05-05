@@ -237,6 +237,35 @@ async def test_tui_help_shortcut_works_before_slash_command(tmp_path, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_tui_command_palette_fills_selected_command(tmp_path, monkeypatch):
+    _configure_runtime(monkeypatch, tmp_path / "runtime")
+
+    import config.settings as app_settings
+    from devsynapse.screens.command_palette import CommandPaletteScreen
+    from devsynapse.tui import DevSynapseTUI
+
+    app_settings.get_settings.cache_clear()
+
+    app = DevSynapseTUI()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+
+        await pilot.press("ctrl+p")
+        await pilot.pause()
+
+        palette = app.screen_stack[-1]
+        assert isinstance(palette, CommandPaletteScreen)
+        palette.query_one("#palette-search").value = "theme"
+        palette._refresh("theme")
+        palette.action_choose_highlighted()
+        await pilot.pause()
+
+        input_widget = app.query_one("#input", EnhancedInput)
+        assert input_widget.value == "/theme "
+        assert input_widget.has_focus
+
+
+@pytest.mark.asyncio
 async def test_tui_command_suggestions_complete_commands_and_arguments(tmp_path, monkeypatch):
     _configure_runtime(monkeypatch, tmp_path / "runtime")
 

@@ -57,7 +57,7 @@ SHORTCUTS = [
     ("F3", "copy last response"),
     ("Ctrl+N", "new conversation"),
     ("Ctrl+L", "clear chat"),
-    ("Ctrl+P", "open provider setup"),
+    ("Ctrl+P", "open command palette"),
     ("Ctrl+R", "refresh status"),
     ("Ctrl+H", "show help"),
     ("Ctrl+Space", "command menu"),

@@ -45,6 +45,7 @@ from devsynapse.commands import (
     _sort_models_for_ui,
 )
 from devsynapse.screens import ModelSelectionScreen, ProviderConnectionScreen
+from devsynapse.screens.command_palette import CommandPaletteScreen
 from devsynapse.tui_input import EnhancedInput
 from devsynapse.tui_notifications import NotificationManager
 from devsynapse.tui_preferences import TUIPreferences, load_tui_preferences, save_tui_preferences
@@ -58,6 +59,7 @@ class DevSynapseTUI(App):
 
     TITLE = "DevSynapse AI"
     SUB_TITLE = "terminal coding agent"
+    ENABLE_COMMAND_PALETTE = False
 
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit", show=False),
@@ -66,7 +68,7 @@ class DevSynapseTUI(App):
         Binding("f2", "open_model_picker", "Model"),
         Binding("f3", "copy_last_response", "Copy"),
         Binding("ctrl+n", "new_session", "New"),
-        Binding("ctrl+p", "open_connect", "Providers"),
+        Binding("ctrl+p", "open_command_palette", "Palette"),
         Binding("ctrl+r", "refresh_status", "Refresh"),
     ]
 
@@ -306,6 +308,19 @@ class DevSynapseTUI(App):
     async def action_open_connect(self):
         await self._open_connect_screen()
 
+    async def action_open_command_palette(self):
+        await self.push_screen(CommandPaletteScreen(), callback=self._command_palette_callback)
+
+    def _command_palette_callback(self, value: str | None) -> None:
+        if not value:
+            self._input().focus()
+            return
+        input_w = self._input()
+        input_w.value = value
+        input_w.cursor_position = len(value)
+        input_w.focus()
+        self.refresh_command_suggestions(value, force=True)
+
     async def action_open_model_picker(self):
         await self._open_model_screen()
 
@@ -380,7 +395,7 @@ class DevSynapseTUI(App):
         self._footer().update(
             f"[{accent}]^l[/] Clear   [{accent}]^h[/] Help   "
             f"[{accent}]F2[/] Model   [{accent}]F3[/] Copy   "
-            f"[{accent}]^n[/] New   [{accent}]^p[/] Providers   "
+            f"[{accent}]^n[/] New   [{accent}]^p[/] Palette   "
             f"[{accent}]^r[/] Refresh   [{accent}]/[/] Commands   "
             f"[{accent}]/theme[/] Theme   [{muted}]Esc quits dialogs[/]"
         )

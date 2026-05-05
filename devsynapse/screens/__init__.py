@@ -20,6 +20,7 @@ from devsynapse.commands import (
     _normalize_provider,
     _sort_models_for_ui,
 )
+from devsynapse.screens.command_palette import CommandPaletteScreen as CommandPaletteScreen
 
 
 class ProviderConnectionScreen(ModalScreen[dict[str, str] | None]):

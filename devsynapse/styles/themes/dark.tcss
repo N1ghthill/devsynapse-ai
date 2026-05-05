@@ -87,3 +87,28 @@ RichLog {
 ToastNotification {
     border: round #58a6ff;
 }
+
+#palette-title,
+#palette-search,
+#palette-results,
+#palette-help {
+    background: #161b22;
+}
+
+#palette-title {
+    color: #79c0ff;
+    border: round #30363d;
+}
+
+#palette-search,
+#palette-results {
+    border: round #30363d;
+}
+
+#palette-search:focus {
+    border: round #58a6ff;
+}
+
+#palette-help {
+    color: #8b949e;
+}

@@ -148,8 +148,9 @@ summarizes the active session, selected model, 24h request/token/cost telemetry,
 cache rate, error rate, latency, budget usage and the top recent model. The sidebar
 panels (Model, Telemetry) are collapsible for a cleaner view.
 
-Typing `/` opens a contextual command menu; `Up` and `Down` move through suggestions,
-and `Tab` or `Enter` completes the highlighted command or argument.
+Typing `/` opens contextual command suggestions; `Up` and `Down` move through
+suggestions, and `Tab` or `Enter` completes the highlighted command or
+argument. `Ctrl+P` opens the command palette for fuzzy command search.
 
 ## Keyboard Shortcuts
 
@@ -160,7 +161,7 @@ and `Tab` or `Enter` completes the highlighted command or argument.
 | `F3` | Copy last assistant answer |
 | `Ctrl+N` | New conversation |
 | `Ctrl+L` | Clear chat |
-| `Ctrl+P` | Open provider setup |
+| `Ctrl+P` | Open command palette |
 | `Ctrl+R` | Refresh status |
 | `Ctrl+Space` | Command menu |
 | `Shift+Enter` | New line in input |

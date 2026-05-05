@@ -152,7 +152,7 @@ Supported provider names:
 | `F3` | Copy last assistant answer |
 | `Ctrl+N` | New conversation |
 | `Ctrl+L` | Clear chat |
-| `Ctrl+P` | Open provider setup |
+| `Ctrl+P` | Open command palette |
 | `Ctrl+R` | Refresh status |
 | `Shift+Enter` | New line in input |
 
