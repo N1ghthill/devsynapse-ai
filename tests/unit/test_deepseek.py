@@ -15,13 +15,11 @@ class FakeStreamResponse:
     def raise_for_status(self):
         return None
 
-    def iter_lines(self):
+    def iter_lines(self, decode_unicode=True):
+        assert decode_unicode is True
         for event in self.events:
             yield f"data: {json.dumps(event)}"
         yield "data: [DONE]"
-
-    def close(self):
-        pass
 
 
 class FakeNonStreamResponse:
@@ -66,10 +64,7 @@ def test_stream_chat_completion_accumulates_content_and_usage():
     ]
     tokens = []
 
-    fake_client = MagicMock()
-    fake_client.post.return_value = FakeStreamResponse(events)
-
-    with patch("core.deepseek.httpx.Client", return_value=fake_client):
+    with patch("core.deepseek.requests.post", return_value=FakeStreamResponse(events)) as post:
         result = _client().stream_chat_completion(
             [{"role": "user", "content": "hi"}],
             on_token=tokens.append,
@@ -78,9 +73,8 @@ def test_stream_chat_completion_accumulates_content_and_usage():
     assert result.content == "Hello"
     assert tokens == ["Hel", "lo"]
     assert result.usage["total_tokens"] == 5
-    call_kwargs = fake_client.post.call_args.kwargs
-    assert call_kwargs["json"]["stream"] is True
-    assert call_kwargs["json"]["stream_options"] == {"include_usage": True}
+    assert post.call_args.kwargs["stream"] is True
+    assert post.call_args.kwargs["json"]["stream_options"] == {"include_usage": True}
 
 
 def test_stream_chat_completion_accumulates_tool_call_deltas():
@@ -117,10 +111,7 @@ def test_stream_chat_completion_accumulates_tool_call_deltas():
         },
     ]
 
-    fake_client = MagicMock()
-    fake_client.post.return_value = FakeStreamResponse(events)
-
-    with patch("core.deepseek.httpx.Client", return_value=fake_client):
+    with patch("core.deepseek.requests.post", return_value=FakeStreamResponse(events)):
         result = _client().stream_chat_completion(
             [{"role": "user", "content": "run ls"}],
         )
@@ -157,10 +148,7 @@ def test_chat_completion_returns_content_and_usage():
         },
     }
 
-    fake_client = MagicMock()
-    fake_client.post.return_value = FakeNonStreamResponse(response_data)
-
-    with patch("core.deepseek.httpx.Client", return_value=fake_client):
+    with patch("core.deepseek.requests.post", return_value=FakeNonStreamResponse(response_data)):
         result = _client().chat_completion([{"role": "user", "content": "hi"}])
 
     assert result.content == "Hello, world!"
@@ -190,10 +178,7 @@ def test_chat_completion_returns_tool_calls():
         "usage": {"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15},
     }
 
-    fake_client = MagicMock()
-    fake_client.post.return_value = FakeNonStreamResponse(response_data)
-
-    with patch("core.deepseek.httpx.Client", return_value=fake_client):
+    with patch("core.deepseek.requests.post", return_value=FakeNonStreamResponse(response_data)):
         result = _client().chat_completion(
             [{"role": "user", "content": "list files"}],
             tools=[{"type": "function", "function": {"name": "bash"}}],
@@ -210,10 +195,7 @@ def test_stream_chat_completion_with_thinking_mode():
         {"choices": [{"delta": {"content": "answer"}}]},
     ]
 
-    fake_client = MagicMock()
-    fake_client.post.return_value = FakeStreamResponse(events)
-
-    with patch("core.deepseek.httpx.Client", return_value=fake_client):
+    with patch("core.deepseek.requests.post", return_value=FakeStreamResponse(events)):
         result = _client().stream_chat_completion(
             [{"role": "user", "content": "hi"}],
         )
@@ -229,9 +211,6 @@ def test_chat_completion_with_openrouter_provider():
         "usage": {"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15},
     }
 
-    fake_client = MagicMock()
-    fake_client.post.return_value = FakeNonStreamResponse(response_data)
-
     client = _client()
     client.provider_configs = {
         "openrouter": {
@@ -241,7 +220,7 @@ def test_chat_completion_with_openrouter_provider():
     }
     client.model = "openrouter:anthropic/claude-2"
 
-    with patch("core.deepseek.httpx.Client", return_value=fake_client):
+    with patch("core.deepseek.requests.post", return_value=FakeNonStreamResponse(response_data)):
         result = client.chat_completion([{"role": "user", "content": "hi"}])
 
     assert result.content == "Hello from OpenRouter"
@@ -259,7 +238,6 @@ def test_retry_on_500_status_code():
         if call_count < 3:
             resp = MagicMock()
             resp.status_code = 500
-            resp.close = MagicMock()
             return resp
         resp = MagicMock()
         resp.status_code = 200
@@ -270,10 +248,7 @@ def test_retry_on_500_status_code():
         }
         return resp
 
-    fake_client = MagicMock()
-    fake_client.post.side_effect = mock_post
-
-    with patch("core.deepseek.httpx.Client", return_value=fake_client):
+    with patch("core.deepseek.requests.post", side_effect=mock_post):
         result = _client().chat_completion([{"role": "user", "content": "hi"}])
 
     assert call_count == 3
@@ -282,7 +257,7 @@ def test_retry_on_500_status_code():
 
 def test_retry_on_connection_error():
     """Verify that connection errors trigger retry logic."""
-    import httpx
+    import requests
 
     call_count = 0
 
@@ -290,7 +265,7 @@ def test_retry_on_connection_error():
         nonlocal call_count
         call_count += 1
         if call_count < 2:
-            raise httpx.ConnectError("connection failed")
+            raise requests.ConnectionError("connection failed")
         resp = MagicMock()
         resp.status_code = 200
         resp.json.return_value = {
@@ -300,10 +275,7 @@ def test_retry_on_connection_error():
         }
         return resp
 
-    fake_client = MagicMock()
-    fake_client.post.side_effect = mock_post
-
-    with patch("core.deepseek.httpx.Client", return_value=fake_client):
+    with patch("core.deepseek.requests.post", side_effect=mock_post):
         result = _client().chat_completion([{"role": "user", "content": "hi"}])
 
     assert call_count == 2

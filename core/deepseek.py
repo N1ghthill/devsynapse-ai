@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
-import httpx
+import requests
 
 from core.metrics import metrics
 
@@ -99,16 +99,16 @@ class DeepSeekClient:
         headers: Dict[str, str],
         json: Dict,
         stream: bool = False,
-    ) -> httpx.Response:
+    ) -> requests.Response:
         """POST with exponential backoff retry for transient failures."""
         last_error = None
         for attempt in range(MAX_RETRIES):
             try:
-                client = httpx.Client(timeout=httpx.Timeout(self.request_timeout, connect=5.0))
-                response = client.post(
+                response = requests.post(
                     url,
                     headers=headers,
                     json=json,
+                    timeout=(5, self.request_timeout),
                     stream=stream,
                 )
                 if response.status_code in RETRYABLE_STATUS_CODES:
@@ -120,13 +120,10 @@ class DeepSeekClient:
                         MAX_RETRIES,
                         wait,
                     )
-                    response.close()
-                    client.close()
                     time.sleep(wait)
                     continue
-                response._client = client
                 return response
-            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+            except (requests.ConnectionError, requests.Timeout) as exc:
                 last_error = exc
                 if attempt < MAX_RETRIES - 1:
                     wait = RETRY_BACKOFF_BASE * (2 ** attempt)
@@ -340,24 +337,19 @@ class DeepSeekClient:
 
     @staticmethod
     def _iter_sse_events(response) -> Iterator[Dict[str, Any]]:
-        try:
-            for raw_line in response.iter_lines():
-                if not raw_line:
-                    continue
-                line = raw_line.strip()
-                if not line or line.startswith(":") or not line.startswith("data:"):
-                    continue
-                data = line.removeprefix("data:").strip()
-                if data == "[DONE]":
-                    break
-                try:
-                    yield json.loads(data)
-                except json.JSONDecodeError:
-                    logger.debug("Ignoring malformed SSE payload: %s", data)
-        finally:
-            client = getattr(response, "_client", None)
-            if client is not None:
-                client.close()
+        for raw_line in response.iter_lines(decode_unicode=True):
+            if not raw_line:
+                continue
+            line = raw_line.strip()
+            if not line or line.startswith(":") or not line.startswith("data:"):
+                continue
+            data = line.removeprefix("data:").strip()
+            if data == "[DONE]":
+                break
+            try:
+                yield json.loads(data)
+            except json.JSONDecodeError:
+                logger.debug("Ignoring malformed SSE payload: %s", data)
 
     @staticmethod
     def _merge_tool_call_delta(
