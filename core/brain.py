@@ -2,33 +2,32 @@
 Núcleo do DevSynapse - Integração com DeepSeek API
 """
 
-import asyncio
 import logging
 import re
-import shlex
 import time
-from dataclasses import dataclass
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import config.settings as app_settings
-from config.settings import ALLOWED_COMMANDS, BLACKLISTED_PATTERNS
+from core.async_utils import run_blocking
+from core.autoexec_policy import (
+    can_autoexecute_command,
+    max_autoexec_rounds,
+    response_promises_pending_action,
+    should_replay_command_result,
+    should_retry_missing_tool,
+    user_request_expects_tool,
+)
+from core.command_extraction import extract_opencode_command, tool_calls_to_opencode_command
 from core.correlation import generate_tool_run_id
 from core.deepseek import DeepSeekClient, LLMResult
 from core.llm_optimization import ModelRoute
-from core.plugin_system import plugin_manager
+from core.memory.protocol import BrainMemoryAdapter, BrainMemoryProtocol
+from core.plugin_system import PluginManager, plugin_manager
 from core.prompts import build_system_prompt
 from core.routing import RouteSelector
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class TaskChecklist:
-    expected_files: set[str]
-    completed_files: set[str]
-    requires_pytest: bool = False
-    pytest_passed: bool = False
 
 
 OPENCODE_TOOLS = [
@@ -172,27 +171,19 @@ OPENCODE_TOOLS = [
     },
 ]
 
-AUTOEXEC_READ_ONLY_BASH_COMMANDS = {"df", "du", "ls", "ps", "pwd"}
-AUTOEXEC_READ_ONLY_GIT_SUBCOMMANDS = {
-    "branch",
-    "describe",
-    "diff",
-    "log",
-    "ls-files",
-    "remote",
-    "rev-parse",
-    "show",
-    "status",
-}
-AUTOEXEC_BASH_OUTPUT_FLAGS = {"-o", "--output"}
-
-
 class DevSynapseBrain:
     """Gerencia a inteligência do DevSynapse via API DeepSeek."""
 
-    def __init__(self, memory_system, opencode_bridge):
+    def __init__(
+        self,
+        memory_system: BrainMemoryProtocol,
+        opencode_bridge,
+        plugin_manager_instance: Optional[PluginManager] = None,
+    ):
         self.memory = memory_system
+        self.memory_optional = BrainMemoryAdapter(memory_system)
         self.opencode = opencode_bridge
+        self.plugin_manager = plugin_manager_instance or plugin_manager
         settings = app_settings.get_settings()
         flash_pricing = {
             "cache_hit": Decimal(
@@ -273,14 +264,12 @@ class DevSynapseBrain:
         stuck_context = self._detect_stuck_context(context)
         settings = app_settings.get_settings()
         active_project_path = None
-        if active_project_name and hasattr(self.memory, "get_project"):
-            try:
-                active_project = self.memory.get_project(active_project_name)
-                active_project_path = active_project.get("path") if active_project else None
-            except Exception:
-                active_project_path = None
+        if active_project_name:
+            active_project = self.memory_optional.get_project(active_project_name)
+            active_project_path = active_project.get("path") if active_project else None
 
         return build_system_prompt(
+            assistant_user_name=settings.assistant_user_name,
             user_prefs=user_prefs,
             projects_info=projects_info,
             agent_learning=agent_learning,
@@ -304,6 +293,7 @@ class DevSynapseBrain:
         user_role: Optional[str] = None,
         project_mutation_allowlist: Optional[List[str]] = None,
         auto_execute: bool = False,
+        on_token: Optional[Callable[[str], None]] = None,
     ) -> Tuple[str, Optional[str], Optional[Dict]]:
         """
         Processa uma mensagem do usuário e retorna resposta + comando OpenCode.
@@ -320,7 +310,7 @@ class DevSynapseBrain:
             "project_name": project_name,
         }
 
-        bp_event = await plugin_manager.emit_event("brain:before_process", event_data)
+        bp_event = await self.plugin_manager.emit_event("brain:before_process", event_data)
         if bp_event.cancelled:
             return "Processamento cancelado por plugin.", None, None
         user_message = bp_event.data.get("user_message", user_message)
@@ -344,26 +334,26 @@ class DevSynapseBrain:
             "conversation_id": conversation_id,
             "project_name": effective_project_name,
         }
-        await plugin_manager.emit_event("memory:before_save", mem_before)
+        await self.plugin_manager.emit_event("memory:before_save", mem_before)
 
         # Preparar mensagens para o DeepSeek
         messages = self._prepare_messages(user_message, context)
 
-        llm_event = await plugin_manager.emit_event("brain:before_llm_call", {"messages": messages})
+        llm_event = await self.plugin_manager.emit_event("brain:before_llm_call", {"messages": messages})
         if not llm_event.cancelled:
             messages = llm_event.data.get("messages", messages)
 
         route = self._select_llm_route(user_message, context)
 
         # Chamar API com loop de auto-execução para comandos read-only
-        max_autoexec_rounds = self._max_autoexec_rounds(auto_execute, user_role)
+        max_rounds = max_autoexec_rounds(auto_execute, user_role)
         round_count = 0
         aggregated_usage = None
         opencode_command = None
         response_text = ""
         autoexecuted_command = None
 
-        while round_count < max_autoexec_rounds:
+        while round_count < max_rounds:
             round_count += 1
             llm_result = self._coerce_llm_result(
                 await self._call_llm_api(
@@ -371,15 +361,16 @@ class DevSynapseBrain:
                     route=route,
                     user_id=user_id,
                     conversation_id=conversation_id,
+                    on_token=on_token,
                 )
             )
             response_text = llm_result.content
-            opencode_command = self._tool_calls_to_opencode_command(llm_result.tool_calls)
+            opencode_command = tool_calls_to_opencode_command(llm_result.tool_calls)
             if opencode_command is None:
-                opencode_command = self._extract_opencode_command(response_text)
+                opencode_command = extract_opencode_command(response_text)
             aggregated_usage = self._merge_usage(aggregated_usage, llm_result.usage)
 
-            if self._should_retry_missing_tool(
+            if should_retry_missing_tool(
                 auto_execute=auto_execute,
                 user_message=user_message,
                 response_text=response_text,
@@ -392,7 +383,7 @@ class DevSynapseBrain:
             if not (
                 autoexec_enabled
                 and opencode_command
-                and self._can_autoexecute_command(opencode_command, user_role)
+                and can_autoexecute_command(opencode_command, user_role)
             ):
                 break
 
@@ -429,7 +420,7 @@ class DevSynapseBrain:
             }
 
             if not success:
-                if self._should_replay_command_result(
+                if should_replay_command_result(
                     auto_execute,
                     user_role,
                     status,
@@ -465,14 +456,14 @@ class DevSynapseBrain:
                 )
             )
 
-        await plugin_manager.emit_event("brain:after_llm_call", {"response": response_text})
+        await self.plugin_manager.emit_event("brain:after_llm_call", {"response": response_text})
 
         response_text = self._sanitize_unconfirmed_execution_claims(
             response_text,
             opencode_command,
         )
         if autoexecuted_command is not None and (
-            not response_text.strip() or self._response_promises_pending_action(response_text)
+            not response_text.strip() or response_promises_pending_action(response_text)
         ):
             response_text = self._command_completion_fallback(autoexecuted_command)
 
@@ -531,14 +522,14 @@ class DevSynapseBrain:
             project_name=effective_project_name,
         )
 
-        await plugin_manager.emit_event("memory:after_save", {
+        await self.plugin_manager.emit_event("memory:after_save", {
             "conversation_id": conversation_id,
             "user_message": user_message,
             "response": response_text,
             "project_name": effective_project_name,
         })
 
-        ap_event = await plugin_manager.emit_event("brain:after_process", {
+        ap_event = await self.plugin_manager.emit_event("brain:after_process", {
             "response": response_text,
             "opencode_command": opencode_command,
         })
@@ -612,26 +603,14 @@ class DevSynapseBrain:
         project_name: Optional[str],
         user_message: str,
     ) -> str:
-        if not hasattr(self.memory, "get_project_memory_context"):
-            return "Nenhuma memória procedural relevante encontrada."
-        try:
-            return self.memory.get_project_memory_context(project_name, user_message)
-        except Exception:
-            logger.debug("Could not load procedural memory context", exc_info=True)
-            return "Nenhuma memória procedural relevante encontrada."
+        return self.memory_optional.get_project_memory_context(project_name, user_message)
 
     def _get_skills_context(
         self,
         user_message: str,
         project_name: Optional[str],
     ) -> str:
-        if not hasattr(self.memory, "get_skills_context"):
-            return "Nenhuma skill registrada ainda."
-        try:
-            return self.memory.get_skills_context(user_message, project_name=project_name)
-        except Exception:
-            logger.debug("Could not load skills context", exc_info=True)
-            return "Nenhuma skill registrada ainda."
+        return self.memory_optional.get_skills_context(user_message, project_name=project_name)
 
     def _start_agent_run_if_needed(
         self,
@@ -644,28 +623,17 @@ class DevSynapseBrain:
             return None
 
         active_run = None
-        if hasattr(self.memory, "get_active_agent_run"):
-            try:
-                active_run = self.memory.get_active_agent_run(conversation_id)
-            except Exception:
-                logger.debug("Could not load active agent run", exc_info=True)
+        active_run = self.memory_optional.get_active_agent_run(conversation_id)
 
-        should_track = active_run is not None or self._user_request_expects_tool(user_message)
-        if should_track and hasattr(self.memory, "start_or_resume_agent_run"):
-            try:
-                active_run = self.memory.start_or_resume_agent_run(
-                    conversation_id=conversation_id,
-                    goal=user_message,
-                    project_name=project_name,
-                )
-            except Exception:
-                logger.debug("Could not start agent run", exc_info=True)
+        should_track = active_run is not None or user_request_expects_tool(user_message)
+        if should_track:
+            active_run = self.memory_optional.start_or_resume_agent_run(
+                conversation_id=conversation_id,
+                goal=user_message,
+                project_name=project_name,
+            )
 
-        if hasattr(self.memory, "get_agent_run_context"):
-            try:
-                context["agent_run_context"] = self.memory.get_agent_run_context(conversation_id)
-            except Exception:
-                logger.debug("Could not load agent run context", exc_info=True)
+        context["agent_run_context"] = self.memory_optional.get_agent_run_context(conversation_id)
 
         return active_run
 
@@ -681,22 +649,17 @@ class DevSynapseBrain:
         reason_code: Optional[str],
         project_name: Optional[str],
     ) -> None:
-        if not hasattr(self.memory, "record_agent_command_result"):
-            return
-        try:
-            self.memory.record_agent_command_result(
-                conversation_id=conversation_id,
-                goal=goal,
-                command=command,
-                success=success,
-                result=result,
-                output=output,
-                status=status,
-                reason_code=reason_code,
-                project_name=project_name,
-            )
-        except Exception:
-            logger.debug("Could not record agent command result", exc_info=True)
+        self.memory_optional.record_agent_command_result(
+            conversation_id=conversation_id,
+            goal=goal,
+            command=command,
+            success=success,
+            result=result,
+            output=output,
+            status=status,
+            reason_code=reason_code,
+            project_name=project_name,
+        )
 
     def _record_agent_final_response(
         self,
@@ -706,18 +669,15 @@ class DevSynapseBrain:
         has_pending_command: bool,
         project_name: Optional[str],
     ) -> None:
-        if not agent_run or not hasattr(self.memory, "record_agent_final_response"):
+        if not agent_run:
             return
-        try:
-            self.memory.record_agent_final_response(
-                run_id=agent_run["id"],
-                conversation_id=conversation_id,
-                response=response_text,
-                has_pending_command=has_pending_command,
-                project_name=project_name,
-            )
-        except Exception:
-            logger.debug("Could not record agent final response", exc_info=True)
+        self.memory_optional.record_agent_final_response(
+            run_id=agent_run["id"],
+            conversation_id=conversation_id,
+            response=response_text,
+            has_pending_command=has_pending_command,
+            project_name=project_name,
+        )
 
     def _review_completed_task(
         self,
@@ -729,20 +689,15 @@ class DevSynapseBrain:
         route: ModelRoute,
         tool_iterations: int,
     ) -> None:
-        if not hasattr(self.memory, "review_completed_task"):
-            return
-        try:
-            self.memory.review_completed_task(
-                conversation_id=conversation_id,
-                user_message=user_message,
-                ai_response=ai_response,
-                project_name=project_name,
-                opencode_command=opencode_command,
-                route=route,
-                tool_iterations=tool_iterations,
-            )
-        except Exception:
-            logger.debug("Could not run learning nudge", exc_info=True)
+        self.memory_optional.review_completed_task(
+            conversation_id=conversation_id,
+            user_message=user_message,
+            ai_response=ai_response,
+            project_name=project_name,
+            opencode_command=opencode_command,
+            route=route,
+            tool_iterations=tool_iterations,
+        )
 
     def _record_agent_route_decision(
         self,
@@ -752,21 +707,16 @@ class DevSynapseBrain:
         project_name: Optional[str],
         opencode_command: Optional[str],
     ) -> None:
-        if not hasattr(self.memory, "record_agent_route_decision"):
-            return
-        try:
-            self.memory.record_agent_route_decision(
-                conversation_id=conversation_id,
-                route=route,
-                usage=usage,
-                project_name=project_name,
-                opencode_command=opencode_command,
-            )
-        except Exception:
-            logger.debug("Could not persist agent route decision", exc_info=True)
+        self.memory_optional.record_agent_route_decision(
+            conversation_id=conversation_id,
+            route=route,
+            usage=usage,
+            project_name=project_name,
+            opencode_command=opencode_command,
+        )
 
     def _persist_repos_project_if_needed(self, project_name: Optional[str]) -> None:
-        if not project_name or not hasattr(self.memory, "add_project"):
+        if not project_name:
             return
 
         settings = app_settings.get_settings()
@@ -780,9 +730,9 @@ class DevSynapseBrain:
             return
 
         try:
-            if hasattr(self.memory, "get_project") and self.memory.get_project(project_name):
+            if self.memory_optional.get_project(project_name):
                 return
-            self.memory.add_project(
+            self.memory_optional.add_project(
                 project_name,
                 str(project_root),
                 project_type="project",
@@ -799,6 +749,7 @@ class DevSynapseBrain:
         tool_choice: object = "auto",
         user_id: Optional[str] = None,
         conversation_id: Optional[str] = None,
+        on_token: Optional[Callable[[str], None]] = None,
     ) -> LLMResult:
         """Chama API do DeepSeek e retorna resposta degradada se a API falhar."""
 
@@ -810,6 +761,7 @@ class DevSynapseBrain:
         try:
             return await self._complete_and_record(
                 messages, model, tool_choice, route, user_id, conversation_id, start_time,
+                on_token,
             )
         except Exception as e:
             fallback_model = route.fallback_model if route else None
@@ -821,7 +773,7 @@ class DevSynapseBrain:
                     )
                     return await self._complete_and_record(
                         messages, fallback_model, tool_choice, route, user_id,
-                        conversation_id, start_time,
+                        conversation_id, start_time, on_token,
                     )
                 except Exception as fallback_error:
                     logger.warning(
@@ -848,11 +800,26 @@ class DevSynapseBrain:
         user_id: Optional[str],
         conversation_id: Optional[str],
         start_time: float,
+        on_token: Optional[Callable[[str], None]] = None,
     ) -> LLMResult:
-        result = await asyncio.to_thread(
-            self.deepseek.chat_completion,
-            messages, OPENCODE_TOOLS, model=model, tool_choice=tool_choice,
-        )
+        settings = app_settings.get_settings()
+        if settings.llm_streaming_enabled:
+            result = await run_blocking(
+                self.deepseek.stream_chat_completion,
+                messages,
+                OPENCODE_TOOLS,
+                model=model,
+                tool_choice=tool_choice,
+                on_token=on_token,
+            )
+        else:
+            result = await run_blocking(
+                self.deepseek.chat_completion,
+                messages,
+                OPENCODE_TOOLS,
+                model=model,
+                tool_choice=tool_choice,
+            )
         usage = self._enrich_usage_cost(result.provider, result.model, result.usage)
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         self._record_llm_request_telemetry(
@@ -880,9 +847,9 @@ class DevSynapseBrain:
             return usage
         if usage.get("estimated_cost_usd") is not None:
             return usage
-        if not provider or not model or not hasattr(self.memory, "get_llm_model"):
+        if not provider or not model:
             return usage
-        catalog = self.memory.get_llm_model(provider, model)
+        catalog = self.memory_optional.get_llm_model(provider, model)
         if not isinstance(catalog, dict):
             return usage
         input_cost = catalog.get("input_cost_per_token")
@@ -906,12 +873,7 @@ class DevSynapseBrain:
         return enriched
 
     def _record_llm_request_telemetry(self, **kwargs) -> None:
-        if not hasattr(self.memory, "record_llm_request_telemetry"):
-            return
-        try:
-            self.memory.record_llm_request_telemetry(**kwargs)
-        except Exception:
-            logger.debug("Could not record LLM request telemetry", exc_info=True)
+        self.memory_optional.record_llm_request_telemetry(**kwargs)
 
 
 
@@ -1012,187 +974,6 @@ class DevSynapseBrain:
         return merged
 
     @staticmethod
-    def _max_autoexec_rounds(auto_execute: bool, user_role: Optional[str]) -> int:
-        """Allow trusted admin runs enough turns to build, test and fix without stopping early."""
-
-        if auto_execute and user_role == "admin":
-            return 20
-        if auto_execute:
-            return 8
-        return 5
-
-    @staticmethod
-    def _should_replay_command_result(
-        auto_execute: bool,
-        user_role: Optional[str],
-        status: str,
-        reason_code: Optional[str],
-        message: Optional[str] = None,
-        output: Optional[str] = None,
-    ) -> bool:
-        """Let auto mode recover from normal failures and explain blocked actions."""
-
-        if not auto_execute:
-            return False
-
-        if status == "failed" and reason_code == "execution_failed":
-            if DevSynapseBrain._looks_like_interactive_sudo_failure(message, output):
-                return False
-
-            return True
-
-        return status == "blocked" and reason_code in {
-            "authorization_failed",
-            "project_scope_mismatch",
-            "validation_failed",
-        }
-
-    @staticmethod
-    def _looks_like_interactive_sudo_failure(
-        message: Optional[str],
-        output: Optional[str],
-    ) -> bool:
-        text = f"{message or ''}\n{output or ''}".lower()
-        sudo_markers = [
-            "sudo:",
-            "a terminal is required",
-            "um terminal é necessário",
-            "a password is required",
-            "uma senha é necessária",
-            "no tty present",
-            "askpass",
-        ]
-        return "sudo" in text and any(marker in text for marker in sudo_markers)
-
-    def _should_retry_missing_tool(
-        self,
-        auto_execute: bool,
-        user_message: str,
-        response_text: str,
-        opencode_command: Optional[str],
-    ) -> bool:
-        """Recover when the model promises action but emits no executable tool call."""
-
-        if not auto_execute or opencode_command:
-            return False
-        if response_text:
-            return self._response_promises_pending_action(response_text)
-        return self._user_request_expects_tool(user_message)
-
-    @staticmethod
-    def _build_task_checklist(user_message: str) -> Optional[TaskChecklist]:
-        """Extract a small objective completion checklist from implementation requests."""
-
-        text = user_message or ""
-        file_matches = re.findall(
-            r"(?<![\w./-])([\w.-]+(?:/[\w.-]+)*\.(?:py|tsx|ts|js|jsx|json|toml|md|css|html|rs|yml|yaml))(?![\w./-])",
-            text,
-            flags=re.IGNORECASE,
-        )
-        expected_files = {
-            match.strip("`'\".,;:()[]{}").lstrip("./")
-            for match in file_matches
-            if match.strip("`'\".,;:()[]{}")
-        }
-        requires_pytest = bool(re.search(r"\b(pytest|testes?\s+passar|tests?\s+pass)\b", text, re.I))
-        if not expected_files and not requires_pytest:
-            return None
-        return TaskChecklist(
-            expected_files=expected_files,
-            completed_files=set(),
-            requires_pytest=requires_pytest,
-        )
-
-    @staticmethod
-    def _update_task_checklist(
-        checklist: TaskChecklist,
-        command: str,
-        output: Optional[str],
-    ) -> None:
-        write_match = re.match(r'write\s+"([^"]+)"', command)
-        if write_match:
-            written_path = write_match.group(1).lstrip("./")
-            for expected_file in checklist.expected_files:
-                if written_path.endswith(expected_file):
-                    checklist.completed_files.add(expected_file)
-
-        if "pytest" in command.lower():
-            result_text = f"{output or ''}".lower()
-            if re.search(r"\b\d+\s+passed\b", result_text) or "passed" in result_text:
-                checklist.pytest_passed = True
-
-    @staticmethod
-    def _task_checklist_complete(checklist: TaskChecklist) -> bool:
-        files_done = checklist.expected_files.issubset(checklist.completed_files)
-        tests_done = not checklist.requires_pytest or checklist.pytest_passed
-        return files_done and tests_done
-
-    @staticmethod
-    def _task_checklist_status(checklist: TaskChecklist) -> str:
-        missing_files = sorted(checklist.expected_files - checklist.completed_files)
-        lines = []
-        if checklist.expected_files:
-            done = sorted(checklist.completed_files)
-            lines.append(f"Files done: {', '.join(done) if done else '(none)'}")
-            lines.append(f"Files missing: {', '.join(missing_files) if missing_files else '(none)'}")
-        if checklist.requires_pytest:
-            lines.append(f"Pytest passed: {'yes' if checklist.pytest_passed else 'no'}")
-        return "\n".join(lines)
-
-    @staticmethod
-    def _build_checklist_repair_messages(
-        assistant_text: str,
-        checklist: TaskChecklist,
-    ) -> List[Dict[str, str]]:
-        return [
-            {"role": "assistant", "content": assistant_text or "Continuing the task."},
-            {
-                "role": "user",
-                "content": (
-                    "The original task is not complete according to this objective checklist:\n"
-                    f"{DevSynapseBrain._task_checklist_status(checklist)}\n\n"
-                    "Continue the original task now. Emit exactly one next tool call. "
-                    "Do not provide a final summary until every listed file exists and "
-                    "the required test command has passed."
-                ),
-            },
-        ]
-
-    @staticmethod
-    def _user_request_expects_tool(user_message: str) -> bool:
-        normalized = " ".join((user_message or "").strip().lower().split())
-        if not normalized:
-            return False
-
-        explanatory_question_patterns = [
-            r"^(como|how)\b",
-            r"\b(o que|what|why|por que|porque)\b",
-        ]
-        if any(re.search(pattern, normalized) for pattern in explanatory_question_patterns):
-            return False
-
-        action_patterns = [
-            r"\b(crie|criar|cria|implemente|implementar|gere|gerar|monte|montar|adicione|adicionar|edite|editar|salve|salvar|rode|rodar|execute|executar|leia|ler|liste|listar|inspecione|inspecionar)\b",
-            r"\b(create|implement|generate|build|add|edit|save|run|execute|read|list|inspect)\b",
-            r"\b(pode\s+continuar|continue|continuar)\b",
-        ]
-        return any(re.search(pattern, normalized) for pattern in action_patterns)
-
-    @staticmethod
-    def _response_promises_pending_action(response_text: str) -> bool:
-        normalized = " ".join(response_text.strip().lower().split())
-        if not normalized:
-            return False
-
-        pending_action_patterns = [
-            r"\b(vou|irei|vamos)\s+(criar|escrever|gerar|montar|adicionar|editar|salvar|rodar|executar|ler|listar|inspecionar)\b",
-            r"\b(agora|em seguida)\s+(vou|vamos)\s+(criar|escrever|gerar|montar|adicionar|editar|salvar|rodar|executar|ler|listar|inspecionar)\b",
-            r"\b(agora|em seguida|pr[oó]ximo|next)\s+(?:o|a|os|as|the)?\s*[`'\"*_]*(arquivo|readme(?:\.md)?|teste|testes|c[oó]digo|pacote|m[oó]dulo|pyproject(?:\.toml)?|file|test|tests|code|package|module)\b[^.!?]*:?\s*$",
-            r"\b(i'?ll|i will|let me|i am going to|i'm going to)\s+(create|write|generate|add|edit|save|run|execute|read|list|inspect)\b",
-        ]
-        return any(re.search(pattern, normalized) for pattern in pending_action_patterns)
-
-    @staticmethod
     def _build_command_result_replay_messages(
         assistant_text: str,
         command: str,
@@ -1256,277 +1037,6 @@ class DevSynapseBrain:
             },
         ]
     
-    @staticmethod
-    def _tool_calls_to_opencode_command(tool_calls: Optional[List[Dict]]) -> Optional[str]:
-        """Convert OpenAI-compatible tool_calls into an OpenCode command string."""
-        if not tool_calls:
-            return None
-
-        tc = tool_calls[0]
-        func = tc.get("function", {})
-        name = func.get("name", "")
-        raw_args = func.get("arguments", "{}")
-
-        try:
-            import json as _json
-            args = _json.loads(raw_args) if isinstance(raw_args, str) else raw_args
-        except Exception:
-            return None
-
-        if name == "bash":
-            command = DevSynapseBrain._escape_opencode_arg(args.get("command", ""))
-            if command:
-                return f'bash "{command}"'
-        elif name == "read":
-            path = DevSynapseBrain._escape_opencode_arg(args.get("path", ""))
-            if path:
-                return f'read "{path}"'
-        elif name == "glob":
-            pattern = DevSynapseBrain._escape_opencode_arg(args.get("pattern", ""))
-            if pattern:
-                return f'glob "{pattern}"'
-        elif name == "grep":
-            pattern = DevSynapseBrain._escape_opencode_arg(args.get("pattern", ""))
-            include = DevSynapseBrain._escape_opencode_arg(args.get("include", ""))
-            if pattern:
-                if include:
-                    return f'grep "{pattern}" --include="{include}"'
-                return f'grep "{pattern}"'
-        elif name == "edit":
-            path = DevSynapseBrain._escape_opencode_arg(args.get("path", ""))
-            old = DevSynapseBrain._escape_opencode_arg(args.get("old", ""))
-            new = DevSynapseBrain._escape_opencode_arg(args.get("new", ""))
-            if path:
-                return f'edit "{path}" --old="{old}" --new="{new}"'
-        elif name == "write":
-            path = DevSynapseBrain._escape_opencode_arg(args.get("path", ""))
-            content = DevSynapseBrain._escape_opencode_arg(args.get("content", ""))
-            if path:
-                return f'write "{path}" --content="{content}"'
-
-        return None
-
-    @staticmethod
-    def _escape_opencode_arg(value: object) -> str:
-        """Escape a JSON tool argument so it remains one quoted OpenCode argument."""
-        return (
-            str(value)
-            .replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\r", "\\r")
-            .replace("\n", "\\n")
-            .replace("\t", "\\t")
-        )
-
-    @staticmethod
-    def _can_autoexecute_command(command: str, user_role: Optional[str] = None) -> bool:
-        """Check whether a command may run without an explicit confirmation click."""
-        if not command:
-            return False
-
-        lower = command.lower()
-        for pattern in BLACKLISTED_PATTERNS:
-            if pattern in lower:
-                return False
-
-        parts = command.split(None, 1)
-        cmd_type = parts[0].lower() if parts else ""
-
-        if user_role == "admin":
-            return cmd_type in set(ALLOWED_COMMANDS)
-
-        if cmd_type == "bash":
-            bash_command = parts[1].strip("\"' ") if len(parts) > 1 else ""
-            if DevSynapseBrain._is_read_only_bash_command(bash_command):
-                return True
-
-        return False
-
-    @staticmethod
-    def _is_read_only_command(command: str) -> bool:
-        """Compatibility wrapper for non-admin low-risk auto-execution checks."""
-        return DevSynapseBrain._can_autoexecute_command(command, user_role="user")
-
-    @staticmethod
-    def _is_read_only_bash_command(command: str) -> bool:
-        try:
-            parts = shlex.split(command)
-        except ValueError:
-            return False
-
-        if not parts:
-            return False
-
-        first_word = parts[0].lower()
-        if first_word in AUTOEXEC_READ_ONLY_BASH_COMMANDS:
-            return not DevSynapseBrain._has_output_redirect_flag(parts[1:])
-
-        if first_word == "git":
-            if len(parts) == 1:
-                return True
-            subcommand = parts[1].lower()
-            if subcommand not in AUTOEXEC_READ_ONLY_GIT_SUBCOMMANDS:
-                return False
-            return not DevSynapseBrain._has_output_redirect_flag(parts[2:])
-
-        return False
-
-    @staticmethod
-    def _has_output_redirect_flag(parts: List[str]) -> bool:
-        return any(part in AUTOEXEC_BASH_OUTPUT_FLAGS or part.startswith("--output=") for part in parts)
-
-    def _extract_opencode_command(self, response_text: str) -> Optional[str]:
-        """
-        Extrai comando OpenCode da resposta do LLM
-        
-        Procura por padrões como:
-        - bash "comando"
-        - read "/path"
-        - etc.
-        """
-        
-        # Padrões para diferentes comandos
-        patterns = {
-            "bash": r'bash\s+"([^"]+)"',
-            "read": r'read\s+"([^"]+)"',
-            "glob": r'glob\s+"([^"]+)"',
-            "grep": r'grep\s+"([^"]+)"(?:\s+--include="([^"]+)")?',
-            "edit": r'edit\s+"([^"]+)"\s+--old="([^"]+)"\s+--new="([^"]+)"',
-            "write": r'write\s+"([^"]+)"\s+--content="([^"]+)"'
-        }
-
-        matches = []
-        for command_type, pattern in patterns.items():
-            for match in re.finditer(pattern, response_text, re.IGNORECASE | re.DOTALL):
-                matches.append((match.start(), command_type, match))
-
-        if not matches:
-            return self._extract_flexible_opencode_command(response_text)
-
-        _, command_type, match = max(matches, key=lambda item: item[0])
-
-        if command_type == "bash":
-            return f'bash "{match.group(1)}"'
-        elif command_type == "read":
-            return f'read "{match.group(1)}"'
-        elif command_type == "glob":
-            return f'glob "{match.group(1)}"'
-        elif command_type == "grep":
-            if match.group(2):  # Tem include
-                return f'grep "{match.group(1)}" --include="{match.group(2)}"'
-            else:
-                return f'grep "{match.group(1)}"'
-        elif command_type == "edit":
-            return (
-                f'edit "{match.group(1)}" '
-                f'--old="{match.group(2)}" --new="{match.group(3)}"'
-            )
-        elif command_type == "write":
-            return f'write "{match.group(1)}" --content="{match.group(2)}"'
-
-        return self._extract_flexible_opencode_command(response_text)
-
-    def _extract_flexible_opencode_command(self, response_text: str) -> Optional[str]:
-        """Handle loosely formatted commands such as `bash ls -la` or bare `docker ps`."""
-
-        lines = [line.strip() for line in response_text.splitlines() if line.strip()]
-
-        for line in reversed(lines):
-            normalized = line.strip().strip("`").strip()
-            normalized = re.sub(r"^[-*]\s+", "", normalized)
-            normalized = re.sub(r"^\d+\.\s+", "", normalized)
-
-            if not normalized:
-                continue
-
-            explicit = self._normalize_explicit_command_line(normalized)
-            if explicit:
-                return explicit
-
-            bare_shell = self._normalize_bare_shell_line(normalized)
-            if bare_shell:
-                return bare_shell
-
-        return None
-
-    def _normalize_explicit_command_line(self, line: str) -> Optional[str]:
-        if any(operator in line for operator in ["&&", "||", ">", "|", ";"]):
-            return None
-
-        explicit_match = re.match(
-            r'^(bash|read|glob|grep)\s+(?:"([^"]+)"|(.+))$',
-            line,
-            re.IGNORECASE,
-        )
-        if not explicit_match:
-            return None
-
-        command_type = explicit_match.group(1).lower()
-        argument = (explicit_match.group(2) or explicit_match.group(3) or "").strip()
-        if not argument:
-            return None
-
-        if command_type == "bash":
-            return f'bash "{argument}"'
-        if command_type == "read":
-            return f'read "{argument}"'
-        if command_type == "glob":
-            return f'glob "{argument}"'
-        if command_type == "grep":
-            return f'grep "{argument}"'
-
-        return None
-
-    def _normalize_bare_shell_line(self, line: str) -> Optional[str]:
-        if any(operator in line for operator in ["&&", "||", ">", "|", ";"]):
-            return None
-
-        bare_shell_match = re.match(r'^([a-zA-Z0-9_.-]+)(?:\s+.+)?$', line)
-        if not bare_shell_match:
-            return None
-
-        if any(punct in line for punct in [":", "?", "!", "```"]):
-            return None
-
-        first_word = bare_shell_match.group(1).lower()
-        if first_word not in {
-            "ls",
-            "pwd",
-            "cat",
-            "head",
-            "tail",
-            "grep",
-            "find",
-            "git",
-            "npm",
-            "node",
-            "python",
-            "python3",
-            "echo",
-            "touch",
-            "mkdir",
-            "cp",
-            "mv",
-            "rm",
-            "chmod",
-            "df",
-            "du",
-            "ps",
-            "top",
-            "kill",
-            "curl",
-            "wget",
-            "tar",
-            "gzip",
-            "gunzip",
-            "zip",
-            "unzip",
-            "docker",
-        }:
-            return None
-
-        return f'bash "{line}"'
-
     def _sanitize_unconfirmed_execution_claims(
         self,
         response_text: str,

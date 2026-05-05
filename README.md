@@ -94,6 +94,9 @@ By default DevSynapse stores user runtime files outside the source checkout:
 Set `DEVSYNAPSE_HOME=/path/to/runtime` to keep config, data and logs together
 under one directory. The more specific `DEVSYNAPSE_CONFIG_FILE`,
 `DEVSYNAPSE_DATA_DIR` and `DEVSYNAPSE_LOGS_DIR` variables can override each path.
+Set `ASSISTANT_USER_NAME` in the runtime config or environment to personalize
+the system prompt; the default prompt is generic for distributed installs.
+Set `LLM_STREAMING_ENABLED=false` to force non-streaming provider responses.
 
 The settings loader creates these files on a best-effort basis. Read-only
 runtime config should not break commands such as `devsynapse --help`; commands
@@ -140,7 +143,7 @@ Current local baseline after the TUI product cleanup:
 
 ```text
 make lint        passed
-make test        150 passed
+make test        167 passed
 make script-check passed
 make tui-smoke   passed
 ```

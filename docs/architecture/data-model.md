@@ -3,6 +3,11 @@
 ## Storage Strategy
 
 DevSynapse AI currently uses SQLite for local persistence. Schema evolution is managed in-repo through explicit migrations.
+Runtime connections are opened through `core.db.connect_db`, which applies a
+shared timeout, `busy_timeout`, foreign key enforcement and WAL mode for
+file-backed databases. Stores should not call `sqlite3.connect` directly.
+Async store methods offload blocking SQLite calls through `core.async_utils.run_blocking`
+instead of `asyncio.to_thread`.
 
 Runtime database files are user state, not source files. By default they live under
 `~/.local/share/devsynapse-ai/data`, with the primary SQLite path resolved from

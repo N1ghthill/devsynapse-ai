@@ -9,7 +9,7 @@ Describe the purpose of this change.
 ## Verification
 
 - [ ] `./venv/bin/pytest -q`
-- [ ] `cd frontend && npm run build`
+- [ ] `make verify`
 - [ ] docs updated when contracts/setup/behavior changed
 
 ## Risks

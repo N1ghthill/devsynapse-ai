@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from config.settings import DEFAULT_PREFERENCES, KNOWN_PROJECTS, get_settings
+from core.async_utils import run_blocking
+from core.db import connect_db
 from core.llm_optimization import ModelRoute, build_task_profile
 from core.memory.agent_runs import AgentRunStore
 from core.memory.conversations import ConversationStore
@@ -56,7 +58,7 @@ class MemorySystem:
 
         build_memory_migration_manager(self.db_path).apply_migrations()
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
 
         # Inserir preferências padrão
@@ -89,7 +91,7 @@ class MemorySystem:
 
     def get_db_connection(self) -> sqlite3.Connection:
         """Return a SQLite connection for internal/service use."""
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -174,7 +176,7 @@ class MemorySystem:
             llm_usage=llm_usage,
             project_name=project_name,
         )
-        self._update_project_access(user_message, inferred)
+        await run_blocking(self._update_project_access, user_message, inferred)
         return inferred
 
     async def save_command_execution(
@@ -200,7 +202,8 @@ class MemorySystem:
             project_name=project_name,
         )
         if record_agent_event:
-            self.record_agent_command_result(
+            await run_blocking(
+                self.record_agent_command_result,
                 conversation_id=conversation_id,
                 goal=f"Executar comando confirmado: {command}",
                 command=command,
@@ -211,16 +214,18 @@ class MemorySystem:
                 reason_code=reason_code,
                 project_name=project_name,
             )
-        self.learning.learn_from_command_outcome(
+        await run_blocking(
+            self.learning.learn_from_command_outcome,
             conversation_id=conversation_id,
             command=command,
             success=success,
             result=result,
         )
         try:
-            row = self._latest_conversation_for_review(conversation_id)
+            row = await run_blocking(self._latest_conversation_for_review, conversation_id)
             if row:
-                self.review_completed_task(
+                await run_blocking(
+                    self.review_completed_task,
                     conversation_id=conversation_id,
                     user_message=row.get("user_message") or "",
                     ai_response=row.get("ai_response") or "",
@@ -237,7 +242,7 @@ class MemorySystem:
 
     async def save_feedback(self, conversation_id: str, feedback: str, score: Optional[int] = None):
         result = await self.conversations.save_feedback(conversation_id, feedback, score)
-        self.learning.learn_from_feedback(conversation_id, feedback, score)
+        await run_blocking(self.learning.learn_from_feedback, conversation_id, feedback, score)
         return result
 
     # ── agent task-run delegation ──────────────────────────────────

@@ -77,7 +77,9 @@ class TestDevSynapseBrain:
         brain = DevSynapseBrain(mock_memory, mock_bridge)
         prompt = brain.generate_system_prompt({"test": "context"})
         assert "DevSynapse" in prompt
-        assert "Irving" in prompt or "N1ghthill" in prompt
+        assert "the user" in prompt
+        assert "Irving" not in prompt
+        assert "N1ghthill" not in prompt
         assert "tools" in prompt.lower()
         assert "CURRENT AGENT RUN" in prompt
         assert 'Do not ask "should I continue?"' in prompt
@@ -163,12 +165,11 @@ class TestDevSynapseBrain:
     async def test_process_message_plugin_cancel_returns_full_contract(
         self, mock_memory, mock_bridge
     ):
-        brain = DevSynapseBrain(mock_memory, mock_bridge)
+        plugin_manager = Mock()
+        plugin_manager.emit_event = AsyncMock(return_value=SimpleNamespace(cancelled=True, data={}))
+        brain = DevSynapseBrain(mock_memory, mock_bridge, plugin_manager_instance=plugin_manager)
 
-        with patch("core.brain.plugin_manager.emit_event", new_callable=AsyncMock) as mock_emit:
-            mock_emit.return_value = SimpleNamespace(cancelled=True, data={})
-
-            response, cmd, usage = await brain.process_message("Hello", "test_session")
+        response, cmd, usage = await brain.process_message("Hello", "test_session")
 
         assert response == "Processamento cancelado por plugin."
         assert cmd is None

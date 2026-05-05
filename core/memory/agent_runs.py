@@ -7,6 +7,8 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Optional
 
+from core.db import connect_db
+
 ACTIVE_STATUSES = {"running", "waiting_confirmation", "blocked"}
 
 
@@ -17,7 +19,7 @@ class AgentRunStore:
         self.db_path = db_path
 
     def get_db_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 

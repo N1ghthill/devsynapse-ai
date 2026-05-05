@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from config.settings import get_settings
+from core.db import connect_db
 from core.llm_optimization import ModelRoute, build_task_profile, cache_hit_rate_pct
 
 POSITIVE_FEEDBACK = ("bom", "ótimo", "otimo", "excelente", "útil", "util", "correto", "perfeito")
@@ -23,7 +24,7 @@ class AgentLearningStore:
         self.db_path = db_path
 
     def get_db_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 

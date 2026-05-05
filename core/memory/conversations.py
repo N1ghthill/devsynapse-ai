@@ -9,6 +9,8 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
+from core.async_utils import run_blocking
+from core.db import connect_db
 from core.llm_optimization import cache_hit_rate_pct
 
 logger = logging.getLogger(__name__)
@@ -22,7 +24,7 @@ class ConversationStore:
 
     def get_db_connection(self) -> sqlite3.Connection:
         """Return a SQLite connection for internal/service use."""
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -51,9 +53,12 @@ class ConversationStore:
         return row["conversation_project_name"] if row else None
 
     async def get_conversation_context(self, conversation_id: Optional[str] = None) -> Dict:
+        return await run_blocking(self._get_conversation_context, conversation_id)
+
+    def _get_conversation_context(self, conversation_id: Optional[str] = None) -> Dict:
         """Obtém contexto para uma conversa"""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -513,7 +518,7 @@ class ConversationStore:
     def rename_conversation(self, conversation_id: str, title: str) -> bool:
         """Persist a display title for a conversation."""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
         cursor.execute(
             '''
@@ -531,7 +536,7 @@ class ConversationStore:
     def delete_conversation(self, conversation_id: str) -> bool:
         """Delete all rows that belong to a conversation."""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
         cursor.execute(
             '''
@@ -555,9 +560,30 @@ class ConversationStore:
         llm_usage: Optional[Dict[str, Any]] = None,
         project_name: Optional[str] = None,
     ):
+        return await run_blocking(
+            self._save_interaction,
+            conversation_id,
+            user_message,
+            ai_response,
+            opencode_command,
+            conversation_title,
+            llm_usage,
+            project_name,
+        )
+
+    def _save_interaction(
+        self,
+        conversation_id: Optional[str],
+        user_message: str,
+        ai_response: str,
+        opencode_command: Optional[str] = None,
+        conversation_title: Optional[str] = None,
+        llm_usage: Optional[Dict[str, Any]] = None,
+        project_name: Optional[str] = None,
+    ):
         """Salva uma interação na memória"""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
 
         timestamp = datetime.now().isoformat()
@@ -628,9 +654,32 @@ class ConversationStore:
         reason_code: Optional[str] = None,
         project_name: Optional[str] = None,
     ):
+        return await run_blocking(
+            self._save_command_execution,
+            conversation_id,
+            command,
+            success,
+            result,
+            output,
+            status,
+            reason_code,
+            project_name,
+        )
+
+    def _save_command_execution(
+        self,
+        conversation_id: Optional[str],
+        command: str,
+        success: bool,
+        result: str,
+        output: Optional[str] = None,
+        status: Optional[str] = None,
+        reason_code: Optional[str] = None,
+        project_name: Optional[str] = None,
+    ):
         """Salva resultado da execução de um comando"""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
 
         cursor.execute('''
@@ -647,24 +696,8 @@ class ConversationStore:
             LIMIT 1
         ''', (result, output, status, reason_code, project_name, conversation_id, command))
 
-        # Aprender com o resultado
-        if success:
-            self._learn_from_success(command, result)
-        else:
-            self._learn_from_failure(command, result)
-
         conn.commit()
         conn.close()
-
-    def _learn_from_success(self, command: str, result: str):
-        """Aprende com execução bem-sucedida"""
-        # Implementar aprendizado baseado em sucesso
-        pass
-
-    def _learn_from_failure(self, command: str, result: str):
-        """Aprende com execução falha"""
-        # Implementar aprendizado baseado em falha
-        pass
 
     async def save_feedback(
         self,
@@ -672,9 +705,17 @@ class ConversationStore:
         feedback: str,
         score: Optional[int] = None
     ):
+        return await run_blocking(self._save_feedback, conversation_id, feedback, score)
+
+    def _save_feedback(
+        self,
+        conversation_id: Optional[str],
+        feedback: str,
+        score: Optional[int] = None
+    ):
         """Salva feedback do usuário"""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
 
         cursor.execute('''
@@ -703,7 +744,7 @@ class ConversationStore:
         feedback_lower = feedback.lower()
 
         # Atualizar preferências baseado no feedback
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
 
         # Exemplo simples: se feedback positivo, aumentar confiança

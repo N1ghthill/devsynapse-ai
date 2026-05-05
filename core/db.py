@@ -4,12 +4,54 @@ SQLite schema versioning utilities.
 
 import logging
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Sequence
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_SQLITE_TIMEOUT_SECONDS = 30.0
+DEFAULT_SQLITE_BUSY_TIMEOUT_MS = 30000
+_WAL_CONFIGURED_PATHS: set[Path] = set()
+_WAL_CONFIG_LOCK = threading.Lock()
+
+
+def connect_db(
+    db_path: Path | str,
+    *,
+    row_factory: bool = True,
+    timeout: float = DEFAULT_SQLITE_TIMEOUT_SECONDS,
+) -> sqlite3.Connection:
+    """Open a SQLite connection with the repository's runtime defaults."""
+
+    path = Path(db_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path, timeout=timeout, check_same_thread=False)
+    if row_factory:
+        conn.row_factory = sqlite3.Row
+
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON")
+    cursor.execute(f"PRAGMA busy_timeout = {DEFAULT_SQLITE_BUSY_TIMEOUT_MS}")
+    if path.name != ":memory:" and _should_configure_wal(path):
+        try:
+            cursor.execute("PRAGMA journal_mode = WAL")
+            cursor.execute("PRAGMA synchronous = NORMAL")
+        except sqlite3.OperationalError as exc:
+            logger.debug("Could not enable SQLite WAL mode for %s: %s", path, exc)
+
+    return conn
+
+
+def _should_configure_wal(path: Path) -> bool:
+    resolved = path.resolve()
+    with _WAL_CONFIG_LOCK:
+        if resolved in _WAL_CONFIGURED_PATHS:
+            return False
+        _WAL_CONFIGURED_PATHS.add(resolved)
+        return True
 
 
 @dataclass(frozen=True)
@@ -28,8 +70,7 @@ class MigrationManager:
         self.migrations = tuple(sorted(migrations, key=lambda migration: migration.version))
 
     def connect(self) -> sqlite3.Connection:
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        return sqlite3.connect(self.db_path)
+        return connect_db(self.db_path)
 
     def ensure_schema_table(self, conn: sqlite3.Connection):
         cursor = conn.cursor()

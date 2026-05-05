@@ -11,6 +11,8 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Dict, Iterable, Optional
 
+from core.db import connect_db
+
 DEFAULT_MEMORY_DECAY_SCORE = 0.02
 MAX_MEMORY_CONTENT_CHARS = 2000
 
@@ -22,7 +24,7 @@ class ProjectMemoryStore:
         self.db_path = db_path
 
     def get_db_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 

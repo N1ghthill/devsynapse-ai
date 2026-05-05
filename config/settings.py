@@ -174,7 +174,8 @@ class AppSettings(BaseSettings):
     )
 
     app_name: str = "DevSynapse AI"
-    app_version: str = "0.9.0"
+    app_version: str = "0.9.1"
+    assistant_user_name: str = "the user"
 
     deepseek_api_key: Optional[str] = None
     openrouter_api_key: Optional[str] = None
@@ -194,6 +195,7 @@ class AppSettings(BaseSettings):
     deepseek_thinking_enabled: bool = True
     llm_model_routing_enabled: bool = True
     llm_auto_economy_enabled: bool = True
+    llm_streaming_enabled: bool = True
     llm_cache_hit_warning_threshold_pct: float = 70.0
     llm_temperature: float = 0.7
     llm_max_tokens: int = 1500

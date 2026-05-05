@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from config.settings import KNOWN_PROJECTS
+from core.db import connect_db
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ class ProjectRegistry:
 
     def get_db_connection(self) -> sqlite3.Connection:
         """Return a SQLite connection for internal/service use."""
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -31,7 +32,7 @@ class ProjectRegistry:
         priority: str = "medium",
         replace: bool = True,
     ):
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
         insert_clause = "INSERT OR REPLACE" if replace else "INSERT"
         cursor.execute(
@@ -105,7 +106,7 @@ class ProjectRegistry:
     def delete_project(self, name: str) -> bool:
         """Delete a project registry row and related mutation permissions."""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
         cursor.execute("DELETE FROM project_permissions WHERE project_name = ?", (name,))
         cursor.execute("DELETE FROM projects WHERE name = ?", (name,))
@@ -122,7 +123,7 @@ class ProjectRegistry:
     def get_projects_context(self) -> str:
         """Retorna contexto sobre projetos"""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -158,7 +159,7 @@ class ProjectRegistry:
     def _update_project_access(self, message: str, project_name: Optional[str] = None):
         """Atualiza contador de acesso para projetos mencionados"""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
 
         if project_name:
@@ -197,7 +198,7 @@ class ProjectRegistry:
         }
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = connect_db(self.db_path)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(
@@ -263,7 +264,7 @@ class ProjectRegistry:
 
         now = datetime.now().isoformat()
         unique_projects = sorted(set(project_names))
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
         cursor.execute(
             """

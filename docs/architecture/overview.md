@@ -73,8 +73,13 @@ Responsibilities:
 
 - `brain.py`: agent-run context, tool-call orchestration, auto-execution loop,
   output sanitization and telemetry recording.
-- `deepseek.py`: provider transport, payload construction, pricing and
-  `LLMResult` response contract.
+- `command_extraction.py`: conversion of structured tool calls and fallback
+  text command extraction into OpenCode command strings.
+- `autoexec_policy.py`: auto-execution round limits, low-risk command checks
+  and retry/replay decisions.
+- `checklist.py`: objective checklist helpers for implementation tasks.
+- `deepseek.py`: provider transport, streaming/non-streaming payload
+  construction, pricing and `LLMResult` response contract.
 - `routing.py`: model selection, budget-aware routing and learned route
   preferences.
 - `prompts.py`: system prompt template construction.
@@ -82,8 +87,17 @@ Responsibilities:
   scoping and execution for `bash`, `read`, `glob`, `grep`, `edit` and `write`.
 - `core/memory/`: SQLite-backed stores for conversations, projects, settings,
   learning, procedural memories, skills and agent runs.
+- `core/memory/protocol.py`: brain-facing memory protocol plus optional
+  capability adapter.
 - `plugin_system.py`: lifecycle and command extension points.
+  `DevSynapseBrain` accepts an injected plugin manager for isolated tests and
+  runtime composition; the module-level singleton remains the default.
 - `correlation.py`: conversation and tool-run ID generation.
+- `db.py`: SQLite migration utilities and the shared connection helper used by
+  memory stores.
+- `async_utils.py`: shared offload helper for blocking provider and SQLite work;
+  it avoids `asyncio.to_thread` so shutdown and SQLite callbacks stay testable
+  on the supported Python runtime.
 
 ## Runtime Configuration
 

@@ -12,6 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
+from core.db import connect_db
+
 MAX_SKILL_BODY_CHARS = 20000
 SKILL_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 _.-]{1,120}$")
 SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{1,120}$")
@@ -35,7 +37,7 @@ class SkillStore:
         self.project_lookup_fn = project_lookup_fn or (lambda: {})
 
     def get_db_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 

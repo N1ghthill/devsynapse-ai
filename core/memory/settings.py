@@ -8,6 +8,8 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+from core.db import connect_db
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,7 +20,7 @@ class SettingsStore:
     def get_user_preferences(self) -> str:
         """Retorna preferências do usuário como texto formatado"""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -36,7 +38,7 @@ class SettingsStore:
         if not rows:
             return "Nenhuma preferência aprendida ainda."
 
-        text = "Preferências conhecidas do Irving:\n"
+        text = "Preferências conhecidas do usuário:\n"
         for row in rows:
             source_emoji = "🎯" if row["source"] == "explicit" else "📚" if row["source"] == "learned" else "⚙️"
             text += f"- {source_emoji} **{row['key']}**: {row['value']} "
@@ -47,7 +49,7 @@ class SettingsStore:
     def update_preference(self, key: str, value: str, source: str = "learned"):
         """Atualiza ou cria uma preferência do usuário"""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
 
         cursor.execute(
@@ -116,7 +118,7 @@ class SettingsStore:
     def get_user(self, username: str) -> Optional[Dict[str, Any]]:
         """Return a stored user by username."""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute(
@@ -146,7 +148,7 @@ class SettingsStore:
         """Create or update a user record."""
 
         now = datetime.now().isoformat()
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
         cursor.execute(
             """
@@ -165,7 +167,7 @@ class SettingsStore:
     def touch_user_login(self, username: str):
         """Update the user's last successful login timestamp."""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
         cursor.execute(
             """
@@ -181,7 +183,7 @@ class SettingsStore:
     def get_app_settings(self) -> Dict[str, Any]:
         """Return persisted application settings."""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute(
@@ -198,7 +200,7 @@ class SettingsStore:
         """Persist runtime-adjustable settings."""
 
         now = datetime.now().isoformat()
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
         for key, value in settings_data.items():
             cursor.execute(
@@ -223,7 +225,7 @@ class SettingsStore:
     ):
         """Persist an administrative audit event."""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         cursor = conn.cursor()
         cursor.execute(
             """
@@ -250,7 +252,7 @@ class SettingsStore:
     def get_admin_audit_logs(self, limit: int = 50) -> list[Dict[str, Any]]:
         """Return recent administrative audit events."""
 
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute(

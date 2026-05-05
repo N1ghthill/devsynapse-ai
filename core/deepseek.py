@@ -2,10 +2,11 @@
 DeepSeek API client — transport, payload, pricing.
 """
 
+import json
 import logging
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import requests
 
@@ -165,6 +166,136 @@ class DeepSeekClient:
             tool_calls=message.get("tool_calls"),
             reasoning_content=message.get("reasoning_content"),
         )
+
+    def stream_chat_completion(
+        self,
+        messages: List[Dict],
+        tools: Optional[List[Dict]] = None,
+        max_tokens: Optional[int] = None,
+        thinking: Optional[Dict] = None,
+        model: Optional[str] = None,
+        tool_choice: Any = "auto",
+        on_token: Optional[Callable[[str], None]] = None,
+    ) -> LLMResult:
+        """Streaming chat completion call that returns the accumulated final result."""
+
+        provider, provider_model, base_url, api_key = self._resolve_provider_model(model)
+        if (provider != "deepseek" and not api_key) or not base_url:
+            raise RuntimeError(f"LLM provider not configured: {provider}")
+        url = f"{base_url}/chat/completions"
+        payload = self._build_payload(
+            messages,
+            tools or [],
+            stream=True,
+            model=provider_model,
+            tool_choice=tool_choice,
+            provider=provider,
+        )
+        payload["stream_options"] = {"include_usage": True}
+
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        if thinking is not None:
+            payload["thinking"] = thinking
+            payload.pop("tools", None)
+            payload.pop("tool_choice", None)
+
+        response = requests.post(
+            url,
+            headers=self._build_headers(provider, api_key),
+            json=payload,
+            timeout=(5, self.request_timeout),
+            stream=True,
+        )
+        response.raise_for_status()
+
+        content_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        tool_call_parts: dict[int, Dict[str, Any]] = {}
+        usage_payload: Dict[str, Any] = {}
+        response_model = provider_model
+
+        for event in self._iter_sse_events(response):
+            if event.get("model"):
+                response_model = event["model"]
+            if event.get("usage"):
+                usage_payload = event["usage"]
+
+            choices = event.get("choices") or []
+            if not choices:
+                continue
+
+            delta = choices[0].get("delta") or {}
+            content = delta.get("content")
+            if content:
+                content_parts.append(content)
+                if on_token is not None:
+                    on_token(content)
+
+            reasoning_content = delta.get("reasoning_content")
+            if reasoning_content:
+                reasoning_parts.append(reasoning_content)
+
+            for tool_call_delta in delta.get("tool_calls") or []:
+                self._merge_tool_call_delta(tool_call_parts, tool_call_delta)
+
+        usage = (
+            self._build_usage_snapshot(provider=provider, model=response_model, usage=usage_payload)
+            if usage_payload
+            else None
+        )
+        tool_calls = [
+            tool_call_parts[index]
+            for index in sorted(tool_call_parts)
+            if tool_call_parts[index].get("function", {}).get("name")
+        ]
+
+        return LLMResult(
+            content="".join(content_parts),
+            provider=provider,
+            model=response_model,
+            usage=usage,
+            tool_calls=tool_calls or None,
+            reasoning_content="".join(reasoning_parts) or None,
+        )
+
+    @staticmethod
+    def _iter_sse_events(response) -> Iterator[Dict[str, Any]]:
+        for raw_line in response.iter_lines(decode_unicode=True):
+            if not raw_line:
+                continue
+            line = raw_line.strip()
+            if not line or line.startswith(":") or not line.startswith("data:"):
+                continue
+            data = line.removeprefix("data:").strip()
+            if data == "[DONE]":
+                break
+            try:
+                yield json.loads(data)
+            except json.JSONDecodeError:
+                logger.debug("Ignoring malformed SSE payload: %s", data)
+
+    @staticmethod
+    def _merge_tool_call_delta(
+        tool_call_parts: dict[int, Dict[str, Any]],
+        delta: Dict[str, Any],
+    ) -> None:
+        index = int(delta.get("index") or 0)
+        entry = tool_call_parts.setdefault(
+            index,
+            {"id": "", "type": "function", "function": {"name": "", "arguments": ""}},
+        )
+        if delta.get("id"):
+            entry["id"] = delta["id"]
+        if delta.get("type"):
+            entry["type"] = delta["type"]
+
+        function_delta = delta.get("function") or {}
+        function = entry.setdefault("function", {"name": "", "arguments": ""})
+        if function_delta.get("name"):
+            function["name"] += function_delta["name"]
+        if function_delta.get("arguments"):
+            function["arguments"] += function_delta["arguments"]
 
     def _build_usage_snapshot(
         self, provider: str, model: str, usage: Dict

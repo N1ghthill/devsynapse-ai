@@ -369,6 +369,15 @@ class DevSynapseTUI(App):
         await self._process(task, chat, input_w)
 
     async def _process(self, task, chat, input_w):
+        streamed_chunks: list[str] = []
+
+        def on_token(chunk: str) -> None:
+            streamed_chunks.append(chunk)
+            try:
+                self.call_from_thread(chat.write, chunk)
+            except RuntimeError:
+                chat.write(chunk)
+
         try:
             response_text, command, usage = await self.brain.process_message(
                 user_message=task,
@@ -377,10 +386,13 @@ class DevSynapseTUI(App):
                 user_id="tui",
                 user_role="admin",
                 auto_execute=True,
+                on_token=on_token,
             )
 
             if response_text:
-                chat.write(response_text)
+                streamed_text = "".join(streamed_chunks).strip()
+                if not streamed_text or streamed_text != response_text.strip():
+                    chat.write(response_text)
                 chat.write("")
 
             if command:
