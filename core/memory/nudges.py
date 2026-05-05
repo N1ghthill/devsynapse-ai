@@ -4,12 +4,15 @@ Learning nudge events and task review system.
 Extracted from MemorySystem to keep the facade thin.
 """
 import json
+import logging
 import re
 from datetime import datetime
 from typing import Any, Dict, Optional
 
 from core.db import connect_db
 from core.llm_optimization import ModelRoute, build_task_profile
+
+logger = logging.getLogger(__name__)
 
 
 class NudgeStore:
@@ -253,7 +256,8 @@ class NudgeStore:
                 replace=False,
                 source="nudge",
             )
-        except Exception:
+        except Exception as e:
+            logger.debug("Could not create skill, falling back to update: %s", e)
             return self._skill_updater(
                 skill_name,
                 body=body,

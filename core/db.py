@@ -7,7 +7,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -47,7 +47,7 @@ def connect_db(
 
 
 @contextmanager
-def db_session(db_path: Path | str):
+def db_session(db_path: Path | str) -> Iterable[sqlite3.Connection]:
     """Context manager that yields a SQLite connection and ensures it is closed."""
     conn = connect_db(db_path)
     try:
@@ -83,7 +83,7 @@ class MigrationManager:
     def connect(self) -> sqlite3.Connection:
         return connect_db(self.db_path)
 
-    def ensure_schema_table(self, conn: sqlite3.Connection):
+    def ensure_schema_table(self, conn: sqlite3.Connection) -> None:
         cursor = conn.cursor()
         cursor.execute(
             """
@@ -148,7 +148,7 @@ class MigrationManager:
                     self.schema_name,
                     migration.version,
                     migration.description,
-                    datetime.now().isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
                 ),
             )
             conn.commit()

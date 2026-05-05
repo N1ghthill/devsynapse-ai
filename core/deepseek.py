@@ -4,14 +4,21 @@ DeepSeek API client — transport, payload, pricing.
 
 import json
 import logging
+import time
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
-import requests
+import httpx
+
+from core.metrics import metrics
 
 logger = logging.getLogger(__name__)
 KNOWN_PROVIDER_PREFIXES = {"deepseek", "openrouter", "opencode-zen", "opencode-go"}
+
+MAX_RETRIES = 3
+RETRY_BACKOFF_BASE = 1.0
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 @dataclass
@@ -86,6 +93,56 @@ class DeepSeekClient:
             headers["X-Title"] = "DevSynapse AI"
         return headers
 
+    def _post_with_retry(
+        self,
+        url: str,
+        headers: Dict[str, str],
+        json: Dict,
+        stream: bool = False,
+    ) -> httpx.Response:
+        """POST with exponential backoff retry for transient failures."""
+        last_error = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                client = httpx.Client(timeout=httpx.Timeout(self.request_timeout, connect=5.0))
+                response = client.post(
+                    url,
+                    headers=headers,
+                    json=json,
+                    stream=stream,
+                )
+                if response.status_code in RETRYABLE_STATUS_CODES:
+                    wait = RETRY_BACKOFF_BASE * (2 ** attempt)
+                    logger.warning(
+                        "Retrying after %s (attempt %d/%d, wait %.1fs)",
+                        response.status_code,
+                        attempt + 1,
+                        MAX_RETRIES,
+                        wait,
+                    )
+                    response.close()
+                    client.close()
+                    time.sleep(wait)
+                    continue
+                response._client = client
+                return response
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+                last_error = exc
+                if attempt < MAX_RETRIES - 1:
+                    wait = RETRY_BACKOFF_BASE * (2 ** attempt)
+                    logger.warning(
+                        "Retrying after %s (attempt %d/%d, wait %.1fs)",
+                        type(exc).__name__,
+                        attempt + 1,
+                        MAX_RETRIES,
+                        wait,
+                    )
+                    time.sleep(wait)
+                continue
+        if last_error:
+            raise last_error
+        raise RuntimeError("All retries exhausted without a response")
+
     def _build_payload(
         self,
         messages: List[Dict],
@@ -124,50 +181,61 @@ class DeepSeekClient:
         tool_choice: Any = "auto",
     ) -> LLMResult:
         """Non-streaming chat completion call."""
-        provider, provider_model, base_url, api_key = self._resolve_provider_model(model)
-        if not api_key or not base_url:
-            raise RuntimeError(f"LLM provider not configured: {provider}")
-        url = f"{base_url}/chat/completions"
-        payload = self._build_payload(
-            messages,
-            tools or [],
-            stream=False,
-            model=provider_model,
-            tool_choice=tool_choice,
-            provider=provider,
-        )
+        start = time.monotonic()
+        try:
+            provider, provider_model, base_url, api_key = self._resolve_provider_model(model)
+            if not api_key or not base_url:
+                raise RuntimeError(f"LLM provider not configured: {provider}")
+            url = f"{base_url}/chat/completions"
+            payload = self._build_payload(
+                messages,
+                tools or [],
+                stream=False,
+                model=provider_model,
+                tool_choice=tool_choice,
+                provider=provider,
+            )
 
-        if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
-        if thinking is not None:
-            payload["thinking"] = thinking
-            payload.pop("tools", None)
-            payload.pop("tool_choice", None)
+            if max_tokens is not None:
+                payload["max_tokens"] = max_tokens
+            if thinking is not None:
+                payload["thinking"] = thinking
+                payload.pop("tools", None)
+                payload.pop("tool_choice", None)
 
-        response = requests.post(
-            url,
-            headers=self._build_headers(provider, api_key),
-            json=payload,
-            timeout=(5, self.request_timeout),
-        )
-        response.raise_for_status()
+            response = self._post_with_retry(
+                url,
+                self._build_headers(provider, api_key),
+                payload,
+                stream=False,
+            )
+            response.raise_for_status()
 
-        result = response.json()
-        choice = result["choices"][0]
-        message = choice.get("message", {})
-        usage = self._build_usage_snapshot(
-            provider=provider,
-            model=result.get("model") or provider_model,
-            usage=result.get("usage") or {},
-        )
-        return LLMResult(
-            content=message.get("content") or "",
-            provider=provider,
-            model=result.get("model") or provider_model,
-            usage=usage,
-            tool_calls=message.get("tool_calls"),
-            reasoning_content=message.get("reasoning_content"),
-        )
+            result = response.json()
+            choice = result["choices"][0]
+            message = choice.get("message", {})
+            usage = self._build_usage_snapshot(
+                provider=provider,
+                model=result.get("model") or provider_model,
+                usage=result.get("usage") or {},
+            )
+            duration = time.monotonic() - start
+            metrics.record_timing("llm.latency", duration, {"provider": provider, "stream": "false"})
+            metrics.increment("llm.success")
+            if usage and usage.get("total_tokens"):
+                metrics.record_gauge("llm.tokens", usage["total_tokens"], {"provider": provider})
+
+            return LLMResult(
+                content=message.get("content") or "",
+                provider=provider,
+                model=result.get("model") or provider_model,
+                usage=usage,
+                tool_calls=message.get("tool_calls"),
+                reasoning_content=message.get("reasoning_content"),
+            )
+        except Exception:
+            metrics.increment("llm.failure")
+            raise
 
     def stream_chat_completion(
         self,
@@ -180,102 +248,116 @@ class DeepSeekClient:
         on_token: Optional[Callable[[str], None]] = None,
     ) -> LLMResult:
         """Streaming chat completion call that returns the accumulated final result."""
+        start = time.monotonic()
+        try:
+            provider, provider_model, base_url, api_key = self._resolve_provider_model(model)
+            if not api_key or not base_url:
+                raise RuntimeError(f"LLM provider not configured: {provider}")
+            url = f"{base_url}/chat/completions"
+            payload = self._build_payload(
+                messages,
+                tools or [],
+                stream=True,
+                model=provider_model,
+                tool_choice=tool_choice,
+                provider=provider,
+            )
+            payload["stream_options"] = {"include_usage": True}
 
-        provider, provider_model, base_url, api_key = self._resolve_provider_model(model)
-        if not api_key or not base_url:
-            raise RuntimeError(f"LLM provider not configured: {provider}")
-        url = f"{base_url}/chat/completions"
-        payload = self._build_payload(
-            messages,
-            tools or [],
-            stream=True,
-            model=provider_model,
-            tool_choice=tool_choice,
-            provider=provider,
-        )
-        payload["stream_options"] = {"include_usage": True}
+            if max_tokens is not None:
+                payload["max_tokens"] = max_tokens
+            if thinking is not None:
+                payload["thinking"] = thinking
+                payload.pop("tools", None)
+                payload.pop("tool_choice", None)
 
-        if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
-        if thinking is not None:
-            payload["thinking"] = thinking
-            payload.pop("tools", None)
-            payload.pop("tool_choice", None)
+            response = self._post_with_retry(
+                url,
+                self._build_headers(provider, api_key),
+                payload,
+                stream=True,
+            )
+            response.raise_for_status()
 
-        response = requests.post(
-            url,
-            headers=self._build_headers(provider, api_key),
-            json=payload,
-            timeout=(5, self.request_timeout),
-            stream=True,
-        )
-        response.raise_for_status()
+            content_parts: list[str] = []
+            reasoning_parts: list[str] = []
+            tool_call_parts: dict[int, Dict[str, Any]] = {}
+            usage_payload: Dict[str, Any] = {}
+            response_model = provider_model
 
-        content_parts: list[str] = []
-        reasoning_parts: list[str] = []
-        tool_call_parts: dict[int, Dict[str, Any]] = {}
-        usage_payload: Dict[str, Any] = {}
-        response_model = provider_model
+            for event in self._iter_sse_events(response):
+                if event.get("model"):
+                    response_model = event["model"]
+                if event.get("usage"):
+                    usage_payload = event["usage"]
 
-        for event in self._iter_sse_events(response):
-            if event.get("model"):
-                response_model = event["model"]
-            if event.get("usage"):
-                usage_payload = event["usage"]
+                choices = event.get("choices") or []
+                if not choices:
+                    continue
 
-            choices = event.get("choices") or []
-            if not choices:
-                continue
+                delta = choices[0].get("delta") or {}
+                content = delta.get("content")
+                if content:
+                    content_parts.append(content)
+                    if on_token is not None:
+                        on_token(content)
 
-            delta = choices[0].get("delta") or {}
-            content = delta.get("content")
-            if content:
-                content_parts.append(content)
-                if on_token is not None:
-                    on_token(content)
+                reasoning_content = delta.get("reasoning_content")
+                if reasoning_content:
+                    reasoning_parts.append(reasoning_content)
 
-            reasoning_content = delta.get("reasoning_content")
-            if reasoning_content:
-                reasoning_parts.append(reasoning_content)
+                for tool_call_delta in delta.get("tool_calls") or []:
+                    self._merge_tool_call_delta(tool_call_parts, tool_call_delta)
 
-            for tool_call_delta in delta.get("tool_calls") or []:
-                self._merge_tool_call_delta(tool_call_parts, tool_call_delta)
+            usage = (
+                self._build_usage_snapshot(provider=provider, model=response_model, usage=usage_payload)
+                if usage_payload
+                else None
+            )
+            tool_calls = [
+                tool_call_parts[index]
+                for index in sorted(tool_call_parts)
+                if tool_call_parts[index].get("function", {}).get("name")
+            ]
 
-        usage = (
-            self._build_usage_snapshot(provider=provider, model=response_model, usage=usage_payload)
-            if usage_payload
-            else None
-        )
-        tool_calls = [
-            tool_call_parts[index]
-            for index in sorted(tool_call_parts)
-            if tool_call_parts[index].get("function", {}).get("name")
-        ]
+            duration = time.monotonic() - start
+            metrics.record_timing("llm.latency", duration, {"provider": provider, "stream": "true"})
+            metrics.increment("llm.success")
+            if usage and usage.get("total_tokens"):
+                metrics.record_gauge("llm.tokens", usage["total_tokens"], {"provider": provider})
 
-        return LLMResult(
-            content="".join(content_parts),
-            provider=provider,
-            model=response_model,
-            usage=usage,
-            tool_calls=tool_calls or None,
-            reasoning_content="".join(reasoning_parts) or None,
-        )
+            return LLMResult(
+                content="".join(content_parts),
+                provider=provider,
+                model=response_model,
+                usage=usage,
+                tool_calls=tool_calls or None,
+                reasoning_content="".join(reasoning_parts) or None,
+            )
+        except Exception:
+            metrics.increment("llm.failure")
+            raise
 
     @staticmethod
     def _iter_sse_events(response) -> Iterator[Dict[str, Any]]:
-        for raw_line in response.iter_lines(decode_unicode=True):
-            if not raw_line:
-                continue
-            line = raw_line.strip()
-            if not line or line.startswith(":") or not line.startswith("data:"):
-                continue
-            data = line.removeprefix("data:").strip()
-            if data == "[DONE]":
-                break
-            try:
-                yield json.loads(data)
-            except json.JSONDecodeError:
-                logger.debug("Ignoring malformed SSE payload: %s", data)
+        try:
+            for raw_line in response.iter_lines():
+                if not raw_line:
+                    continue
+                line = raw_line.strip()
+                if not line or line.startswith(":") or not line.startswith("data:"):
+                    continue
+                data = line.removeprefix("data:").strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    yield json.loads(data)
+                except json.JSONDecodeError:
+                    logger.debug("Ignoring malformed SSE payload: %s", data)
+        finally:
+            client = getattr(response, "_client", None)
+            if client is not None:
+                client.close()
 
     @staticmethod
     def _merge_tool_call_delta(

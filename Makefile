@@ -29,7 +29,7 @@ install-dev:
 	fi
 
 test:
-	$(PYTEST) -q
+	$(PYTEST) -q --cov=core --cov=devsynapse --cov-report=term-missing
 
 lint:
 	$(RUFF) check .

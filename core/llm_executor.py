@@ -5,10 +5,12 @@ import random
 import time
 from typing import Callable, Dict, List, Optional
 
+from config.settings import AppSettings
 from core.async_utils import run_blocking
 from core.deepseek import DeepSeekClient, LLMResult
 from core.llm_optimization import ModelRoute
 from core.tools.openai_tool_defs import OPENCODE_TOOLS
+from core.usage_tracker import UsageTracker
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +21,8 @@ class LLMExecutor:
     def __init__(
         self,
         deepseek_client: DeepSeekClient,
-        usage_tracker,
-        get_settings: Callable,
+        usage_tracker: UsageTracker,
+        get_settings: Callable[[], AppSettings],
     ) -> None:
         self._client = deepseek_client
         self._usage = usage_tracker
@@ -60,9 +62,18 @@ class LLMExecutor:
                     )
                 except Exception as fallback_error:
                     logger.warning(
-                        "DeepSeek fallback model %s failed: %s",
-                        fallback_model, fallback_error,
+                        "DeepSeek fallback model %s failed: %s (original error: %s)",
+                        fallback_model, fallback_error, e,
                     )
+                    self._usage.record_llm_telemetry(
+                        user_id=user_id, conversation_id=conversation_id,
+                        provider=None, model=model, route=route, success=False,
+                        usage=None,
+                        total_latency_ms=(time.perf_counter() - start_time) * 1000,
+                        error_message=f"Primary: {e}; Fallback: {fallback_error}",
+                    )
+                    logger.warning("DeepSeek API falhou: %s. Usando resposta degradada.", e)
+                    return LLMResult(content=self._get_fallback_response())
 
             self._usage.record_llm_telemetry(
                 user_id=user_id, conversation_id=conversation_id,

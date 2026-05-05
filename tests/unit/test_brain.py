@@ -158,7 +158,20 @@ class TestDevSynapseBrain:
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
         with patch.object(brain.executor, 'call_api', new_callable=AsyncMock) as mock_call:
-            mock_call.return_value = 'Here is the file list: bash "ls -la"'
+            from core.deepseek import LLMResult
+            mock_call.return_value = LLMResult(
+                content='Here is the file list:',
+                tool_calls=[
+                    {
+                        "id": "call-1",
+                        "type": "function",
+                        "function": {
+                            "name": "bash",
+                            "arguments": '{"command": "ls -la"}',
+                        },
+                    }
+                ],
+            )
 
             response, cmd, usage = await brain.process_message("List files", "test_session")
 

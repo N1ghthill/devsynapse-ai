@@ -1,13 +1,14 @@
 """
-Sistema de plugins/extensões do DevSynapse
+Plugin/extension system for DevSynapse.
 """
 import asyncio
 import importlib
 import inspect
 import json
 import logging
+import sys
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
@@ -33,7 +34,7 @@ class PluginManifest:
 class PluginEvent:
     name: str
     data: Dict[str, Any]
-    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     cancelled: bool = False
 
 
@@ -50,10 +51,10 @@ class PluginContext:
     async def get_storage(self, key: str, default: Any = None) -> Any:
         return self._storage.get(key, default)
 
-    async def set_storage(self, key: str, value: Any):
+    async def set_storage(self, key: str, value: Any) -> None:
         self._storage[key] = value
 
-    async def log(self, level: str, message: str):
+    async def log(self, level: str, message: str) -> None:
         getattr(self.logger, level, self.logger.info)(message)
 
 
@@ -63,16 +64,16 @@ class BasePlugin:
     def __init__(self, context: PluginContext):
         self.context = context
 
-    async def on_load(self):
+    async def on_load(self) -> None:
         pass
 
-    async def on_unload(self):
+    async def on_unload(self) -> None:
         pass
 
-    async def on_activate(self):
+    async def on_activate(self) -> None:
         pass
 
-    async def on_deactivate(self):
+    async def on_deactivate(self) -> None:
         pass
 
 
@@ -104,7 +105,7 @@ BUILTIN_HOOKS: Dict[str, str] = {
 
 
 class PluginManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self._plugins: Dict[str, BasePlugin] = {}
         self._manifests: Dict[str, PluginManifest] = {}
         self._hook_handlers: Dict[str, List[HookHandler]] = {
@@ -139,8 +140,8 @@ class PluginManager:
                 return False
 
             sys_path = str(plugin_dir)
-            if sys_path not in importlib.sys.path:
-                importlib.sys.path.insert(0, sys_path)
+            if sys_path not in sys.path:
+                sys.path.insert(0, sys_path)
 
             module_path = manifest.entry_point.replace("/", ".").replace(".py", "")
             module = importlib.import_module(module_path)
@@ -175,7 +176,7 @@ class PluginManager:
             return True
 
         except Exception as e:
-            logger.error(f"Erro carregando plugin {manifest.name}: {e}", exc_info=True)
+            logger.error("Error loading plugin %s: %s", manifest.name, e, exc_info=True)
             return False
 
     async def unload_plugin(self, name: str) -> bool:
@@ -198,17 +199,17 @@ class PluginManager:
             return True
 
         except Exception as e:
-            logger.error(f"Erro removendo plugin {name}: {e}")
+            logger.error("Error removing plugin %s: %s", name, e)
             return False
 
-    async def load_all(self):
+    async def load_all(self) -> None:
         manifests = await self.discover_plugins()
         for manifest in manifests:
             await self.load_plugin(manifest)
         self._loaded = True
-        logger.info(f"PluginManager: {len(self._plugins)} plugins carregados")
+        logger.info("PluginManager: %d plugins loaded", len(self._plugins))
 
-    async def unload_all(self):
+    async def unload_all(self) -> None:
         for name in list(self._plugins.keys()):
             await self.unload_plugin(name)
         self._loaded = False
@@ -235,7 +236,7 @@ class PluginManager:
                     break
 
             except Exception as e:
-                logger.error(f"Erro em handler de {event_name}: {e}")
+                logger.error("Error in handler for %s: %s", event_name, e)
 
         return event
 

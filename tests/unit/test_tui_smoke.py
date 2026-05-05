@@ -24,6 +24,7 @@ async def test_tui_mounts_and_handles_status_command(tmp_path, monkeypatch):
     _configure_runtime(monkeypatch, tmp_path / "runtime")
 
     import config.settings as app_settings
+    from devsynapse.commands import CommandDispatcher
     from devsynapse.tui import DevSynapseTUI
 
     app_settings.get_settings.cache_clear()
@@ -43,7 +44,8 @@ async def test_tui_mounts_and_handles_status_command(tmp_path, monkeypatch):
         assert "Model" in str(providers_panel.content)
         assert "F2" in str(providers_panel.content)
 
-        await app._handle_slash_command("/status")
+        dispatcher = CommandDispatcher(app)
+        await dispatcher.cmd_status([])
         await pilot.pause()
 
         status_bar = app.query_one("#bar", Static)

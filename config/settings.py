@@ -341,6 +341,8 @@ ALLOWED_BASH_COMMANDS = [
 
 BLACKLISTED_PATTERNS = [
     "rm -rf",
+    "rm -fr",
+    "rm --no-preserve-root",
     "format c:",
     "dd if=",
     "mkfs",
@@ -350,10 +352,44 @@ BLACKLISTED_PATTERNS = [
     "poweroff",
     "> /dev/sda",
     "> /dev/sdb",
+    "> /dev/nvme",
     "mkfs.ext",
     "fdisk",
     ":(){:|:&};:",
     "fork bomb patterns",
+    "curl | bash",
+    "curl | sh",
+    "wget -o- |",
+    "wget -qo- |",
+    "wget -o - |",
+    "curl -s | bash",
+    "curl -fs |",
+    "curl -sl |",
+    "bash <(curl",
+    "sh <(curl",
+    "bash <(wget",
+    "sh <(wget",
+    "eval $(curl",
+    "eval $(wget",
+    "chmod 777 /",
+    "chmod -r 777",
+    "chown -r root:root /",
+    "iptables -f",
+    "iptables --flush",
+    "kill -9 1",
+    "killall -9",
+    "pkill -9",
+    "crontab -r",
+    "visudo",
+    "passwd root",
+    "userdel",
+    "groupdel",
+    "mount /",
+    "umount /",
+    "sysctl -w",
+    "modprobe -r",
+    "rmmod",
+    "insmod",
 ]
 
 ALLOWED_FILE_EXTENSIONS = [
@@ -460,8 +496,8 @@ def validate_config():
 if __name__ == "__main__":
     validation_errors = validate_config()
     if validation_errors:
-        print("❌ Erros de configuração:")
+        logger.error("Configuration errors:")
         for error in validation_errors:
-            print(f"  - {error}")
+            logger.error("  - %s", error)
     else:
-        print("✅ Configuração válida")
+        logger.info("Configuration valid")

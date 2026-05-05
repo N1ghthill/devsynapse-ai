@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import sqlite3
 from datetime import datetime
@@ -13,6 +14,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from core.db import connect_db
+
+logger = logging.getLogger(__name__)
 
 MAX_SKILL_BODY_CHARS = 20000
 SKILL_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 _.-]{1,120}$")
@@ -338,7 +341,8 @@ class SkillStore:
                         content=content,
                         metadata={"tags": tags, "source": "disk"},
                     )
-                except Exception:
+                except Exception as e:
+                    logger.debug("Failed to load skill from %s: %s", skill_path, e)
                     continue
 
     def get_stats(self) -> Dict[str, Any]:

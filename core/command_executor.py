@@ -3,17 +3,28 @@ Command execution engine for DevSynapse.
 
 Extracted from OpenCodeBridge to separate execution from orchestration.
 """
+import glob as glob_module
 import json
 import logging
 import re
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
+
+COMMAND_TIMEOUTS: Dict[str, int] = {
+    "bash": 30,
+    "grep": 60,
+    "read": 5,
+    "glob": 5,
+    "edit": 10,
+    "write": 10,
+}
 
 
 class CommandExecutor:
@@ -26,46 +37,49 @@ class CommandExecutor:
         decode_quoted_arg: Callable[[str], str],
         backup_enabled: bool,
         backup_suffix: str,
+        dry_run: bool = False,
     ) -> None:
         self._validate_file_path = validate_file_path
         self._validate_file_size = validate_file_size
         self._decode_quoted_arg = decode_quoted_arg
         self.backup_enabled = backup_enabled
         self.backup_suffix = backup_suffix
+        self.dry_run = dry_run
 
     async def execute_bash(
         self,
-        args: List,
+        args: List[str],
         cwd: Optional[str] = None,
         trusted_shell: bool = False,
     ) -> Tuple[bool, str, Optional[str]]:
-        """Execute bash command."""
+        """Execute bash command.
+
+        Security: Even for admin users, commands are parsed with shlex.split()
+        and executed as argument lists (shell=False) to prevent command injection.
+        The trusted_shell flag is kept for backward compatibility but does not
+        enable shell=True anymore.
+        """
         command = args[0]
 
         try:
-            if trusted_shell:
-                if not command.strip():
-                    return False, "Empty command", None
-                command_to_run = ["/bin/bash", "-o", "pipefail", "-c", command]
-            else:
-                parts = shlex.split(command)
-                if not parts:
-                    return False, "Empty command", None
-
-                if parts[0] == "cd":
-                    return False, "Bash command not allowed for direct execution: cd", None
-                command_to_run = parts
-
-            if not trusted_shell and not command_to_run:
+            parts = shlex.split(command)
+            if not parts:
                 return False, "Empty command", None
+
+            if parts[0] == "cd":
+                return False, "Bash command not allowed for direct execution: cd", None
+
+            if self.dry_run:
+                return True, f"[DRY RUN] Would execute: {command}", None
 
             exec_cwd = cwd or str(get_settings().default_execution_cwd)
             settings = get_settings()
+            timeout = COMMAND_TIMEOUTS.get("bash", settings.opencode_timeout)
             result = subprocess.run(
-                command_to_run,
+                parts,
                 capture_output=True,
                 text=True,
-                timeout=settings.opencode_timeout,
+                timeout=timeout,
                 cwd=exec_cwd,
                 shell=False,
             )
@@ -83,11 +97,11 @@ class CommandExecutor:
                 return False, f"Command failed (exit code: {result.returncode})", output
 
         except subprocess.TimeoutExpired:
-            return False, f"Command timed out after {get_settings().opencode_timeout} seconds", None
+            return False, f"Command timed out after {timeout} seconds", None
         except (OSError, subprocess.SubprocessError) as e:
             return False, f"Error executing command: {str(e)}", None
 
-    async def execute_read(self, args: List) -> Tuple[bool, str, Optional[str]]:
+    async def execute_read(self, args: List[str]) -> Tuple[bool, str, Optional[str]]:
         """Simulate OpenCode read command."""
         filepath = args[0]
 
@@ -111,16 +125,14 @@ class CommandExecutor:
 
     async def execute_glob(
         self,
-        args: List,
+        args: List[str],
         trusted_paths: bool = False,
     ) -> Tuple[bool, str, Optional[str]]:
         """Simulate OpenCode glob command."""
         pattern = args[0]
 
         try:
-            import glob
-
-            files = glob.glob(pattern, recursive=True)
+            files = glob_module.glob(pattern, recursive=True)
 
             allowed_files = []
             for file in files:
@@ -140,7 +152,7 @@ class CommandExecutor:
             return False, f"Error searching files: {str(e)}", None
 
     async def execute_grep(
-        self, args: List, cwd: Optional[str] = None
+        self, args: List[str], cwd: Optional[str] = None
     ) -> Tuple[bool, str, Optional[str]]:
         """Simulate OpenCode grep command."""
         pattern = args[0]
@@ -161,12 +173,13 @@ class CommandExecutor:
             base_dir = cwd or str(get_settings().dev_repos_root.resolve())
             cmd.append(base_dir)
             settings = get_settings()
+            timeout = COMMAND_TIMEOUTS.get("grep", settings.opencode_timeout)
 
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=settings.opencode_timeout,
+                timeout=timeout,
             )
 
             output = result.stdout
@@ -183,11 +196,11 @@ class CommandExecutor:
                 return False, f"grep failed (exit code: {result.returncode})", output
 
         except subprocess.TimeoutExpired:
-            return False, f"Search timed out after {get_settings().opencode_timeout} seconds", None
+            return False, f"Search timed out after {timeout} seconds", None
         except (OSError, subprocess.SubprocessError) as e:
             return False, f"Error in search: {str(e)}", None
 
-    async def execute_edit(self, args: List) -> Tuple[bool, str, Optional[str]]:
+    async def execute_edit(self, args: List[str]) -> Tuple[bool, str, Optional[str]]:
         """Execute OpenCode edit command with safety checks."""
         filepath = args[0]
         extra_args = args[1]
@@ -214,38 +227,37 @@ class CommandExecutor:
             if not self._validate_file_size(path, max_edit):
                 return False, f"File too large for editing (limit: {max_edit/1024/1024:.1f}MB)", None
 
-            backup_path = None
-            backup_label = "disabled"
-            if self.backup_enabled:
-                backup_path = path.with_suffix(path.suffix + self.backup_suffix)
-                import shutil
-
-                shutil.copy2(path, backup_path)
-                backup_label = backup_path.name
-                logger.info("Backup created: %s", backup_path)
-
             current_content = path.read_text(encoding="utf-8", errors="ignore")
 
             if old_text not in current_content:
                 try:
                     current_content = path.read_text(encoding="utf-8")
-                except Exception:
+                except UnicodeDecodeError:
                     try:
                         current_content = path.read_text(encoding="latin-1")
-                    except Exception:
+                    except UnicodeDecodeError:
                         current_content = path.read_text(errors="ignore")
 
                 if old_text not in current_content:
-                    if backup_path:
-                        backup_path.unlink(missing_ok=True)
                     return False, f"Text not found in file: '{old_text[:50]}...'", None
 
             new_content = current_content.replace(old_text, new_text)
 
             if new_content == current_content:
-                if backup_path:
-                    backup_path.unlink(missing_ok=True)
                 return False, "No changes applied (identical text)", None
+
+            if self.dry_run:
+                occurrences = current_content.count(old_text)
+                preview = f"--- {filepath}\n+++ {filepath}\n@@\n-{old_text[:200]}\n+{new_text[:200]}"
+                return True, f"[DRY RUN] Would edit {occurrences} occurrence(s) in {filepath}", preview
+
+            backup_path = None
+            backup_label = "disabled"
+            if self.backup_enabled:
+                backup_path = path.with_suffix(path.suffix + self.backup_suffix)
+                shutil.copy2(path, backup_path)
+                backup_label = backup_path.name
+                logger.info("Backup created: %s", backup_path)
 
             path.write_text(new_content, encoding="utf-8")
 
@@ -260,7 +272,7 @@ class CommandExecutor:
             logger.error("Error editing file %s: %s", filepath, e)
             return False, f"Error editing file: {str(e)}", None
 
-    async def execute_write(self, args: List) -> Tuple[bool, str, Optional[str]]:
+    async def execute_write(self, args: List[str]) -> Tuple[bool, str, Optional[str]]:
         """Execute OpenCode write command with safety checks."""
         filepath = args[0]
         extra_args = args[1]
@@ -276,16 +288,20 @@ class CommandExecutor:
 
             parent_dir = path.parent
             if not parent_dir.exists():
+                if self.dry_run:
+                    return True, f"[DRY RUN] Would create directory: {parent_dir}", None
                 parent_dir.mkdir(parents=True, exist_ok=True)
                 parent_dir.chmod(0o755)
 
             file_exists = path.exists()
-            backup_path = None
+
+            if self.dry_run:
+                action = "overwrite" if file_exists else "create"
+                preview = content[:300] + ("..." if len(content) > 300 else "")
+                return True, f"[DRY RUN] Would {action} {filepath} ({len(content)} chars)", preview
 
             if file_exists:
                 backup_path = path.with_suffix(path.suffix + ".devsynapse_backup")
-                import shutil
-
                 shutil.copy2(path, backup_path)
 
             path.write_text(content, encoding="utf-8")

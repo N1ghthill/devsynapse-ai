@@ -114,7 +114,8 @@ class TestOpenCodeBridge:
             assert "successfully" in message
 
     @pytest.mark.asyncio
-    async def test_execute_bash_trusted_shell_uses_bash_pipefail(self):
+    async def test_execute_bash_trusted_shell_uses_shlex_split(self):
+        """Security: trusted_shell no longer uses shell=True; commands are parsed with shlex.split()."""
         bridge = _bridge()
 
         with patch('core.command_executor.subprocess.run') as mock_run:
@@ -131,12 +132,9 @@ class TestOpenCodeBridge:
 
         mock_run.assert_called_once()
         assert mock_run.call_args.kwargs["shell"] is False
+        # Command is parsed with shlex.split() for security
         assert mock_run.call_args.args[0] == [
-            "/bin/bash",
-            "-o",
-            "pipefail",
-            "-c",
-            'printf "x" | wc -c',
+            "printf", "x", "|", "wc", "-c",
         ]
         assert success is True
         assert "successfully" in message

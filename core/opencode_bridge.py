@@ -66,7 +66,7 @@ class CommandGate:
     def check(
         self,
         command_type: str,
-        args: List,
+        args: List[str],
         user_role: str,
         project_name: Optional[str],
         project_mutation_allowlist: List[str],
@@ -119,7 +119,7 @@ class OpenCodeBridge:
         self,
         known_projects: Optional[Dict[str, Dict[str, str]]] = None,
         allowed_directories: Optional[List[str]] = None,
-    ):
+    ) -> None:
         settings = get_settings()
         self.allowed_commands = ALLOWED_COMMANDS
         self.allowed_bash_commands = ALLOWED_BASH_COMMANDS
@@ -313,8 +313,8 @@ class OpenCodeBridge:
     def _normalize_placeholder_command_args(
         self,
         command_type: Optional[str],
-        args: Optional[List],
-    ) -> Optional[List]:
+        args: Optional[List[str]],
+    ) -> Optional[List[str]]:
         """Map common LLM placeholder paths to this machine configured roots."""
 
         if not args:
@@ -355,7 +355,7 @@ class OpenCodeBridge:
         self,
         command: str,
         user_role: str = "user",
-    ) -> Tuple[bool, str, Optional[str], Optional[List]]:
+    ) -> Tuple[bool, str, Optional[str], Optional[List[str]]]:
         """Validate and parse an OpenCode command."""
 
         # Pattern: command "argument"
@@ -369,17 +369,17 @@ class OpenCodeBridge:
         main_arg = self._decode_quoted_arg(match.group(2))
         extra_args = match.group(3) if match.group(3) else ""
         
-        # Verificar se comando é permitido
+        # Check if command is allowed
         if command_type not in self.allowed_commands:
             return False, f"Command not allowed: {command_type}", None, None
         
-        # Verificar padrões blacklistados
+        # Check for blacklisted patterns
         full_command = f"{command_type} {main_arg} {extra_args}".lower()
         for pattern in self.blacklisted_patterns:
             if pattern in full_command:
                 return False, f"Command contains disallowed pattern: {pattern}", None, None
         
-        # Validar argumentos específicos por tipo de comando
+        # Validate arguments by command type
         if command_type == "bash":
             if user_role == "admin":
                 if not main_arg.strip():
@@ -393,7 +393,7 @@ class OpenCodeBridge:
     def _authorize_command(
         self,
         command_type: Optional[str],
-        args: Optional[List],
+        args: Optional[List[str]],
         user_role: str,
         project_name: Optional[str],
         project_mutation_allowlist: List[str],
@@ -405,7 +405,7 @@ class OpenCodeBridge:
     def _authorize_project_mutation(
         self,
         action_name: str,
-        args: Optional[List],
+        args: Optional[List[str]],
         user_role: str,
         project_name: Optional[str],
         project_mutation_allowlist: List[str],
@@ -417,12 +417,12 @@ class OpenCodeBridge:
     def _authorize_mutation_paths(
         self,
         action_name: str,
-        args: Optional[List],
+        args: Optional[List[str]],
         project_name: str,
     ) -> Tuple[bool, str]:
         return self._validator._authorize_mutation_paths(action_name, args, project_name)
 
-    def _mutation_path_operands(self, action_name: str, args: Optional[List]) -> List[str]:
+    def _mutation_path_operands(self, action_name: str, args: Optional[List[str]]) -> List[str]:
         return self._validator._mutation_path_operands(action_name, args)
 
     def _non_option_operands(self, parts: List[str]) -> List[str]:
@@ -434,7 +434,7 @@ class OpenCodeBridge:
     def _validate_command_paths_inside_project(
         self,
         command_type: Optional[str],
-        args: Optional[List],
+        args: Optional[List[str]],
         project_name: str,
     ) -> Tuple[bool, str]:
         return self._validator.validate_command_paths_inside_project(
@@ -444,22 +444,22 @@ class OpenCodeBridge:
     def _project_scope_path_operands(
         self,
         command_type: Optional[str],
-        args: Optional[List],
+        args: Optional[List[str]],
     ) -> List[str]:
         return self._validator._project_scope_path_operands(command_type, args)
 
     def _normalize_file_command_args(
         self,
         command_type: Optional[str],
-        args: Optional[List],
+        args: Optional[List[str]],
         project_name: Optional[str],
-    ) -> Optional[List]:
+    ) -> Optional[List[str]]:
         return self._validator.normalize_file_command_args(command_type, args, project_name)
 
     def _infer_project_name(
         self,
         command_type: Optional[str],
-        args: Optional[List],
+        args: Optional[List[str]],
         explicit_project_name: Optional[str],
     ) -> Optional[str]:
         return self._resolver.infer_project_name(command_type, args, explicit_project_name)

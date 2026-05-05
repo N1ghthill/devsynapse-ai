@@ -4,7 +4,7 @@ Persistent storage for DevSynapse — facade composing domain stores.
 
 import logging
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -59,7 +59,7 @@ class MemorySystem:
             skill_updater=self.update_skill,
         )
 
-    def _init_database(self):
+    def _init_database(self) -> None:
         """Initialize SQLite database with migrations and seed data."""
 
         build_memory_migration_manager(self.db_path).apply_migrations()
@@ -78,7 +78,7 @@ class MemorySystem:
                     (key, value, source, confidence, last_updated, evidence_count)
                     VALUES (?, ?, 'default', 1.0, ?, 1)
                     """,
-                    (key, value, datetime.now().isoformat()),
+                    (key, value, datetime.now(timezone.utc).isoformat()),
                 )
 
             for name, info in known_projects.items():
@@ -89,7 +89,7 @@ class MemorySystem:
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (name, info["path"], info["type"], info["priority"],
-                     datetime.now().isoformat(), 0),
+                     datetime.now(timezone.utc).isoformat(), 0),
                 )
 
             conn.commit()
@@ -104,7 +104,7 @@ class MemorySystem:
 
     # ── project delegation ──────────────────────────────────────────
 
-    def add_project(self, name, path, project_type="project", priority="medium", replace=True):
+    def add_project(self, name: str, path: str, project_type: str = "project", priority: str = "medium", replace: bool = True) -> Any:
         return self.projects.add_project(name, path, project_type, priority, replace)
 
     def get_project(self, name: str, include_missing: bool = False) -> Optional[Dict[str, Any]]:
@@ -243,8 +243,8 @@ class MemorySystem:
                     command_output=output,
                     trigger_reason="command_success" if success else "command_failure",
                 )
-        except Exception:
-            logger.debug("Could not run command completion nudge", exc_info=True)
+        except Exception as e:
+            logger.exception("Could not run command completion nudge: %s", e)
         return result_value
 
     async def save_feedback(self, conversation_id: str, feedback: str, score: Optional[int] = None):

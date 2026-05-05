@@ -4,7 +4,7 @@ Core of DevSynapse - DeepSeek API Integration
 
 import logging
 from decimal import Decimal
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple
 
 import config.settings as app_settings
 from core.autoexec_policy import (
@@ -30,7 +30,11 @@ from core.plugin_system import PluginManager, plugin_manager
 from core.prompts import build_system_prompt
 from core.routing import RouteSelector
 from core.tool_repair import coerce_llm_result, sanitize_unconfirmed_execution_claims
+from core.tool_validation import validate_tool_calls
 from core.usage_tracker import UsageTracker
+
+if TYPE_CHECKING:
+    from core.opencode_bridge import OpenCodeBridge
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +45,9 @@ class DevSynapseBrain:
     def __init__(
         self,
         memory_system: BrainMemoryProtocol,
-        opencode_bridge,
+        opencode_bridge: "OpenCodeBridge",
         plugin_manager_instance: Optional[PluginManager] = None,
-    ):
+    ) -> None:
         self.memory = memory_system
         self.memory_optional = BrainMemoryAdapter(memory_system)
         self.opencode = opencode_bridge
@@ -177,15 +181,14 @@ class DevSynapseBrain:
         auto_execute: bool = False,
         on_token: Optional[Callable[[str], None]] = None,
     ) -> Tuple[str, Optional[str], Optional[Dict]]:
-        """
-        Processa uma mensagem do usuário e retorna resposta + comando OpenCode.
+        """Process a user message and return response + OpenCode command.
 
         When user_id and user_role are provided, read-only commands are auto-executed
         and the result is fed back to the LLM in a loop until a final answer is reached.
         Mutating commands require explicit confirmation unless automatic execution is enabled
         for a trusted admin session.
         """
-        
+
         event_data = {
             "user_message": user_message,
             "conversation_id": conversation_id,
@@ -199,7 +202,7 @@ class DevSynapseBrain:
         conversation_id = bp_event.data.get("conversation_id", conversation_id)
         project_name = bp_event.data.get("project_name", project_name)
 
-        # Obter contexto da conversa
+        # Get conversation context
         context = await self.memory.get_conversation_context(conversation_id)
         effective_project_name = project_name or context.get("project_name")
         if effective_project_name:
@@ -218,7 +221,7 @@ class DevSynapseBrain:
         }
         await self.plugin_manager.emit_event("memory:before_save", mem_before)
 
-        # Preparar mensagens para o DeepSeek
+        # Prepare messages for DeepSeek
         messages = self._prepare_messages(user_message, context)
 
         llm_event = await self.plugin_manager.emit_event("brain:before_llm_call", {"messages": messages})
@@ -227,7 +230,121 @@ class DevSynapseBrain:
 
         route = self._select_llm_route(user_message, context)
 
-        # Chamar API com loop de auto-execução para comandos read-only
+        # Run LLM call with auto-execution loop
+        response_text, opencode_command, aggregated_usage, autoexecuted_command = (
+            await self._run_autoexec_loop(
+                messages=messages,
+                route=route,
+                user_message=user_message,
+                context=context,
+                user_id=user_id,
+                user_role=user_role,
+                conversation_id=conversation_id,
+                effective_project_name=effective_project_name,
+                project_mutation_allowlist=project_mutation_allowlist or [],
+                auto_execute=auto_execute,
+                on_token=on_token,
+            )
+        )
+
+        await self.plugin_manager.emit_event("brain:after_llm_call", {"response": response_text})
+
+        response_text = sanitize_unconfirmed_execution_claims(
+            response_text,
+            opencode_command,
+        )
+        if autoexecuted_command is not None and (
+            not response_text.strip() or response_promises_pending_action(response_text)
+        ):
+            response_text = command_completion_fallback(autoexecuted_command)
+
+        persisted_command = opencode_command
+        if persisted_command is None and autoexecuted_command is not None:
+            persisted_command = autoexecuted_command["command"]
+
+        # Save to memory
+        persisted_project_name = await self.memory.save_interaction(
+            conversation_id=conversation_id,
+            user_message=user_message,
+            ai_response=response_text,
+            opencode_command=persisted_command,
+            llm_usage=aggregated_usage,
+            project_name=effective_project_name,
+        )
+        if isinstance(persisted_project_name, str) or persisted_project_name is None:
+            effective_project_name = persisted_project_name or effective_project_name
+
+        if autoexecuted_command is not None and persisted_command == autoexecuted_command["command"]:
+            await self.memory.save_command_execution(
+                conversation_id=conversation_id,
+                command=autoexecuted_command["command"],
+                success=autoexecuted_command["success"],
+                result=autoexecuted_command["result"],
+                output=autoexecuted_command["output"],
+                status=autoexecuted_command["status"],
+                reason_code=autoexecuted_command["reason_code"],
+                project_name=autoexecuted_command["project_name"],
+                record_agent_event=False,
+            )
+            if autoexecuted_command["success"]:
+                self._persist_repos_project_if_needed(autoexecuted_command["project_name"])
+
+        self.usage.record_route_decision(
+            conversation_id=conversation_id,
+            route=route,
+            usage=aggregated_usage,
+            project_name=effective_project_name,
+            opencode_command=persisted_command,
+        )
+        self._review_completed_task(
+            conversation_id=conversation_id,
+            user_message=user_message,
+            ai_response=response_text,
+            project_name=effective_project_name,
+            opencode_command=persisted_command,
+            route=route,
+            tool_iterations=max(0, self._count_tool_iterations(autoexecuted_command, opencode_command)),
+        )
+        self._record_agent_final_response(
+            agent_run,
+            conversation_id,
+            response_text,
+            has_pending_command=opencode_command is not None,
+            project_name=effective_project_name,
+        )
+
+        await self.plugin_manager.emit_event("memory:after_save", {
+            "conversation_id": conversation_id,
+            "user_message": user_message,
+            "response": response_text,
+            "project_name": effective_project_name,
+        })
+
+        ap_event = await self.plugin_manager.emit_event("brain:after_process", {
+            "response": response_text,
+            "opencode_command": opencode_command,
+        })
+        if not ap_event.cancelled:
+            response_text = ap_event.data.get("response", response_text)
+            opencode_command = ap_event.data.get("opencode_command", opencode_command)
+
+        return response_text, opencode_command, aggregated_usage
+
+    async def _run_autoexec_loop(
+        self,
+        messages: List[Dict],
+        route: ModelRoute,
+        user_message: str,
+        context: Dict,
+        user_id: Optional[str],
+        user_role: Optional[str],
+        conversation_id: Optional[str],
+        effective_project_name: Optional[str],
+        project_mutation_allowlist: List[str],
+        auto_execute: bool,
+        on_token: Optional[Callable[[str], None]],
+    ) -> Tuple[str, Optional[str], Optional[Dict], Optional[Dict]]:
+        """Run LLM call with auto-execution loop for read-only commands."""
         max_rounds = max_autoexec_rounds(auto_execute, user_role)
         round_count = 0
         aggregated_usage = None
@@ -252,6 +369,11 @@ class DevSynapseBrain:
                 opencode_command = extract_opencode_command(response_text)
             aggregated_usage = self.usage.merge_usage(aggregated_usage, llm_result.usage)
 
+            is_valid, validation_reason = validate_tool_calls(llm_result.tool_calls)
+            if not is_valid and opencode_command:
+                logger.warning("Invalid tool call schema: %s", validation_reason)
+                opencode_command = None
+
             if should_retry_missing_tool(
                 auto_execute=auto_execute,
                 user_message=user_message,
@@ -275,7 +397,7 @@ class DevSynapseBrain:
                 user_id=user_id,
                 project_name=effective_project_name,
                 user_role=user_role,
-                project_mutation_allowlist=project_mutation_allowlist or [],
+                project_mutation_allowlist=project_mutation_allowlist,
                 conversation_id=conversation_id,
                 tool_run_id=tool_run_id,
             )
@@ -346,105 +468,31 @@ class DevSynapseBrain:
                 )
             )
 
-        await self.plugin_manager.emit_event("brain:after_llm_call", {"response": response_text})
+        return response_text, opencode_command, aggregated_usage, autoexecuted_command
 
-        response_text = sanitize_unconfirmed_execution_claims(
-            response_text,
-            opencode_command,
-        )
-        if autoexecuted_command is not None and (
-            not response_text.strip() or response_promises_pending_action(response_text)
-        ):
-            response_text = command_completion_fallback(autoexecuted_command)
-
-        persisted_command = opencode_command
-        if persisted_command is None and autoexecuted_command is not None:
-            persisted_command = autoexecuted_command["command"]
-
-        # Salvar na memória
-        persisted_project_name = await self.memory.save_interaction(
-            conversation_id=conversation_id,
-            user_message=user_message,
-            ai_response=response_text,
-            opencode_command=persisted_command,
-            llm_usage=aggregated_usage,
-            project_name=effective_project_name,
-        )
-        if isinstance(persisted_project_name, str) or persisted_project_name is None:
-            effective_project_name = persisted_project_name or effective_project_name
-
-        if autoexecuted_command is not None and persisted_command == autoexecuted_command["command"]:
-            await self.memory.save_command_execution(
-                conversation_id=conversation_id,
-                command=autoexecuted_command["command"],
-                success=autoexecuted_command["success"],
-                result=autoexecuted_command["result"],
-                output=autoexecuted_command["output"],
-                status=autoexecuted_command["status"],
-                reason_code=autoexecuted_command["reason_code"],
-                project_name=autoexecuted_command["project_name"],
-                record_agent_event=False,
-            )
-            if autoexecuted_command["success"]:
-                self._persist_repos_project_if_needed(autoexecuted_command["project_name"])
-
-        self.usage.record_route_decision(
-            conversation_id=conversation_id,
-            route=route,
-            usage=aggregated_usage,
-            project_name=effective_project_name,
-            opencode_command=persisted_command,
-        )
-        self._review_completed_task(
-            conversation_id=conversation_id,
-            user_message=user_message,
-            ai_response=response_text,
-            project_name=effective_project_name,
-            opencode_command=persisted_command,
-            route=route,
-            tool_iterations=max(0, round_count - 1) + (1 if persisted_command else 0),
-        )
-        self._record_agent_final_response(
-            agent_run,
-            conversation_id,
-            response_text,
-            has_pending_command=opencode_command is not None,
-            project_name=effective_project_name,
-        )
-
-        await self.plugin_manager.emit_event("memory:after_save", {
-            "conversation_id": conversation_id,
-            "user_message": user_message,
-            "response": response_text,
-            "project_name": effective_project_name,
-        })
-
-        ap_event = await self.plugin_manager.emit_event("brain:after_process", {
-            "response": response_text,
-            "opencode_command": opencode_command,
-        })
-        if not ap_event.cancelled:
-            response_text = ap_event.data.get("response", response_text)
-            opencode_command = ap_event.data.get("opencode_command", opencode_command)
-        
-        return response_text, opencode_command, aggregated_usage
+    @staticmethod
+    def _count_tool_iterations(
+        autoexecuted_command: Optional[Dict],
+        opencode_command: Optional[str],
+    ) -> int:
+        return 1 if autoexecuted_command is not None or opencode_command is not None else 0
     
     def _prepare_messages(self, user_message: str, context: Dict) -> List[Dict]:
-        """Prepara mensagens no formato para API"""
+        """Prepare messages in API format."""
         context = {**context, "current_user_message": user_message}
         system_prompt = self.generate_system_prompt(context)
-        
+
         messages = [
             {"role": "system", "content": system_prompt}
         ]
-        
-        # Adicionar histórico de conversa se existir
+
+        # Add conversation history if exists
         if context.get("conversation_history"):
-            for msg in context["conversation_history"][-6:]:  # Últimas 6 mensagens
+            for msg in context["conversation_history"][-6:]:  # Last 6 messages
                 messages.append(msg)
-        
+
         messages.append({"role": "user", "content": user_message})
-        
+
         return messages
 
     def _select_llm_route(self, user_message: str, context: Dict) -> ModelRoute:

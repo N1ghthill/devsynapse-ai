@@ -12,16 +12,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from devsynapse.tui import (
+from devsynapse.commands import (
     OPENROUTER_CURATED_FREE_MODELS,
-    DevSynapseTUI,
-    ModelSelectionScreen,
-    ProviderConnectionScreen,
+    CommandDispatcher,
     _format_money,
     _is_free_model,
     _mask_secret,
     _model_option_label,
 )
+from devsynapse.screens import ModelSelectionScreen, ProviderConnectionScreen
+from devsynapse.tui import DevSynapseTUI
 
 
 class TestPureHelpers:
@@ -62,21 +62,6 @@ class TestPureHelpers:
         assert _is_free_model(model)
         assert "free" in _model_option_label(model)
         assert "tools" in _model_option_label(model)
-
-
-class TestRouterUpdatesFromArgs:
-    """Tests for removed automatic routing controls."""
-
-    def _make_tui(self):
-        """Create a minimal TUI instance for calling the method."""
-        return DevSynapseTUI()
-
-    def test_router_args_are_ignored(self):
-        tui = self._make_tui()
-        assert tui._router_updates_from_args([]) is None
-        assert tui._router_updates_from_args(["on"]) is None
-        assert tui._router_updates_from_args(["economy", "on"]) is None
-        assert tui._router_updates_from_args(["adaptive", "off"]) is None
 
 
 def _configure_runtime(monkeypatch: pytest.MonkeyPatch, runtime_root: Path) -> None:
@@ -121,7 +106,8 @@ class TestSlashCommandParsing:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command("/unknown")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.handle("/unknown")
             await pilot.pause()
 
             mock_chat.write.assert_called()
@@ -139,7 +125,8 @@ class TestSlashCommandParsing:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command('/connect "unclosed quote')
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.handle('/connect "unclosed quote')
             await pilot.pause()
 
             mock_chat.write.assert_called()
@@ -157,7 +144,8 @@ class TestSlashCommandParsing:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command("/")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.handle("/")
             await pilot.pause()
 
             mock_chat.write.assert_called()
@@ -179,7 +167,8 @@ class TestSlashCommandHandlers:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command("/help")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.cmd_help([])
             await pilot.pause()
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
@@ -200,7 +189,8 @@ class TestSlashCommandHandlers:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command("/status")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.cmd_status([])
             await pilot.pause()
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
@@ -218,7 +208,8 @@ class TestSlashCommandHandlers:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command("/providers")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.cmd_providers([])
             await pilot.pause()
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
@@ -236,7 +227,8 @@ class TestSlashCommandHandlers:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command("/new")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.cmd_new([])
             await pilot.pause()
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
@@ -255,14 +247,15 @@ class TestSlashCommandHandlers:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command("/details")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.cmd_details([])
             await pilot.pause()
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
             text = " ".join(calls)
             assert "on" in text
 
-            await app._handle_slash_command("/details")
+            await dispatcher.cmd_details([])
             await pilot.pause()
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
@@ -280,7 +273,8 @@ class TestSlashCommandHandlers:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command("/budget")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.cmd_budget([])
             await pilot.pause()
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
@@ -298,7 +292,8 @@ class TestSlashCommandHandlers:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command("/router")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.cmd_router([])
             await pilot.pause()
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
@@ -317,7 +312,8 @@ class TestSlashCommandHandlers:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command("/router on")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.cmd_router(["on"])
             await pilot.pause()
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
@@ -336,7 +332,8 @@ class TestSlashCommandHandlers:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command("/projects")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.cmd_projects([])
             await pilot.pause()
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
@@ -353,7 +350,8 @@ class TestSlashCommandHandlers:
         app = DevSynapseTUI()
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            await app._handle_slash_command("/connect")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.cmd_connect([])
             await pilot.pause()
 
             assert isinstance(app.screen, ProviderConnectionScreen)
@@ -371,7 +369,8 @@ class TestSlashCommandHandlers:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command("/connect openrouter sk-test openrouter/auto")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.cmd_connect(["openrouter", "sk-test", "openrouter/auto"])
             await pilot.pause()
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
@@ -391,7 +390,8 @@ class TestSlashCommandHandlers:
         app = DevSynapseTUI()
         async with app.run_test(size=(120, 35)) as pilot:
             await pilot.pause()
-            await app._handle_slash_command("/model openrouter")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.cmd_model(["openrouter"])
             await pilot.pause()
 
             assert isinstance(app.screen, ModelSelectionScreen)
@@ -445,7 +445,8 @@ class TestSlashCommandHandlers:
             app.copy_to_clipboard = copied.append
             app.last_response_text = "resposta final"
 
-            await app._handle_slash_command("/copy")
+            dispatcher = CommandDispatcher(app)
+            await dispatcher.cmd_copy([])
             await pilot.pause()
 
             assert copied == ["resposta final"]

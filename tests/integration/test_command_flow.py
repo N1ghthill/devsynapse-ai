@@ -53,8 +53,8 @@ class TestCommandFlowIntegration:
     """Full command execution flow with real validation + mocked subprocess."""
 
     @pytest.mark.asyncio
-    async def test_admin_bash_executes_via_trusted_shell(self, tmp_path):
-        """Admin bash commands use trusted shell (bash -o pipefail -c)."""
+    async def test_admin_bash_executes_via_shlex_split(self, tmp_path):
+        """Security: Admin bash commands are parsed with shlex.split() (no shell=True)."""
         bridge = _bridge()
 
         with patch("core.command_executor.subprocess.run") as mock_run:
@@ -70,7 +70,8 @@ class TestCommandFlowIntegration:
             assert result.status == "success"
             mock_run.assert_called_once()
             call_args = mock_run.call_args.args[0]
-            assert call_args[:3] == ["/bin/bash", "-o", "pipefail"]
+            # Command is parsed with shlex.split() for security
+            assert call_args == ["echo", "hello", "|", "cat"]
 
     @pytest.mark.asyncio
     async def test_user_bash_executes_via_direct_args(self, tmp_path):

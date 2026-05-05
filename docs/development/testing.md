@@ -2,11 +2,11 @@
 
 ## Current Verification Baseline
 
-At the latest documentation refresh on `2026-05-04`, local verification produced:
+At the latest documentation refresh on `2026-05-05`, local verification produced:
 
-- `150` passing tests;
+- `319` passing tests;
 - successful Ruff lint;
-- successful shell script syntax checks and Python script compilation.
+- successful shell script syntax checks, ShellCheck and Python script compilation.
 
 ## Test Layout
 
@@ -87,6 +87,15 @@ failing tests, validates project-scope policy blocks and, when a provider API ke
 is configured, asks DevSynapse to diagnose, edit and re-run the primary fixture.
 Reports are written as Markdown and JSON inside the generated `reports/`
 directory.
+
+GitHub Actions runs the same local verification surface in a Python `3.13`
+virtual environment:
+
+```bash
+make install-dev
+make verify
+make eval-agent EVAL_AGENT_ARGS=--no-llm
+```
 
 ## Expectations For Contributors
 
