@@ -47,6 +47,11 @@ Install or refresh the local app:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/N1ghthill/devsynapse-ai/main/scripts/install.sh | bash
+```
+
+Then reload your shell path and start the TUI:
+
+```bash
 source ~/.bashrc
 devsynapse
 ```
@@ -54,7 +59,10 @@ devsynapse
 The installer bootstraps the source checkout when needed, creates `venv/`,
 installs dependencies, applies migrations and writes real commands to
 `~/.local/bin`: `devsynapse`, `update-devsynapse` and `uninstall-devsynapse`.
-It also removes previous DevSynapse aliases from shell rc files.
+It also removes previous DevSynapse aliases from shell rc files. Piped installs
+use default setup values automatically; configure provider keys later with
+`/connect` inside the TUI. For scripted local installs, set
+`DEVSYNAPSE_ASSUME_DEFAULTS=1` to skip prompts explicitly.
 
 From an existing checkout, the same contract is:
 

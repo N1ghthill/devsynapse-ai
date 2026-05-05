@@ -101,6 +101,7 @@ def _run_script(
     script: str,
     stdin: str,
     script_args: list[str] | None = None,
+    interactive: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["PATH"] = f"{fake_bin}:{env['PATH']}"
@@ -111,6 +112,8 @@ def _run_script(
     for key in list(env):
         if key.startswith("DEVSYNAPSE_"):
             env.pop(key)
+    if interactive:
+        env["DEVSYNAPSE_INTERACTIVE"] = "1"
     return subprocess.run(
         ["bash", script, *(script_args or [])],
         cwd=repo,
@@ -201,6 +204,28 @@ def test_install_script_preserves_existing_api_key_on_blank_input(tmp_path: Path
     assert "DEEPSEEK_API_KEY=sk-existing" in env_text
     assert "API key kept" in installed.stdout
     assert "No API key configured" not in installed.stdout
+
+
+def test_install_script_uses_defaults_when_stdin_is_not_interactive(tmp_path: Path) -> None:
+    repo, fake_bin, home = _create_script_repo(tmp_path)
+    config_file = home / ".config" / "devsynapse-ai" / ".env"
+    data_dir = home / ".local" / "share" / "devsynapse-ai" / "data"
+
+    installed = _run_script(
+        repo,
+        fake_bin,
+        home,
+        "scripts/install.sh",
+        "source ~/.bashrc\ndevsynapse\n",
+        interactive=False,
+    )
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+
+    env_text = config_file.read_text(encoding="utf-8")
+    assert "DEEPSEEK_API_KEY=source ~/.bashrc" not in env_text
+    assert f"DEV_REPOS_ROOT={home / 'repos'}" in env_text
+    assert (data_dir / "devsynapse_memory.db").is_file()
+    assert "No API key configured" in installed.stdout
 
 
 def test_uninstall_script_removes_artifacts_and_respects_data_choices(tmp_path: Path) -> None:

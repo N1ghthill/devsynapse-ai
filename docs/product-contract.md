@@ -47,6 +47,11 @@ Canonical install:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/N1ghthill/devsynapse-ai/main/scripts/install.sh | bash
+```
+
+Then reload the shell path and start the TUI:
+
+```bash
 source ~/.bashrc
 devsynapse
 ```
@@ -61,6 +66,10 @@ The installer:
 - writes executable wrappers to `~/.local/bin`;
 - removes previous DevSynapse shell aliases from shell rc files;
 - adds `~/.local/bin` to PATH when needed.
+
+For `curl | bash`, installer prompts use default setup values automatically.
+Provider keys are configured later inside the TUI with `/connect`. For scripted
+local installs, `DEVSYNAPSE_ASSUME_DEFAULTS=1` skips prompts explicitly.
 
 Installed wrappers:
 

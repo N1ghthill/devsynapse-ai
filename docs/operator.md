@@ -25,6 +25,11 @@ Canonical install:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/N1ghthill/devsynapse-ai/main/scripts/install.sh | bash
+```
+
+Then reload your shell path and start the TUI:
+
+```bash
 source ~/.bashrc
 devsynapse
 ```
@@ -48,7 +53,11 @@ uninstall-devsynapse
 ```
 
 It also removes previous DevSynapse aliases from shell rc files so the command
-path is unambiguous.
+path is unambiguous. When installed through `curl | bash`, prompts use default
+values automatically so pasted follow-up commands are not consumed as setup
+answers. Configure provider keys later with `/connect` inside the TUI. For
+scripted local installs, set `DEVSYNAPSE_ASSUME_DEFAULTS=1` to skip prompts
+explicitly.
 
 Check the installed build:
 

@@ -83,6 +83,11 @@ prompt_value() {
         return
     fi
 
+    if [ ! -t 0 ] && [ -z "${DEVSYNAPSE_INTERACTIVE:-}" ]; then
+        echo "$default_value"
+        return
+    fi
+
     if [ -t 0 ]; then
         read -r -p "$prompt" value || value="$default_value"
     elif [ -t 1 ] && [ -r /dev/tty ]; then
@@ -395,6 +400,10 @@ install() {
     echo -e "  ${CYAN}/providers${NC}"
     echo -e "  ${CYAN}/status${NC}"
     echo -e "  ${CYAN}/usage${NC}"
+    echo ""
+    echo -e "${BOLD}Notes:${NC}"
+    echo -e "  Piped installs use default setup values; configure provider keys with ${CYAN}/connect${NC}."
+    echo -e "  Scripted local installs can set ${CYAN}DEVSYNAPSE_ASSUME_DEFAULTS=1${NC} to skip prompts."
     echo ""
     echo -e "${BOLD}Runtime files:${NC}"
     echo -e "  Config: ${CYAN}$CONFIG_FILE${NC}"
