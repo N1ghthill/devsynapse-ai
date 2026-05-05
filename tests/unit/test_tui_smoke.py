@@ -10,6 +10,7 @@ from textual.widgets import OptionList, RichLog, Static
 
 from devsynapse.tui_input import EnhancedInput
 from devsynapse.tui_preferences import load_tui_preferences
+from devsynapse.tui_rendering import diff_stats, is_unified_diff, render_command_result
 from devsynapse.tui_sidebar import DynamicSidebar
 
 
@@ -55,6 +56,30 @@ def test_tui_preferences_accept_theme_and_layout_overrides(tmp_path, monkeypatch
     assert preferences.theme == "dracula"
     assert preferences.layout == "dense"
     assert preferences.palette["thinking"] == "#8be9fd"
+
+
+def test_tui_diff_renderer_detects_and_summarizes_unified_diff():
+    diff = "\n".join(
+        [
+            "diff --git a/app.py b/app.py",
+            "index 1111111..2222222 100644",
+            "--- a/app.py",
+            "+++ b/app.py",
+            "@@ -1,2 +1,3 @@",
+            " import os",
+            "-print('old')",
+            "+print('new')",
+            "+print('done')",
+        ]
+    )
+
+    assert is_unified_diff(diff)
+    stats = diff_stats(diff)
+    assert stats.files == 1
+    assert stats.hunks == 1
+    assert stats.additions == 2
+    assert stats.deletions == 1
+    assert render_command_result(message="ok", output=diff) is not None
 
 
 @pytest.mark.asyncio

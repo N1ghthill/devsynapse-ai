@@ -49,6 +49,7 @@ from devsynapse.screens.command_palette import CommandPaletteScreen
 from devsynapse.tui_input import EnhancedInput
 from devsynapse.tui_notifications import NotificationManager
 from devsynapse.tui_preferences import TUIPreferences, load_tui_preferences, save_tui_preferences
+from devsynapse.tui_rendering import render_command_result, strip_ansi
 from devsynapse.tui_sidebar import DynamicSidebar
 
 logger = logging.getLogger(__name__)
@@ -594,14 +595,13 @@ class DevSynapseTUI(App):
             conversation_id=self.conversation_id,
         )
         color = self._state_color("success" if result.success else "error")
-        body = result.message
-        if result.reason_code:
-            body += f"\nreason: {result.reason_code}"
-        if result.output:
-            body += f"\n\n{result.output}"
         self._write_panel(
             f"shell {result.status}",
-            Text(body),
+            render_command_result(
+                message=result.message,
+                output=strip_ansi(result.output or ""),
+                reason_code=result.reason_code,
+            ),
             border_style=color,
         )
         self._refresh_sidebar()

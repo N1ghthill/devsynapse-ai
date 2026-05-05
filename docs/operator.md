@@ -143,6 +143,9 @@ Supported provider names:
 !<command>                       run a shell command through the command bridge
 ```
 
+Shell output that looks like a unified diff or git patch is rendered with diff
+highlighting plus a compact file, hunk, addition and deletion summary.
+
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
