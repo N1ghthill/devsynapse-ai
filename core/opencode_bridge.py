@@ -7,7 +7,6 @@ import logging
 import re
 import shlex
 import subprocess
-import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -29,7 +28,6 @@ from config.settings import (
     USER_BASH_COMMANDS,
     get_settings,
 )
-from core.monitoring import monitoring_system as default_monitoring_system
 from core.plugin_system import plugin_manager
 
 logger = logging.getLogger(__name__)
@@ -45,7 +43,6 @@ class OpenCodeBridge:
         self,
         known_projects: Optional[Dict[str, Dict[str, str]]] = None,
         allowed_directories: Optional[List[str]] = None,
-        monitoring_system=None,
     ):
         self.allowed_commands = ALLOWED_COMMANDS
         self.allowed_bash_commands = ALLOWED_BASH_COMMANDS
@@ -60,7 +57,6 @@ class OpenCodeBridge:
         self.allowed_file_extensions = ALLOWED_FILE_EXTENSIONS
         self.backup_enabled = OPENCODE_BACKUP_ENABLED
         self.backup_suffix = OPENCODE_BACKUP_SUFFIX
-        self.monitoring_system = monitoring_system or default_monitoring_system
 
     def register_project(
         self,
@@ -84,6 +80,8 @@ class OpenCodeBridge:
         project_name: Optional[str] = None,
         user_role: str = "user",
         project_mutation_allowlist: Optional[List[str]] = None,
+        conversation_id: Optional[str] = None,
+        tool_run_id: Optional[str] = None,
     ) -> CommandExecutionTuple:
         """
         Executa um comando OpenCode de forma segura
@@ -91,8 +89,6 @@ class OpenCodeBridge:
         Returns:
             Tuple[success, result_message, output]
         """
-        
-        start_time = time.time()
         
         before_event = await plugin_manager.emit_event(
             "command:before_execute",
@@ -112,34 +108,12 @@ class OpenCodeBridge:
         validation_result = self._validate_command(command, user_role=user_role)
         if not validation_result[0]:
             error_msg = validation_result[1]
-            execution_time = time.time() - start_time
-            
-            # Log de falha de validação
-            self.monitoring_system.log_command_execution(
-                command_type="validation_failed",
-                command_text=command[:200],
-                success=False,
-                execution_time=execution_time,
-                user_id=user_id,
-                project_name=project_name,
-                error_message=error_msg
-            )
             
             return False, error_msg, None, "blocked", "validation_failed", project_name
         
         command_type, args = validation_result[2], validation_result[3]
         if project_name and project_name not in self.known_projects:
             error_msg = f"Projeto selecionado não está registrado: {project_name}"
-            execution_time = time.time() - start_time
-            self.monitoring_system.log_command_execution(
-                command_type="authorization_failed",
-                command_text=command[:200],
-                success=False,
-                execution_time=execution_time,
-                user_id=user_id,
-                project_name=project_name,
-                error_message=error_msg,
-            )
             return False, error_msg, None, "blocked", "authorization_failed", project_name
 
         args = self._normalize_placeholder_command_args(command_type, args)
@@ -147,16 +121,6 @@ class OpenCodeBridge:
             error_msg = (
                 "Comandos com sudo não são executados pelo chat. Execute a etapa privilegiada "
                 "manualmente no terminal e use Revalidar pré-requisitos para continuar."
-            )
-            execution_time = time.time() - start_time
-            self.monitoring_system.log_command_execution(
-                command_type="privileged_setup_required",
-                command_text=command[:200],
-                success=False,
-                execution_time=execution_time,
-                user_id=user_id,
-                project_name=project_name,
-                error_message=error_msg,
             )
             return False, error_msg, None, "blocked", "privileged_setup_required", project_name
 
@@ -172,16 +136,6 @@ class OpenCodeBridge:
                 f"Comando aponta para o projeto '{resolved_project_name}', mas esta conversa "
                 f"está travada no projeto '{project_name}'"
             )
-            execution_time = time.time() - start_time
-            self.monitoring_system.log_command_execution(
-                command_type="project_scope_mismatch",
-                command_text=command[:200],
-                success=False,
-                execution_time=execution_time,
-                user_id=user_id,
-                project_name=project_name,
-                error_message=error_msg,
-            )
             return False, error_msg, None, "blocked", "project_scope_mismatch", project_name
 
         effective_project_name = project_name or resolved_project_name
@@ -193,16 +147,6 @@ class OpenCodeBridge:
                 project_name,
             )
             if not scoped:
-                execution_time = time.time() - start_time
-                self.monitoring_system.log_command_execution(
-                    command_type="project_scope_mismatch",
-                    command_text=command[:200],
-                    success=False,
-                    execution_time=execution_time,
-                    user_id=user_id,
-                    project_name=project_name,
-                    error_message=scope_message,
-                )
                 return False, scope_message, None, "blocked", "project_scope_mismatch", project_name
 
         if (
@@ -211,16 +155,6 @@ class OpenCodeBridge:
             and not self._validate_file_path(args[0])
         ):
             error_msg = f"Caminho de arquivo não permitido: {args[0]}"
-            execution_time = time.time() - start_time
-            self.monitoring_system.log_command_execution(
-                command_type="validation_failed",
-                command_text=command[:200],
-                success=False,
-                execution_time=execution_time,
-                user_id=user_id,
-                project_name=effective_project_name,
-                error_message=error_msg,
-            )
             return False, error_msg, None, "blocked", "validation_failed", effective_project_name
 
         authorized, auth_message = self._authorize_command(
@@ -231,16 +165,6 @@ class OpenCodeBridge:
             project_mutation_allowlist or [],
         )
         if not authorized:
-            execution_time = time.time() - start_time
-            self.monitoring_system.log_command_execution(
-                command_type="authorization_failed",
-                command_text=command[:200],
-                success=False,
-                execution_time=execution_time,
-                user_id=user_id,
-                project_name=effective_project_name,
-                error_message=auth_message,
-            )
             return False, auth_message, None, "blocked", "authorization_failed", effective_project_name
         
         try:
@@ -271,30 +195,11 @@ class OpenCodeBridge:
             result = (False, f"Erro executando comando: {str(e)}", None)
         
         # Calcular tempo de execução
-        execution_time = time.time() - start_time
         success, message, output = result
         status = "success" if success else "failed"
         reason_code = None if success else "execution_failed"
         if not success and self._looks_like_interactive_sudo_failure(message, output):
             reason_code = "interactive_sudo_required"
-        
-        # Log da execução
-        self.monitoring_system.log_command_execution(
-            command_type=command_type,
-            command_text=command[:200],
-            success=success,
-            execution_time=execution_time,
-            user_id=user_id,
-            project_name=effective_project_name,
-            error_message=message if not success else None
-        )
-        
-        # Log métrica de tempo
-        self.monitoring_system.log_system_metric(
-            metric_name=f"command_{command_type}_execution_time",
-            metric_value=execution_time,
-            tags={"success": success, "user_id": user_id}
-        )
         
         await plugin_manager.emit_event(
             "command:after_execute",

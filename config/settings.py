@@ -5,8 +5,8 @@ Centralized settings for DevSynapse AI.
 from __future__ import annotations
 
 import json
+import logging
 import os
-import secrets
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -15,6 +15,7 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+logger = logging.getLogger(__name__)
 
 
 def _expand_env_path(value: str | Path) -> Path:
@@ -31,18 +32,6 @@ def _xdg_dir(env_name: str, default_relative: str) -> Path:
 def _runtime_home() -> Optional[Path]:
     value = os.getenv("DEVSYNAPSE_HOME")
     return _expand_env_path(value) if value else None
-
-
-def parse_csv_or_json_list(value: str) -> List[str]:
-    value = value.strip()
-    if not value:
-        return ["*"]
-    if value.startswith("["):
-        parsed = json.loads(value)
-        if isinstance(parsed, list):
-            return [str(item).strip() for item in parsed if str(item).strip()] or ["*"]
-        return ["*"]
-    return [item.strip() for item in value.split(",") if item.strip()] or ["*"]
 
 
 def _default_config_dir() -> Path:
@@ -71,23 +60,25 @@ CONFIG_FILE = _expand_env_path(os.getenv("DEVSYNAPSE_CONFIG_FILE", CONFIG_DIR / 
 DATA_DIR = _expand_env_path(os.getenv("DEVSYNAPSE_DATA_DIR", _default_data_dir()))
 LOGS_DIR = _expand_env_path(os.getenv("DEVSYNAPSE_LOGS_DIR", _default_logs_dir()))
 
-CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+def _mkdir_best_effort(path: Path) -> None:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.debug("Could not create runtime directory %s: %s", path, exc)
+
+
+_mkdir_best_effort(CONFIG_DIR)
+_mkdir_best_effort(CONFIG_FILE.parent)
+_mkdir_best_effort(DATA_DIR)
+_mkdir_best_effort(LOGS_DIR)
 
 
 DEFAULT_RUNTIME_CONFIG_TEMPLATE = """# DevSynapse AI runtime config
-API_HOST=127.0.0.1
-API_PORT=8000
-API_DEBUG=true
 DEEPSEEK_API_KEY=
 OPENROUTER_API_KEY=
 OPENCODE_ZEN_API_KEY=
 OPENCODE_GO_API_KEY=
-JWT_SECRET_KEY=change-this-in-production
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
 """
 
 
@@ -136,23 +127,21 @@ def _ensure_initial_runtime_config() -> None:
             if template.exists()
             else DEFAULT_RUNTIME_CONFIG_TEMPLATE
         )
-        CONFIG_FILE.write_text(template_text, encoding="utf-8")
+        try:
+            CONFIG_FILE.write_text(template_text, encoding="utf-8")
+        except OSError as exc:
+            logger.debug("Could not create runtime config %s: %s", CONFIG_FILE, exc)
+            return
 
-    values = _read_env_values(CONFIG_FILE)
     updates: dict[str, str | Path] = {
         "MEMORY_DB_PATH": DATA_DIR / "devsynapse_memory.db",
-        "MONITORING_DB_PATH": DATA_DIR / "devsynapse_monitoring.db",
         "LOG_FILE": LOGS_DIR / "devsynapse.log",
     }
-    current_secret = values.get("JWT_SECRET_KEY", "")
-    if (
-        not current_secret
-        or current_secret == "change-this-in-production"
-        or len(current_secret) < 32
-    ):
-        updates["JWT_SECRET_KEY"] = secrets.token_urlsafe(48)
 
-    _set_env_values(CONFIG_FILE, updates)
+    try:
+        _set_env_values(CONFIG_FILE, updates)
+    except OSError as exc:
+        logger.debug("Could not update runtime config %s: %s", CONFIG_FILE, exc)
 
 
 _ensure_initial_runtime_config()
@@ -185,12 +174,7 @@ class AppSettings(BaseSettings):
     )
 
     app_name: str = "DevSynapse AI"
-    app_version: str = "0.8.4"
-    api_host: str = "127.0.0.1"
-    api_port: int = 8000
-    api_debug: bool = True
-    api_base_url: Optional[str] = None
-    cors_allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
+    app_version: str = "0.9.0"
 
     deepseek_api_key: Optional[str] = None
     openrouter_api_key: Optional[str] = None
@@ -229,16 +213,7 @@ class AppSettings(BaseSettings):
     dev_repos_root: Path = Field(default_factory=_default_repos_root)
     dev_projects_json: str = ""
 
-    jwt_secret_key: str = Field(
-        default_factory=lambda: os.getenv("JWT_SECRET_KEY", "") or secrets.token_urlsafe(48)
-    )
-    jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60 * 24
-
     memory_db_path: Path = Field(default_factory=lambda: DATA_DIR / "devsynapse_memory.db")
-    monitoring_db_path: Path = Field(
-        default_factory=lambda: DATA_DIR / "devsynapse_monitoring.db"
-    )
     conversation_history_limit: int = 20
 
     opencode_timeout: int = 30
@@ -253,14 +228,6 @@ class AppSettings(BaseSettings):
 
     log_level: str = "INFO"
     log_file: Path = Field(default_factory=lambda: LOGS_DIR / "devsynapse.log")
-
-    default_admin_username: str = "admin"
-    default_admin_password: str = "admin"
-    default_user_username: str = ""
-    default_user_password: str = ""
-
-    def get_cors_allowed_origins(self) -> List[str]:
-        return parse_csv_or_json_list(self.cors_allowed_origins)
 
     def build_allowed_directories(self) -> List[str]:
         roots = {str(self.dev_repos_root.resolve()), str(self.dev_workspace_root.resolve())}
@@ -340,8 +307,6 @@ DEEPSEEK_PRO_OUTPUT_PRICE_USD_PER_MILLION = (
     _settings.deepseek_pro_output_price_usd_per_million
 )
 MEMORY_DB_PATH = _settings.memory_db_path
-MONITORING_DB_PATH = _settings.monitoring_db_path
-VECTOR_DB_PATH = DATA_DIR / "chroma_db"
 CONVERSATION_HISTORY_LIMIT = _settings.conversation_history_limit
 OPENCODE_TIMEOUT = _settings.opencode_timeout
 OPENCODE_MAX_OUTPUT = _settings.opencode_max_output
@@ -350,9 +315,6 @@ OPENCODE_BACKUP_ENABLED = _settings.opencode_backup_enabled
 OPENCODE_BACKUP_SUFFIX = _settings.opencode_backup_suffix
 MAX_EDIT_SIZE = _settings.max_edit_size
 MAX_WRITE_SIZE = _settings.max_write_size
-API_HOST = _settings.api_host
-API_PORT = _settings.api_port
-API_DEBUG = _settings.api_debug
 
 ALLOWED_COMMANDS = [
     "bash",

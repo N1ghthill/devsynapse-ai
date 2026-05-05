@@ -1,120 +1,87 @@
 # Local Security Model
 
-DevSynapse AI is a local-first development assistant. It is meant to be downloaded,
-run on a developer machine, and connected to the user's own DeepSeek API key. It is
-not designed as a public SaaS or a hardened multi-tenant service.
+DevSynapse AI is a local-first terminal coding agent. It is meant to run on a
+developer machine with the user's own LLM provider API key. It is not a public
+SaaS, a hardened sandbox or a multi-tenant service.
 
 ## Security Goal
 
-The main goal is to reduce local development risk while keeping the app useful:
+The main goal is to reduce local development risk while keeping the agent useful:
 
-- keep the DeepSeek API key in runtime configuration, not in source control
-- bind the API to localhost by default
-- restrict browser origins to local frontend origins by default
-- require authentication for chat, settings, admin and command execution routes
-- force first-run setup for admin password, DeepSeek API key and repository workspace
-  when any of those runtime values are missing
-- require admin authorization for global runtime settings updates
-- require admin authorization for global saved knowledge writes
-- require project mutation permission for non-admin project memory writes
-- validate command format before execution
-- restrict command types and non-admin bash commands through allowlists
-- require explicit project scope for mutating commands
-- require user/project permission for non-admin mutations
-- keep mutating commands inside the registered project root
-- save command outcomes, status and reason codes for auditability
+- keep provider API keys in runtime configuration or environment variables, not
+  in source control;
+- validate command format before execution;
+- restrict command families to `bash`, `read`, `glob`, `grep`, `edit` and
+  `write`;
+- block configured high-risk command patterns;
+- require project scope for project-bound mutations;
+- keep project-scoped mutating commands inside the registered project root;
+- record command outcomes, status and reason codes in SQLite;
+- block `sudo` from chat-driven command execution.
 
 ## Command Boundary
 
-DevSynapse exposes a constrained command bridge, not a raw shell. Supported command
-families are `bash`, `read`, `glob`, `grep`, `edit` and `write`.
+DevSynapse exposes a constrained command bridge, not a raw unrestricted shell.
+The bridge parses model tool calls, checks the command family, applies command
+allowlists and resolves project working directories before execution.
 
-Read-oriented operations can inspect files and command output. Non-admin mutating
-operations such as `edit`, `write`, `touch`, `mkdir`, `cp`, `mv`, `rm` and `chmod`
-require confirmation and project-aware authorization. Non-admin users can mutate
-only projects in their allowlist.
+TUI sessions are treated as trusted local-operator sessions. Trusted tool calls
+may execute supported tools, including `edit` and `write`, and trusted `bash`
+can use shell syntax. This is still not a sandbox boundary: commands run on the
+host machine with the current user's privileges.
 
-Admin users are treated as trusted local operators. Admin chat tool calls may
-auto-execute supported OpenCode tools, including `edit` and `write`; admin `bash`
-uses Bash with `pipefail` enabled so pipelines, redirects and chained commands
-work as expected while still surfacing a failed command inside a pipeline. Chat
-commands containing `sudo` are blocked before execution with
-`privileged_setup_required`; privileged OS setup must happen manually in a
-terminal or through a future dedicated installer flow. Admin file tools are not
-constrained to registered project roots or the normal allowed-directory list. The
-bridge still rejects configured blacklist patterns and records command telemetry,
-but this is not a sandbox boundary.
+Commands containing `sudo` are blocked before execution with
+`privileged_setup_required`. Privileged OS setup must happen manually in a real
+terminal. Unexpected failures that require an interactive `sudo` password or TTY
+are classified with `interactive_sudo_required`.
 
-The chat UI can enable an "Aprovar tudo" fast path. This sends
-`execute_command=true` on streaming chat turns so authorized tool calls run
-without another confirmation click and emit audit events back to the chat. It
-does not bypass backend role checks, project mutation allowlists, blacklist
-checks, command telemetry or command execution records.
+When a conversation is scoped to a registered project, that project is the
+mutation boundary. Write/edit and mutating bash actions that point outside it are
+blocked with `project_scope_mismatch`. Read-oriented commands can still inspect
+allowed paths so the agent can gather context.
 
-For admin users, "Aprovar tudo" is an operator mode rather than a project
-allowlist mode. Supported OpenCode tools run directly, admin `bash` uses shell
-syntax, and ordinary command failures are replayed to the model so it can keep
-fixing and validating. Privileged setup is routed out of the agent loop:
-commands containing `sudo` are classified with `privileged_setup_required`, and
-unexpected failures that require an interactive `sudo` password or TTY are
-classified with `interactive_sudo_required`. These are not replayed as
-recoverable work because the chat process cannot provide that credential; the UI
-shows a manual terminal instruction and a revalidation action. Revalidation uses
-fixed non-privileged version checks rather than model-generated shell commands.
-When a conversation is scoped to a registered project, that project remains the
-mutation boundary: write/edit and mutating bash actions that point outside it are
-blocked with `project_scope_mismatch`. Read-only reference commands can still
-inspect other allowed or registered repositories so the agent can compare code
-and gather context without switching the working project. Global admin sessions
-without a selected project remain trusted local-operator sessions. To constrain
-what a person or agent can mutate more narrowly, create a non-admin user and
-grant only the intended project allowlist.
+LLMs sometimes produce placeholder paths such as `/home/user/projects`,
+`~/projects` or `/workspace`. Before validation and execution, the command
+bridge normalizes those placeholders to configured local repository/workspace
+roots. If the command then points at a different project than the active one, a
+mutating command is blocked instead of silently switching scope.
 
-LLMs sometimes produce placeholder filesystem paths such as `/home/user/projects`,
-`~/projects` or `/workspace`. Before validation and execution, the command bridge
-normalizes those placeholders to the configured local repository/workspace roots.
-For example, `/home/user/projects/calculadora` maps to
-`DEV_REPOS_ROOT/calculadora`. If a chat is already scoped to another project, a
-normalized mutating command is blocked instead of silently switching projects.
+## Runtime Secrets
 
-Non-admin auto-execution is intentionally conservative. It is limited to low-risk
-inspection through allowlisted bash commands. File-content tools such as `read`,
-`grep` and `glob` are proposed for explicit confirmation instead of being sent to
-the LLM automatically.
+Runtime config defaults to `~/.config/devsynapse-ai/.env`. Set one or more of:
+
+- `DEEPSEEK_API_KEY`
+- `OPENROUTER_API_KEY`
+- `OPENCODE_ZEN_API_KEY`
+- `OPENCODE_GO_API_KEY`
+
+The repository `.env.example` is safe to commit because keys are blank. Do not
+commit populated runtime config files, SQLite databases or logs.
 
 ## Non-Goals
 
 This project does not provide:
 
-- kernel-level sandbox isolation
-- safe execution of arbitrary untrusted code
-- public internet hardening by default
-- multi-tenant SaaS isolation
-- formal secrets rotation or incident-response workflows
-
-If the API is bound to `0.0.0.0` or another non-loopback host, DevSynapse logs a
-warning because network exposure changes the risk profile. Use that only on trusted
-networks and only when you understand that commands execute on the host machine.
+- kernel-level sandbox isolation;
+- safe execution of arbitrary untrusted code;
+- public internet hardening;
+- multi-tenant isolation;
+- formal secrets rotation or incident-response workflows.
 
 ## Local Operator Checklist
 
 Before normal use:
 
-- keep `API_HOST=127.0.0.1` unless network access is intentional
-- keep `CORS_ALLOWED_ORIGINS` limited to known browser origins
-- complete first-run setup before using the app normally
-- configure `DEEPSEEK_API_KEY` only in runtime config or environment
-- replace default local passwords
-- use the admin role only when unrestricted local agent execution is intended
-- keep global runtime settings changes limited to trusted admins
-- register only project directories you trust
-- grant mutation permissions only where writes are expected
-- review proposed commands before confirming mutations
-- treat local databases and logs as developer state that may contain project context
+- configure provider API keys only in runtime config or environment variables;
+- keep local databases and logs out of commits;
+- register only project directories you trust;
+- review proposed commands before allowing mutations;
+- use disposable `DEVSYNAPSE_HOME` directories for experiments;
+- treat command execution as host execution by your current user.
 
 ## When to Add More Hardening
 
-Add stronger isolation only if the product direction changes. Examples include
-shared machines, remote access, untrusted users, untrusted repositories or public
-network exposure. In those cases, prefer OS-level isolation, a dedicated system
-user, container boundaries, stricter network policy and external secret handling.
+Add stronger isolation if the product direction changes toward shared machines,
+remote access, untrusted users or untrusted repositories. In those cases, prefer
+OS-level isolation, a dedicated system user, container boundaries, stricter
+network policy and external secret handling.

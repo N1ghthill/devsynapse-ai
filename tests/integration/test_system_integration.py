@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from core.memory import MemorySystem
-from core.monitoring import MonitoringSystem
 from core.opencode_bridge import OpenCodeBridge
 
 PROJECT_NAME = "devsynapse-ai"
@@ -58,45 +57,6 @@ class TestSystemIntegration:
         assert row is not None
         assert row[0] == "Great response!"
         assert row[1] == 5
-
-    def test_monitoring_lifecycle(self, tmp_path):
-        monitor = MonitoringSystem(tmp_path / "monitoring.db")
-
-        monitor.log_command_execution(
-            command_type="bash",
-            command_text="ls -la",
-            success=True,
-            execution_time=0.05,
-            user_id="test_user",
-            project_name="DevSynapse"
-        )
-
-        monitor.log_api_request(
-            endpoint="/chat",
-            method="POST",
-            status_code=200,
-            response_time=1.5,
-            user_id="test_user"
-        )
-
-        monitor.log_system_metric(
-            metric_name="cpu_usage",
-            metric_value=45.2,
-            tags={"host": "localhost"}
-        )
-
-        cmd_stats = monitor.get_command_stats(hours=24)
-        assert cmd_stats["totals"]["total"] >= 1
-        assert "blocked" in cmd_stats["totals"]
-
-        api_stats = monitor.get_api_stats(hours=24)
-        assert api_stats["totals"]["total_requests"] >= 1
-
-        health = monitor.get_system_health()
-        assert "overall_status" in health
-
-        alerts = monitor.get_active_alerts()
-        assert isinstance(alerts, list)
 
     def test_security_integration(self):
         bridge = OpenCodeBridge()
@@ -184,55 +144,3 @@ class TestSystemIntegration:
         conn.close()
 
         assert final > initial
-
-    def test_monitoring_alert_lifecycle(self, tmp_path):
-        monitor = MonitoringSystem(tmp_path / "monitoring.db")
-
-        monitor.log_command_execution(
-            command_type="bash",
-            command_text="rm -rf /",
-            success=False,
-            execution_time=0.01,
-            error_message="Permission denied: cannot delete system files"
-        )
-
-        alerts = monitor.get_active_alerts()
-        assert len(alerts) >= 1
-        assert alerts[0]["alert_type"] == "command_failure"
-
-        monitor.resolve_alert(alerts[0]["id"])
-
-        active = monitor.get_active_alerts()
-        resolved_ids = [a["id"] for a in active]
-        assert alerts[0]["id"] not in resolved_ids
-
-    def test_monitoring_separates_policy_blocks_from_operational_failures(self, tmp_path):
-        monitor = MonitoringSystem(tmp_path / "monitoring.db")
-
-        monitor.log_command_execution(
-            command_type="project_scope_mismatch",
-            command_text='write "../escape.md" --content="blocked"',
-            success=False,
-            execution_time=0.01,
-            error_message="Comando não pode acessar caminho fora do projeto",
-        )
-        monitor.log_command_execution(
-            command_type="bash",
-            command_text='bash "python3 -m pytest"',
-            success=False,
-            execution_time=0.02,
-            error_message="Comando falhou (exit code: 1)",
-        )
-
-        cmd_stats = monitor.get_command_stats(hours=24)
-        assert cmd_stats["totals"]["blocked"] == 1
-        assert cmd_stats["totals"]["failed"] == 1
-
-        health = monitor.get_system_health()
-        assert health["policy_blocks"] == 1
-        assert health["command_error_rate"] == 0.5
-
-        alerts = monitor.get_active_alerts()
-        alert_types = {alert["alert_type"] for alert in alerts}
-        assert "command_blocked" in alert_types
-        assert "command_failure" in alert_types

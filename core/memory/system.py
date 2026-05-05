@@ -1017,34 +1017,11 @@ class MemorySystem:
     def update_preference(self, key: str, value: str, source: str = "learned"):
         return self.settings.update_preference(key, value, source)
 
-    def get_user(self, username: str) -> Optional[Dict[str, Any]]:
-        return self.settings.get_user(username)
-
-    def upsert_user(
-        self, username: str, password_hash: str, role: str = "user", is_active: bool = True
-    ):
-        return self.settings.upsert_user(username, password_hash, role, is_active)
-
-    def touch_user_login(self, username: str):
-        return self.settings.touch_user_login(username)
-
     def get_app_settings(self) -> Dict[str, Any]:
         return self.settings.get_app_settings()
 
     def update_app_settings(self, settings_data: Dict[str, Any]):
         return self.settings.update_app_settings(settings_data)
-
-    def log_admin_action(
-        self,
-        actor_username: str,
-        action: str,
-        target_username: Optional[str] = None,
-        details: Optional[Dict] = None,
-    ):
-        return self.settings.log_admin_action(actor_username, action, target_username, details)
-
-    def get_admin_audit_logs(self, limit: int = 50) -> list[Dict[str, Any]]:
-        return self.settings.get_admin_audit_logs(limit)
 
     # ── cross-cutting ───────────────────────────────────────────────
 

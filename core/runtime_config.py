@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import secrets
 from pathlib import Path
 
 from config.settings import (
@@ -80,19 +79,9 @@ def ensure_runtime_config_file(path: Path | None = None) -> None:
         )
         path.write_text(template_text, encoding="utf-8")
 
-    values = read_runtime_config(path)
     updates: dict[str, str | Path] = {
         "MEMORY_DB_PATH": DATA_DIR / "devsynapse_memory.db",
-        "MONITORING_DB_PATH": DATA_DIR / "devsynapse_monitoring.db",
         "LOG_FILE": LOGS_DIR / "devsynapse.log",
     }
-
-    current_secret = values.get("JWT_SECRET_KEY", "")
-    if (
-        not current_secret
-        or current_secret == "change-this-in-production"
-        or len(current_secret) < 32
-    ):
-        updates["JWT_SECRET_KEY"] = secrets.token_urlsafe(48)
 
     set_runtime_config_values(updates, path)

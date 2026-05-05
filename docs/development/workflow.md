@@ -2,111 +2,81 @@
 
 ## Local Loop
 
-Recommended sequence:
-
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-make setup
+make install-dev
+make migrate
 make verify
-make dev
 ```
 
-For first-time setup from a new public clone, use [onboarding.md](onboarding.md).
-
-For frontend development:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
+For first-time setup from a new clone, use [onboarding.md](onboarding.md).
 
 ## Standard Commands
 
-- `make setup`: install backend/frontend dependencies, create the per-user runtime config if missing, apply migrations and seed local users
-- `make dev`: run backend and frontend dev servers together
-- `make test`: run backend tests
-- `make lint`: run Python lint checks with Ruff
-- `make script-check`: run shell syntax checks, Python script compilation and ShellCheck when installed
-- `make frontend-lint`: run frontend ESLint
-- `make frontend-build`: build the frontend bundle
-- `make desktop-backend`: build the PyInstaller backend sidecar for Tauri
-- `make desktop-dev`: build the sidecar and run the Tauri app in dev mode
-- `make desktop-build`: build the sidecar and generate default desktop packages
-- `make verify`: run Python lint, backend tests, script checks, frontend lint and frontend build in one pass
-- `make ui-smoke`: build and smoke-test the served UI with Playwright against temporary local databases and seeded smoke users
-- `make update`: update code, refresh dependencies, apply migrations and rebuild the frontend for an existing install
-- `make update-locks`: regenerate Python dependency lock constraints from the manifests
-- `make seed-users`: ensure default users exist
-- `make migrate`: apply all SQLite migrations
-- `make migration-status`: inspect current schema versions
+- `make setup`: create `venv`, install runtime dependencies and apply migrations.
+- `make install`: install runtime dependencies from `requirements.txt`.
+- `make install-dev`: install runtime and test dependencies from
+  `requirements-dev.txt`.
+- `make test`: run pytest.
+- `make lint`: run Ruff.
+- `make script-check`: check shell script syntax, compile Python scripts and run
+  ShellCheck when installed.
+- `make tui-smoke`: check TUI launcher help.
+- `make verify`: run lint, tests, script checks and TUI smoke checks.
+- `make migrate`: apply SQLite migrations.
+- `make migration-status`: inspect current migration state.
+- `make eval-agent`: run the disposable agent evaluation harness.
 
-Python dependency manifests are split by purpose:
-- `requirements.txt`: runtime dependencies
-- `requirements-dev.txt`: development and test dependencies
-- `requirements.lock` / `requirements-dev.lock`: resolved constraints used by Makefile and CI when installing
+## Running The Agent
 
-Dependabot watches GitHub Actions, Python, frontend npm and Tauri Cargo manifests weekly. The `Dependency Locks` workflow also runs weekly and can be dispatched manually to regenerate Python lock constraints and open a pull request when they change.
+Start the TUI:
 
-GitHub Releases are published from pushed `v*.*.*` tags by reading `docs/releases/<tag>.md`. Create the release notes before pushing the tag; manual dispatch is available for an existing tag.
+```bash
+./devsynapse.sh
+```
 
-Desktop artifacts for landing-page downloads are tracked in
-[../deployment/desktop-distribution.md](../deployment/desktop-distribution.md).
+Useful TUI commands:
+
+- `/connect <provider> <api-key>` saves provider keys in runtime config.
+- `/providers` shows key status without printing full secrets.
+- `/discover` refreshes the model catalog for configured providers.
+- `/models [provider]` lists known models with context and pricing data.
+- `/budget` shows daily/monthly usage against configured limits.
+- `/router` shows routing, economy, adaptive override and learned pattern state.
+- `/usage` shows recent token, cache, cost and model telemetry.
+- `!<command>` runs a shell command through the constrained command bridge.
+
+The TUI keeps session, provider, budget and command context visible beside the
+chat.
+
+## Dependency Manifests
+
+- `requirements.txt`: runtime dependencies for installer and launcher scripts.
+- `requirements-dev.txt`: development and test dependencies.
+- `requirements.lock` / `requirements-dev.lock`: pinned constraints used by
+  Makefile and install/update scripts when present.
+- `pyproject.toml`: package metadata and `devsynapse` console script.
+
+Keep `requirements.txt` and `pyproject.toml` aligned when runtime imports
+change.
+
+## Runtime Configuration During Development
+
+Use `DEVSYNAPSE_HOME` for isolated local runs:
+
+```bash
+DEVSYNAPSE_HOME=/tmp/devsynapse-dev ./venv/bin/python -m devsynapse.cli --help
+```
+
+The settings loader tolerates read-only config files for non-runtime commands,
+but memory-backed agent work requires a writable data directory.
 
 ## Agent Completion Guard
 
-Automatic execution keeps a lightweight task checklist for implementation
-requests. When the prompt explicitly names files such as `pyproject.toml`,
-`README.md` or `src/app.py`, or asks for `pytest`, the backend tracks successful
-`write` commands and passing pytest output before accepting a final response.
-If the model emits prose like "now the README" without a tool call, or tries to
-summarize before the checklist is complete, the brain feeds back the missing
-items and asks for exactly one next tool call.
-
-## Updating An Existing Install
-
-Installed users should prefer the updater instead of rerunning the interactive installer:
-
-```bash
-devsynapse update
-```
-
-The installer also creates a direct alias:
-
-```bash
-update-devsynapse
-```
-
-For a specific published release:
-
-```bash
-devsynapse update --version v0.6.0
-```
-
-The updater backs up existing runtime files when present, preserves runtime
-configuration, refreshes Python/frontend dependencies, applies migrations,
-ensures missing seeded users and rebuilds the production frontend bundle.
-
-## Revalidated Public Onboarding
-
-The contributor path was revalidated from a clean public clone on `2026-04-25` with:
-
-- `python3 -m venv venv`
-- `source venv/bin/activate`
-- `make setup`
-- `./venv/bin/pytest -q tests/integration/test_api_routes.py`
-- `make script-check`
-- `cd frontend && npm install && npm run lint && npm run build`
-
-## User Administration
-
-Examples:
-
-```bash
-./venv/bin/python scripts/manage_users.py seed-defaults
-./venv/bin/python scripts/manage_users.py list
-./venv/bin/python scripts/manage_users.py create --username alice --password change-me --role admin
-```
-
-This is intentionally simple and local-first. It is sufficient for current SQLite-backed environments and should later evolve into a more formal admin workflow if the product scope demands it.
+Automatic execution keeps a lightweight checklist for implementation requests.
+When the prompt explicitly names files such as `pyproject.toml`, `README.md` or
+`src/app.py`, or asks for `pytest`, the brain tracks successful write commands
+and passing pytest output before accepting a final response. If the model emits
+completion prose before the checklist is complete, the brain feeds back the
+missing items and asks for one next tool call.

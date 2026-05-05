@@ -406,93 +406,9 @@ MEMORY_MIGRATIONS = (
 )
 
 
-MONITORING_MIGRATIONS = (
-    Migration(
-        version=1,
-        description="Initial monitoring schema",
-        statements=(
-            """
-            CREATE TABLE IF NOT EXISTS command_executions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                command_type TEXT,
-                command_text TEXT,
-                success INTEGER,
-                execution_time REAL,
-                user_id TEXT,
-                project_name TEXT,
-                error_message TEXT
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS api_usage (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                endpoint TEXT,
-                method TEXT,
-                status_code INTEGER,
-                response_time REAL,
-                user_id TEXT,
-                ip_address TEXT
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS system_metrics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                metric_name TEXT,
-                metric_value REAL,
-                tags TEXT
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS alerts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                alert_type TEXT,
-                severity TEXT,
-                message TEXT,
-                resolved INTEGER DEFAULT 0,
-                resolved_at TEXT
-            )
-            """,
-        ),
-    ),
-)
-
-
 def build_memory_migration_manager(db_path):
     return MigrationManager(
         db_path=db_path,
         schema_name="memory",
         migrations=MEMORY_MIGRATIONS,
     )
-
-
-def build_monitoring_migration_manager(db_path):
-    return MigrationManager(
-        db_path=db_path,
-        schema_name="monitoring",
-        migrations=MONITORING_MIGRATIONS,
-    )
-
-
-def get_migration_managers(memory_db_path, monitoring_db_path):
-    return (
-        build_memory_migration_manager(memory_db_path),
-        build_monitoring_migration_manager(monitoring_db_path),
-    )
-
-
-def apply_all_migrations(memory_db_path, monitoring_db_path) -> dict:
-    return {
-        manager.schema_name: manager.apply_migrations()
-        for manager in get_migration_managers(memory_db_path, monitoring_db_path)
-    }
-
-
-def get_all_migration_status(memory_db_path, monitoring_db_path) -> list[dict]:
-    return [
-        manager.status()
-        for manager in get_migration_managers(memory_db_path, monitoring_db_path)
-    ]

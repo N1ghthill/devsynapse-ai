@@ -241,10 +241,6 @@ def _prepare_isolated_env(run_dir: Path, deepseek_key: str | None) -> None:
     os.environ["DEVSYNAPSE_HOME"] = str(run_dir / "runtime")
     os.environ["DEV_WORKSPACE_ROOT"] = str(run_dir / "workspace")
     os.environ["DEV_REPOS_ROOT"] = str(run_dir / "repos")
-    os.environ["DEFAULT_ADMIN_PASSWORD"] = "EvalAdmin123"
-    os.environ["DEFAULT_USER_USERNAME"] = "eval-user"
-    os.environ["DEFAULT_USER_PASSWORD"] = "EvalUser123"
-    os.environ["JWT_SECRET_KEY"] = "devsynapse-eval-agent-secret-with-adequate-length"
     if deepseek_key:
         os.environ["DEEPSEEK_API_KEY"] = deepseek_key
     else:
@@ -252,10 +248,8 @@ def _prepare_isolated_env(run_dir: Path, deepseek_key: str | None) -> None:
 
 
 async def _run_bridge_checks(project_name: str, project_root: Path) -> list[dict[str, Any]]:
-    from core.monitoring import MonitoringSystem
     from core.opencode_bridge import OpenCodeBridge
 
-    monitor = MonitoringSystem()
     bridge = OpenCodeBridge(
         known_projects={
             project_name: {
@@ -264,7 +258,6 @@ async def _run_bridge_checks(project_name: str, project_root: Path) -> list[dict
                 "priority": "high",
             }
         },
-        monitoring_system=monitor,
     )
 
     checks = []
@@ -300,10 +293,8 @@ async def _run_bridge_command_set(
     project_root: Path,
     commands: list[tuple[str, str]],
 ) -> list[dict[str, Any]]:
-    from core.monitoring import MonitoringSystem
     from core.opencode_bridge import OpenCodeBridge
 
-    monitor = MonitoringSystem()
     bridge = OpenCodeBridge(
         known_projects={
             project_name: {
@@ -312,7 +303,6 @@ async def _run_bridge_command_set(
                 "priority": "medium",
             }
         },
-        monitoring_system=monitor,
     )
 
     results = []
@@ -413,13 +403,11 @@ async def _run_benchmark_catalog(repos_root: Path) -> list[dict[str, Any]]:
 async def _run_llm_agent(project_name: str, project_root: Path) -> dict[str, Any] | None:
     from core.brain import DevSynapseBrain
     from core.memory import MemorySystem
-    from core.monitoring import MonitoringSystem
     from core.opencode_bridge import OpenCodeBridge
 
     memory = MemorySystem()
     memory.add_project(project_name, str(project_root), "evaluation-fixture", "high")
-    monitor = MonitoringSystem()
-    bridge = OpenCodeBridge(monitoring_system=monitor)
+    bridge = OpenCodeBridge()
     bridge.register_project(project_name, str(project_root), "evaluation-fixture", "high")
     brain = DevSynapseBrain(memory, bridge)
 

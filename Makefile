@@ -3,22 +3,16 @@ PIP ?= $(shell if [ -x ./venv/bin/pip ]; then printf './venv/bin/pip'; else comm
 PYTEST ?= $(shell if [ -x ./venv/bin/pytest ]; then printf './venv/bin/pytest'; else command -v pytest; fi)
 RUFF ?= $(shell if [ -x ./venv/bin/ruff ]; then printf './venv/bin/ruff'; else command -v ruff; fi)
 
-.PHONY: setup dev install install-dev update run test lint frontend-lint frontend-build desktop-backend desktop-build desktop-build-updates desktop-dev script-check install-ui-smoke ui-smoke eval-agent update-locks verify seed-users migrate migration-status
+.PHONY: setup install install-dev test lint script-check verify migrate migration-status run tui-smoke
 
 setup:
 	python3 -m venv venv
-	@if [ -f requirements-dev.lock ]; then \
-		$(PIP) install -r requirements-dev.txt -c requirements-dev.lock; \
+	@if [ -f requirements.lock ]; then \
+		$(PIP) install -r requirements.txt -c requirements.lock; \
 	else \
-		$(PIP) install -r requirements-dev.txt; \
+		$(PIP) install -r requirements.txt; \
 	fi
-	$(PYTHON) scripts/ensure_runtime_config.py
 	$(PYTHON) scripts/migrate.py apply
-	$(PYTHON) scripts/manage_users.py seed-defaults
-	cd frontend && npm install
-
-dev:
-	$(PYTHON) scripts/dev.py
 
 install:
 	@if [ -f requirements.lock ]; then \
@@ -34,68 +28,34 @@ install-dev:
 		$(PIP) install -r requirements-dev.txt; \
 	fi
 
-update:
-	bash scripts/update.sh
-
-run:
-	$(PYTHON) -m uvicorn api.app:app --host 127.0.0.1 --port 8000 --reload
-
 test:
 	$(PYTEST) -q
 
 lint:
 	$(RUFF) check .
 
-frontend-lint:
-	cd frontend && npm run lint
-
-frontend-build:
-	cd frontend && npm run build
-
-desktop-backend:
-	bash scripts/build-backend.sh
-
-desktop-build: desktop-backend
-	cd frontend && npm run tauri:build
-
-desktop-build-updates: desktop-backend
-	cd frontend && npm run tauri:build:updates
-
-desktop-dev: desktop-backend
-	cd frontend && npm run tauri:dev
-
 script-check:
 	bash -n scripts/install.sh
 	bash -n scripts/uninstall.sh
 	bash -n scripts/update.sh
-	bash -n scripts/ui_smoke.sh
-	bash -n scripts/build-backend.sh
-	bash -n scripts/update_locks.sh
-	sh -n frontend/src-tauri/scripts/linux-preremove.sh
-	bash -n devsynapse.sh
-	$(PYTHON) -m py_compile scripts/dev.py scripts/ensure_runtime_config.py scripts/eval_agent.py scripts/generate-tauri-update-manifest.py scripts/migrate.py scripts/manage_users.py
+	$(PYTHON) -m py_compile devsynapse/cli.py devsynapse/tui.py scripts/migrate.py scripts/eval_agent.py
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh scripts/ui_smoke.sh scripts/build-backend.sh scripts/update_locks.sh frontend/src-tauri/scripts/linux-preremove.sh devsynapse.sh; \
+		shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh; \
 	else \
 		echo "shellcheck not installed; skipping shell script lint"; \
 	fi
 
-install-ui-smoke:
-	cd frontend && npx playwright install chromium
-
-ui-smoke:
-	bash scripts/ui_smoke.sh
-
 eval-agent:
 	$(PYTHON) scripts/eval_agent.py $(EVAL_AGENT_ARGS)
 
-update-locks:
-	bash scripts/update_locks.sh
+run:
+	$(PYTHON) -m devsynapse.cli
 
-verify: lint test script-check frontend-lint frontend-build
+tui-smoke:
+	$(PYTHON) -m devsynapse.cli --help
+	$(PYTEST) -q tests/unit/test_tui_smoke.py
 
-seed-users:
-	$(PYTHON) scripts/manage_users.py seed-defaults
+verify: lint test script-check tui-smoke
 
 migrate:
 	$(PYTHON) scripts/migrate.py apply

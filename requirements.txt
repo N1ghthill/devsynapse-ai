@@ -1,17 +1,6 @@
-fastapi>=0.136.1
-uvicorn[standard]>=0.46.0
 requests>=2.33.1
 httpx>=0.28.1
 python-dotenv>=1.2.2
 pydantic>=2.13.3
 pydantic-settings>=2.14.0
-# sqlite3 já vem com Python
-# Autenticação JWT
-pyjwt>=2.12.1
-passlib[bcrypt]>=1.7.4
-bcrypt>=5.0.0
-
-# Para fase 2:
-# chromadb>=0.4.0
-# langchain>=0.0.300
-# numpy>=1.24.0
+textual>=8.0.0

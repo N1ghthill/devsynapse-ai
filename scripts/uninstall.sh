@@ -128,19 +128,13 @@ main() {
     echo -e "${BOLD}2. Removendo ambiente virtual Python...${NC}"
     remove_if_exists "$ROOT_DIR/venv" "venv/"
 
-    # 3. Frontend artifacts
+    # 3. Database and logs
     echo ""
-    echo -e "${BOLD}3. Removendo artefatos do frontend...${NC}"
-    remove_if_exists "$ROOT_DIR/frontend/node_modules" "frontend/node_modules/"
-    remove_if_exists "$ROOT_DIR/frontend/dist" "frontend/dist/"
-
-    # 4. Database and logs
-    echo ""
-    echo -e "${BOLD}4. Removendo dados e logs locais...${NC}"
+    echo -e "${BOLD}3. Removendo dados e logs locais...${NC}"
 
     local delete_data="n"
     echo ""
-    echo -e "  ${YELLOW}⚠  Isso inclui histórico de conversas e telemetria em:${NC}"
+    echo -e "  ${YELLOW}⚠  Isso inclui historico de conversas, memoria local e logs em:${NC}"
     echo -e "     ${CYAN}$DATA_DIR${NC}"
     echo -e "     ${CYAN}$LOGS_DIR${NC}"
     echo ""
@@ -153,9 +147,9 @@ main() {
         info "dados e logs runtime mantidos"
     fi
 
-    # 5. Runtime config file
+    # 4. Runtime config file
     echo ""
-    echo -e "${BOLD}5. Arquivo de configuração runtime...${NC}"
+    echo -e "${BOLD}4. Arquivo de configuração runtime...${NC}"
 
     local delete_env="n"
     echo ""
@@ -169,9 +163,9 @@ main() {
         info "configuração runtime mantida (contém sua API key)"
     fi
 
-    # 6. Project directory
+    # 5. Project directory
     echo ""
-    echo -e "${BOLD}6. Diretório do projeto...${NC}"
+    echo -e "${BOLD}5. Diretório do projeto...${NC}"
 
     echo ""
     echo -e "  Para remover completamente, delete o diretório:"

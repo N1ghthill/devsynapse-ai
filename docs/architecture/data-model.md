@@ -5,9 +5,9 @@
 DevSynapse AI currently uses SQLite for local persistence. Schema evolution is managed in-repo through explicit migrations.
 
 Runtime database files are user state, not source files. By default they live under
-`~/.local/share/devsynapse-ai/data`, with paths resolved from `MEMORY_DB_PATH` and
-`MONITORING_DB_PATH` in the runtime config. `DEVSYNAPSE_HOME` or
-`DEVSYNAPSE_DATA_DIR` can relocate them for a specific install.
+`~/.local/share/devsynapse-ai/data`, with the primary SQLite path resolved from
+`MEMORY_DB_PATH` in the runtime config. `DEVSYNAPSE_HOME` or
+`DEVSYNAPSE_DATA_DIR` can relocate data files for a specific install.
 
 Primary implementation files:
 - [core/db.py](../../core/db.py)
@@ -23,6 +23,7 @@ Primary implementation files:
 Stores:
 - user message
 - assistant response
+- stable `conversation_id` used as the visible chat/support ID
 - proposed command
 - execution result and status
 - explicit conversation title
@@ -35,17 +36,8 @@ This table is central to:
 - execution status persistence
 - token and cost reporting
 - conversation lists and export
-- project-aware authorization, telemetry and dashboard reporting
-- restoring project scope in the chat UI when a persisted conversation is opened
-
-### Users
-
-Stores:
-- username
-- password hash
-- role
-- active state
-- login timestamps
+- project-aware attribution and telemetry
+- restoring project scope when a persisted conversation continues
 
 ### Runtime settings
 
@@ -56,7 +48,7 @@ Stores:
 - budget threshold percentages
 - adaptive routing controls
 
-These values back `/settings` and supplement environment defaults.
+These values supplement environment defaults and runtime config files.
 
 ### Project and preference context
 
@@ -65,12 +57,10 @@ Stores:
 - learned user preferences
 - historical decisions and lessons
 
-This context supports assistant prompt construction and project-aware reporting.
-Administrators can register additional existing local project directories at runtime; these rows are persisted and are loaded into command attribution and project working-directory resolution.
-User-facing project lists expose only active registered projects whose local
-directory still exists. Administrative project management lists both active and
-stale registry rows, includes the local path and `path_exists` status, and can
-remove a registry entry without deleting files from disk.
+This context supports assistant prompt construction, command attribution and
+project working-directory resolution. Project lists expose active registered
+projects whose local directory still exists; stale registry rows can remain in
+SQLite without deleting any project files.
 
 ### Agent learning
 
@@ -84,7 +74,8 @@ Stores:
 
 This lets the agent use prior local outcomes when choosing Flash or Pro, instead
 of treating every request as a stateless prompt. Learned patterns are local
-SQLite state and are surfaced in monitoring stats.
+SQLite state and can be inspected from the database or exported reporting
+helpers.
 
 ### LLM model catalog
 
@@ -112,8 +103,8 @@ Stores:
 - token usage, cache hit/miss tokens, reasoning tokens and estimated cost
 - first-token latency and total latency
 
-This table is separate from conversation history so the dashboard can report
-per-user/per-model cost, latency and error rate even when a conversation row is
+This table is separate from conversation history so reporting can calculate
+per-user/per-model cost, latency and error rate even when conversation rows are
 summarized or exported separately.
 
 ### Procedural memories
@@ -141,9 +132,9 @@ Stores:
 
 Global skills are stored under the local DevSynapse data directory. Explicit
 project skills live under `.devsynapse/skills` inside a registered project and
-are admin-managed because they write to the project tree. Skills are loaded into
-the prompt when their metadata matches the current task, and activation events
-are persisted for observability.
+are managed through the same local command policy used for other project writes.
+Skills are loaded into the prompt when their metadata matches the current task,
+and activation events are persisted for observability.
 
 ### Learning nudges
 
@@ -153,7 +144,7 @@ Stores:
 - structured details for created memory ids or skill slugs
 - timestamp
 
-The backend runs a deterministic review after complex turns and command
+The brain runs a deterministic review after complex turns and command
 completion. Successful command outcomes can create or reinforce a procedural
 memory and a global Markdown skill; complex non-command turns create lower
 confidence insight memories.
@@ -165,11 +156,12 @@ Stores:
 - project name
 - permission type
 
-This is the basis for project-scoped mutation authorization for non-admin users.
-Admin users are trusted local operators and do not depend on rows in this table.
-Non-admin path-based mutating commands must stay inside the resolved registered project.
+This is retained as the project-scoped mutation policy table used by the command
+bridge. TUI operator sessions use the trusted local-operator role, while the
+bridge still keeps lower-trust role checks available for tests and future
+restricted execution modes.
 
-### Admin audit logs
+### Audit logs
 
 Stores:
 - actor
@@ -192,14 +184,6 @@ This is the durable task state used by the coding agent to continue after missin
 dependencies, blocked commands or resumed conversations without losing the
 original objective.
 
-### Monitoring schema
-
-Stores:
-- command execution telemetry
-- API usage telemetry
-- generic system metrics
-- alerts
-
 ## Migration Discipline
 
 Use:
@@ -221,8 +205,6 @@ Contributors should add a new migration when:
 - historical rows are intentionally tolerated with partial fields
 - project attribution now prefers explicit persisted project names over text-only inference
 - explicit chat project context should be persisted as `conversation_project_name`
-- streaming chat should return the resolved persisted project name in the terminal
-  `done` event when attribution is available
 - agent learning is advisory: it can influence model routing, but budget-critical
   economy mode still wins over learned Pro preferences
 - adaptive LLM routing is advisory: it may choose a cheaper discovered model for

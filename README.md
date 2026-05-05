@@ -1,368 +1,146 @@
 # DevSynapse AI
 
-[![CI](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/N1ghthill/devsynapse-ai/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.8.2-blue)
+DevSynapse AI is a local-first terminal UI coding agent for DeepSeek-compatible
+LLM providers. It runs as a Textual TUI, keeps project memory in SQLite, routes
+between configured models, and executes constrained local commands through a
+project-aware bridge. The product has one operator entry point: `devsynapse`.
 
-**A local-first DeepSeek coding agent with safe command execution, project memory, and cost visibility.**
+## Product Surface
 
-Run an AI development assistant on your machine, connected to your own DeepSeek API key,
-with project-aware context, controlled tools, audit logs and usage telemetry.
+- opens a single terminal UI for chat, setup, status and command execution;
+- calls DeepSeek, OpenRouter, OpenCode Zen or OpenCode Go when a matching API key
+  is configured;
+- persists conversations, project registry data, task runs, model routing
+  telemetry, procedural memories and skills in SQLite;
+- executes local tool calls through `bash`, `read`, `glob`, `grep`, `edit` and
+  `write` with command validation and project scoping;
+- tracks token usage and estimated LLM cost from provider responses;
+- keeps setup and operations in slash commands inside the TUI.
 
-![DevSynapse AI demo flow](docs/screenshots/devsynapse-demo-flow.gif)
+## Requirements
 
-DevSynapse AI is built for Linux developers who want DeepSeek without losing local control:
-select a project, ask for help, review the proposed command, confirm execution and see
-the token/cost impact in the dashboard.
-
-## Why It Exists
-
-DeepSeek is strong for development work, but it does not ship with a dedicated
-coding-agent environment. DevSynapse AI is that missing layer: a local-first
-browser workspace around your DeepSeek API key, with persistent memory,
-controlled command execution, project-scoped authorization and cost visibility.
-
-The MVP focus is intentionally narrow: an AI coding assistant for Linux developers
-who want DeepSeek without SaaS lock-in, hidden shell access or surprise API bills.
-
-## Core Loop
-
-1. Select the project you want DevSynapse to understand.
-2. Ask a development task such as `analyze this repo and run tests`.
-3. Review the proposed command, risk level, working directory and expected effect.
-4. Confirm the command only when the scope and risk are clear.
-5. Let DevSynapse interpret the result and preserve the conversation context.
-6. If a command fails, is blocked or hits a missing dependency, let the agent
-   keep the original task goal and continue with an allowed next step.
-7. Track token usage, estimated cost, alerts and project attribution in the dashboard.
-
-## Use Cases
-
-- **Budget-conscious developer:** use DeepSeek through your own API key, keep conversations local, track token/cost usage and set daily or monthly budget thresholds.
-- **Freelancer with multiple clients:** keep project context explicit, scope mutating commands per project and report usage/cost by project.
-- **Contributor or maintainer:** inspect chat history, command outcomes, monitoring data, budget alerts, permissions and audit records from one local UI.
-
-## Try It On Linux
-
-```bash
-bash scripts/install.sh
-```
-
-The supported installer target is Debian/Ubuntu-style Linux. The setup asks for
-your DeepSeek API key and repositories directory, then registers local launcher
-and updater commands.
-
-## Desktop App Builds
-
-The repository also contains a Tauri v2 desktop app under `frontend/src-tauri`.
-For a local desktop build:
-
-```bash
-make desktop-build
-```
-
-That target compiles the Python sidecar, places it at
-`frontend/src-tauri/binaries/devsynapse-backend-{target-triple}`. Generate
-release builds on each target OS; PyInstaller does not cross-compile the Python
-backend.
-
-Current desktop distribution status:
-
-| Platform | Status |
-| --- | --- |
-| Linux `.deb` | validated locally on 2026-04-27 |
-| Linux `.rpm` | validated locally on 2026-04-27 |
-| Linux AppImage | opt-in/experimental |
-| macOS | configured, not yet validated |
-| Windows NSIS installer | validated in GitHub Actions on 2026-04-27 |
-
-See [TAURI.md](TAURI.md) for the build workflow and
-[docs/deployment/desktop-distribution.md](docs/deployment/desktop-distribution.md)
-for landing-page artifact status.
-
-## Product Showcase
-
-| Controlled coding workflow | Cost and project telemetry |
-| --- | --- |
-| ![Chat command execution workflow](docs/screenshots/2026-04-24-chat-command-execution.png) | ![Dashboard with LLM usage and project cost reporting](docs/screenshots/2026-04-24-dashboard-llm-usage.png) |
-
-| DeepSeek and budget settings | Project permission administration |
-| --- | --- |
-| ![DeepSeek settings, budget controls and project access](docs/screenshots/2026-04-24-settings-project-access.png) | ![Admin project permissions and audit history](docs/screenshots/2026-04-24-admin-project-permissions.png) |
-
-More context is available in the [product showcase](docs/product/showcase.md) and the [screenshot evidence index](docs/screenshots/README.md).
-
-To generate fresh disposable evidence locally:
-
-```bash
-make eval-agent
-```
-
-The target writes Markdown and JSON reports under `/tmp/devsynapse-agent-evaluations/`
-and does not touch real user repositories. CI runs the no-LLM variant so the
-disposable harness and command-policy checks stay continuously validated without
-requiring secrets.
-
-## Evaluation Evidence
-
-Recent product evidence is organized under [docs/evaluation](docs/evaluation/README.md).
-
-- Real DeepSeek agent run on `2026-05-02`: DevSynapse inspected a disposable
-  Python project, diagnosed failing tests, edited the bug and finished with
-  `3 passed in 0.01s`.
-- Local orchestrator appraisal on `2026-05-02`: project scoping, command
-  authorization, blocked unsafe paths, telemetry and UI screenshots were
-  validated against disposable projects.
-
-The real-LLM evidence includes screenshots, structured JSON output, token/cost
-telemetry and the exact code diff produced by the agent:
-[real DeepSeek evidence](docs/evaluation/real-llm/2026-05-02-real-deepseek-evidence.md).
-
-## License
-
-This project is licensed under the MIT License. See [LICENSE](LICENSE).
-
-## Verified Baseline
-
-Local verification refreshed on `2026-05-04` (v0.8.2 repository baseline):
-- full repository verification: `make verify`
-- browser UI smoke: `make ui-smoke`
-- dependency consistency: `pip check`
-- frontend dependency audit: `npm audit --audit-level=high`
-- backend test suite: `233 passed`
-- Python/Ruff checks, shell syntax checks, Python script compilation and frontend ESLint: passed
-- frontend production build: passed
-- OpenAPI schema generation: passed
-- previous release validation also covered `make desktop-build` and GitHub Actions CI on `main`
-- supported shell installer target: Debian/Ubuntu-style Linux with `apt`
-- validated desktop artifacts: Linux `.deb` / `.rpm` and Windows NSIS installer; macOS is configured but not validated
-- LLM usage telemetry, streaming chat delivery, project selector, project manager, conversation persistence, execution workflow and dashboard metrics are active in the current codebase
-
-## What The Project Does
-
-DevSynapse AI provides:
-- a FastAPI backend for auth, chat, streaming chat (SSE), command execution, monitoring, settings and admin flows;
-- a React/Vite frontend with chat, project selector, dashboard, settings and admin interfaces;
-- SQLite-backed persistence for runtime state and migration-controlled schema evolution;
-- a DeepSeek API orchestration layer with native tool calling (strict function definitions, thinking mode), Flash/Pro routing, local agent learning, streaming token delivery, and execution result interpretation;
-- procedural memory with confidence/decay scoring, learning nudges after complex turns or command outcomes, and Markdown-backed reusable skills;
-- persistent agent task runs that keep the original goal, command events, blocked/failed outcomes and next action across turns;
-- a constrained execution bridge for `bash`, `read`, `glob`, `grep`, `edit` and `write` with per-project working directories;
-- workflow templates for common local coding tasks such as test runs, failing-test analysis, TODO search, repository summaries, changelog drafts and Docker inspection;
-- visible project attribution in conversation summaries, chat messages, command execution and usage reporting;
-- per-user, project-scoped mutation authorization for non-admin users;
-- automatic recovery context for command failures, permission blocks and missing local tools such as Rust/Cargo during Tauri work;
-- token, cache hit-rate and cost telemetry for LLM usage;
-- configurable daily/monthly LLM budgets with warning and critical thresholds, enabled by default.
-
-## Repository Map
-
-```text
-devsynapse-ai/
-├── api/                    # FastAPI application, contracts and routes
-├── config/                 # Centralized settings and policy constants
-├── core/                   # Brain, auth, memory, monitoring, bridge, plugins
-├── docs/                   # Contributor-facing technical documentation
-├── frontend/               # React/Vite operator UI
-├── plugins/                # Plugin implementations
-├── scripts/                # Local operational utilities
-├── tests/                  # Unit and integration tests
-├── .env.example            # Runtime configuration template
-├── Makefile                # Common dev commands
-└── README_PROFESSIONAL.md  # Engineering-oriented companion doc
-```
-
-## Platform Support
-
-The supported shell installer target is Linux, specifically Debian/Ubuntu and
-close derivatives that use `apt`. The installer, updater and launcher are
-shell-based and assume `bash`, `python3`, `python3-venv`, `npm` and standard
-Linux paths.
-
-The desktop packaging flow currently has validated Linux `.deb` / `.rpm`
-artifacts and a validated Windows x86_64 installer generated on GitHub Actions.
-macOS desktop packaging is configured through Tauri, but release artifacts still
-need to be generated and validated on macOS before they should be linked
-publicly.
-
-Windows users should use the packaged desktop installer for the validated
-Windows path. Native Windows source-checkout setup is still not a supported
-shell workflow: there is no PowerShell or `.bat` installer, and command-line
-aliases/path behavior remain Linux-oriented.
-
-For specific areas where community help is most needed, see the
-[Platform Contributions](CONTRIBUTING.md#platform-contributions) section in
-`CONTRIBUTING.md`.
+- Python 3.10 or newer; CI/development currently uses Python 3.13.
+- Linux or another Unix-like shell environment for the installer scripts.
+- At least one provider API key:
+  `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `OPENCODE_ZEN_API_KEY` or
+  `OPENCODE_GO_API_KEY`.
 
 ## Quick Start
 
 ```bash
-bash scripts/install.sh
-```
-
-The installer asks for your DeepSeek API key and repositories directory, then sets up
-everything automatically. Two shell aliases are registered:
-
-```bash
-devsynapse              # start the app
-update-devsynapse       # update an existing install
-uninstall-devsynapse    # remove local artifacts
-```
-
-Runtime state is intentionally outside the source checkout by default:
-
-- config: `~/.config/devsynapse-ai/.env`
-- SQLite data: `~/.local/share/devsynapse-ai/data`
-- logs: `~/.local/state/devsynapse-ai/logs`
-
-Packaged desktop installs complete interactive setup inside the app on first
-launch. The onboarding flow configures the local admin password, DeepSeek API key
-and default repository folder before the chat workspace is available.
-
-Local security checklist:
-
-- keep the backend bound to `127.0.0.1` unless network access is intentional;
-- keep CORS limited to local or explicitly trusted browser origins;
-- store `DEEPSEEK_API_KEY` only in runtime config or environment;
-- complete first-run admin password setup when prompted;
-- use the admin role only when unrestricted local agent execution is intended;
-- review proposed commands before confirming mutations;
-- grant project mutation permissions only where writes are expected.
-
-The detailed local security model is documented in
-[docs/security/local-security-model.md](docs/security/local-security-model.md).
-
-Set `DEVSYNAPSE_HOME=/path/to/runtime` to keep all three under one custom directory,
-or set `DEVSYNAPSE_CONFIG_FILE`, `DEVSYNAPSE_DATA_DIR` and `DEVSYNAPSE_LOGS_DIR`
-individually.
-
-### Manual Path
-
-This path is still documented for Linux-like shells. On Windows, use the
-packaged desktop installer for normal use; source-checkout setup remains an
-experimental contributor path until a tested PowerShell setup exists.
-
-```bash
 python3 -m venv venv
 source venv/bin/activate
-make setup
+make install-dev
 ```
 
-Add your DeepSeek key to the runtime config printed by `make setup`, then:
+Configure a provider key in the runtime config:
 
 ```bash
-make dev
+mkdir -p ~/.config/devsynapse-ai
+cp .env.example ~/.config/devsynapse-ai/.env
+$EDITOR ~/.config/devsynapse-ai/.env
 ```
 
-### Updating
-
-Existing installs can update without rerunning the interactive installer:
+Start DevSynapse:
 
 ```bash
-devsynapse update
+./devsynapse.sh
 ```
 
-The updater preserves the runtime config, creates a backup of existing config
-and SQLite state when present, refreshes dependencies, applies migrations and
-rebuilds the frontend. A direct alias is also installed:
+The installer creates the same alias:
 
 ```bash
-update-devsynapse
+devsynapse
 ```
 
-To pin a specific published release:
+## Canonical Flow
+
+`devsynapse` opens the terminal UI. That is the only supported operator flow.
+Provider setup, status, usage, budget, routing, project selection and shell-tool
+commands are slash commands inside the TUI. External subcommands such as
+`devsynapse providers`, `devsynapse connect ...` or `devsynapse tui` are
+intentionally rejected so the product has one clear entry point.
+
+Inside the TUI, DevSynapse exposes operational slash commands:
+
+```text
+/connect <provider> <api-key>    save DeepSeek/OpenRouter/OpenCode keys
+/providers                       show configured provider status
+/discover                        refresh the model catalog
+/models [provider]               list known models and pricing
+/budget                          show daily/monthly plan usage
+/budget daily|monthly <usd>      set budget limits
+/router                          show intelligent routing policy
+/router on|off                   enable or disable model routing
+/router economy on|off           toggle automatic economy mode
+/router adaptive on|off          toggle cheapest-model override
+/usage                           show recent model/cost telemetry
+!<command>                       run a shell command as a tool result
+```
+
+The TUI keeps the conversation log, input line, session state, provider status,
+budget state and common commands visible in one terminal screen. It supports the
+slash commands above plus shortcuts such as `Ctrl+H` for help, `Ctrl+N` for a
+new conversation and `Ctrl+R` to refresh status.
+
+## Runtime State
+
+By default DevSynapse stores user runtime files outside the source checkout:
+
+- config: `~/.config/devsynapse-ai/.env`
+- SQLite data: `~/.local/share/devsynapse-ai/data/devsynapse_memory.db`
+- logs: `~/.local/state/devsynapse-ai/logs/devsynapse.log`
+
+Set `DEVSYNAPSE_HOME=/path/to/runtime` to keep config, data and logs together
+under one directory. The more specific `DEVSYNAPSE_CONFIG_FILE`,
+`DEVSYNAPSE_DATA_DIR` and `DEVSYNAPSE_LOGS_DIR` variables can override each path.
+
+The settings loader creates these files on a best-effort basis. Read-only
+runtime config should not break commands such as `devsynapse --help`; commands
+that need persistent memory still require a writable SQLite data directory.
+
+## Common Commands
 
 ```bash
-devsynapse update --version v0.8.2
+make install-dev        # install runtime and test dependencies
+make run                # start the TUI
+make tui-smoke          # check TUI launcher help
+make lint               # run Ruff
+make test               # run pytest
+make script-check       # check shell and operational scripts
+make verify             # lint, tests, script checks and TUI smoke checks
+make migrate            # apply SQLite migrations
+make migration-status   # inspect migration state
 ```
 
-### Manual Backend
+The Python package entry point is also declared as:
 
 ```bash
-make run
+devsynapse = "devsynapse.cli:main"
 ```
 
-### Manual Frontend
+For day-to-day operation, see [docs/operator.md](docs/operator.md).
 
-```bash
-cd frontend && npm run dev
+## Project Structure
+
+```text
+devsynapse/        TUI launcher and Textual application
+config/            runtime settings and command policy constants
+core/              LLM orchestration, routing, memory, plugins and tools
+core/memory/       SQLite-backed stores
+plugins/           local plugin examples
+scripts/           install, update, migration and evaluation utilities
+tests/             unit and integration tests
+docs/              contributor and architecture documentation
 ```
 
-### Local URLs
+## Verification
 
-- frontend: `http://127.0.0.1:5173`
-- OpenAPI docs: `http://127.0.0.1:8000/docs`
-- health endpoint: `http://127.0.0.1:8000/health`
+Current local baseline after the TUI product cleanup:
 
-### Screenshots
-
-Curated product screenshots are available in [docs/screenshots/README.md](docs/screenshots/README.md).
-Use-case context is documented in [docs/product/showcase.md](docs/product/showcase.md).
-
-## Main Development Commands
-
-```bash
-make setup
-make dev
-make test
-make lint
-make script-check
-make frontend-lint
-make frontend-build
-make eval-agent
-make install-ui-smoke
-make desktop-build
-make verify
-make migrate
-make migration-status
+```text
+make lint        passed
+make test        150 passed
+make script-check passed
+make tui-smoke   passed
 ```
-
-## Documentation Index
-
-Start here:
-- contributor guide: [CONTRIBUTING.md](CONTRIBUTING.md)
-- agent/contributor operating guide: [AGENTS.md](AGENTS.md)
-- product positioning analysis: [DevSynapse_IA.md](DevSynapse_IA.md)
-- code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-- security policy: [SECURITY.md](SECURITY.md)
-- changelog: [CHANGELOG.md](CHANGELOG.md)
-- release checklist: [RELEASING.md](RELEASING.md)
-- documentation index: [docs/README.md](docs/README.md)
-
-Technical guides:
-- product showcase: [docs/product/showcase.md](docs/product/showcase.md)
-- contributor onboarding: [docs/development/onboarding.md](docs/development/onboarding.md)
-- architecture overview: [docs/architecture/overview.md](docs/architecture/overview.md)
-- persistence and data model: [docs/architecture/data-model.md](docs/architecture/data-model.md)
-- API overview: [docs/api/overview.md](docs/api/overview.md)
-- development workflow: [docs/development/workflow.md](docs/development/workflow.md)
-- testing guide: [docs/development/testing.md](docs/development/testing.md)
-- development roadmap: [docs/development/roadmap.md](docs/development/roadmap.md)
-- runtime and delivery notes: [docs/deployment/runtime.md](docs/deployment/runtime.md)
-- local security model: [docs/security/local-security-model.md](docs/security/local-security-model.md)
-- latest release notes: [docs/releases/v0.8.2.md](docs/releases/v0.8.2.md)
-
-Supplementary references:
-- engineering guide: [README_PROFESSIONAL.md](README_PROFESSIONAL.md)
-- frontend guide: [frontend/README.md](frontend/README.md)
-
-## Roadmap
-
-The canonical planning source is [docs/development/roadmap.md](docs/development/roadmap.md).
-It separates completed baseline capabilities from current priorities, later work and explicitly deferred production-hardening scope.
-
-## Contribution Scope
-
-Contributions are welcome for:
-- bug fixes and reliability improvements
-- documentation quality and contributor ergonomics
-- monitoring, telemetry and operational maturity
-- frontend UX improvements that preserve current backend contracts
-- security hardening and test coverage expansion
-
-Before opening a PR, read [CONTRIBUTING.md](CONTRIBUTING.md).
-For the shortest setup path from a new clone, read [docs/development/onboarding.md](docs/development/onboarding.md).
-
-## Security Boundary
-
-This project executes constrained development-oriented commands, but it is not a full sandbox product. The repository should be described as a safer local execution framework, not as a formally hardened isolation system. See [SECURITY.md](SECURITY.md) and the [local security model](docs/security/local-security-model.md).

@@ -3,11 +3,10 @@
 ## Current Verification Baseline
 
 At the latest documentation refresh on `2026-05-04`, local verification produced:
-- `242` passing backend tests
-- successful script checks
-- successful frontend lint and production build
-- successful browser UI smoke validation with Playwright
-- valid OpenAPI schema generation for the documented route set
+
+- `150` passing tests;
+- successful Ruff lint;
+- successful shell script syntax checks and Python script compilation.
 
 ## Test Layout
 
@@ -17,35 +16,39 @@ tests/
 └── integration/
 ```
 
-### Unit tests
+### Unit Tests
 
 Main areas covered:
-- `brain` behavior and command extraction
-- `memory` persistence and telemetry
-- `opencode bridge` validation and authorization
-- plugin system basics
 
-### Integration tests
+- TUI launcher behavior;
+- `brain` behavior and command extraction;
+- `memory` persistence and telemetry;
+- `opencode bridge` validation and authorization;
+- plugin system basics;
+- LLM routing and optimization helpers.
+
+### Integration Tests
 
 Main areas covered:
-- route-level API contract validation
-- command execution responses
-- conversation flows and telemetry persistence
+
+- end-to-end memory/brain/bridge interactions;
+- installer and uninstaller script behavior;
+- migration-backed persistence flows.
 
 ## Commands
 
-Run all backend tests:
+Run all tests:
 
 ```bash
 ./venv/bin/pytest -q
 ```
 
-Run a focused module:
+Run focused modules:
 
 ```bash
+./venv/bin/pytest -q tests/unit/test_cli.py
 ./venv/bin/pytest -q tests/unit/test_memory.py
 ./venv/bin/pytest -q tests/unit/test_brain.py
-./venv/bin/pytest -q tests/integration/test_api_routes.py
 ```
 
 Run repository verification:
@@ -60,58 +63,17 @@ Script validation:
 make script-check
 ```
 
-`make script-check` always runs shell syntax checks and Python script compilation.
-If `shellcheck` is installed locally, it also runs ShellCheck against the shell entrypoints,
-including `scripts/update.sh`.
+`make script-check` always runs shell syntax checks and Python script
+compilation. If `shellcheck` is installed locally, it also runs ShellCheck
+against the shell entry points.
 
-Backend linting:
+Linting:
 
 ```bash
 make lint
 ```
 
 Ruff checks application code and tests for import order and basic correctness.
-
-Frontend validation:
-
-```bash
-cd frontend
-npm run lint
-npm run build
-```
-
-Browser UI smoke:
-
-```bash
-make ui-smoke
-```
-
-`make ui-smoke` starts a temporary API with disposable SQLite databases, builds the
-frontend with a matching API URL and runs Playwright against the production
-bundle served by FastAPI. The smoke runtime seeds an admin account plus a
-temporary non-admin user so the Admin permission workflow is exercised without
-touching local developer data. It also exercises a rapid chat command stream
-where `command`, `running`, `command_result` and `done` arrive together, then
-asserts that the chat shows a final completion summary, a successful command
-badge, command timeline and command output instead of staying in a pending
-state. It also checks desktop and mobile chat layouts for horizontal overflow
-and verifies compact UI controls such as nav items, buttons, chips, pills and
-badges keep single-line labels.
-
-Install the Chromium browser once with:
-
-```bash
-make install-ui-smoke
-```
-
-Screenshot evidence:
-
-```bash
-cd frontend
-npm run capture:docs-screenshots
-```
-
-The screenshot workflow requires a running backend and frontend with seeded local users. See [../screenshots/README.md](../screenshots/README.md).
 
 Disposable agent evaluation:
 
@@ -121,28 +83,24 @@ make eval-agent
 
 `make eval-agent` creates a timestamped benchmark run under
 `/tmp/devsynapse-agent-evaluations/`, initializes a small Python project with
-failing tests, validates project-scope policy blocks, creates auxiliary
-documentation/refactor/setup-diagnosis fixtures and, when a DeepSeek API key is
-configured, asks DevSynapse to diagnose, edit and re-run the primary fixture.
+failing tests, validates project-scope policy blocks and, when a provider API key
+is configured, asks DevSynapse to diagnose, edit and re-run the primary fixture.
 Reports are written as Markdown and JSON inside the generated `reports/`
-directory. CI runs `make eval-agent EVAL_AGENT_ARGS=--no-llm` so the disposable
-harness and policy checks stay covered without spending API tokens.
+directory.
 
 ## Expectations For Contributors
 
 Add or update tests when you change:
-- route payloads
-- migration behavior
-- execution authorization
-- token/cost telemetry
-- conversation persistence semantics
+
+- TUI launcher and runtime configuration behavior;
+- migration behavior;
+- execution authorization;
+- token/cost telemetry;
+- conversation persistence semantics;
+- provider routing or LLM transport contracts.
 
 ## Testing Philosophy
 
-The repository currently emphasizes:
-- small unit tests for logic-heavy services
-- route-level integration tests for contract safety
-- frontend build verification as a compatibility gate
-- product screenshots as visual evidence for documented workflows
-
-This is sufficient for the current local-first scope, but future contributors should continue expanding higher-confidence integration coverage where it adds real value.
+The repository currently emphasizes focused unit tests for logic-heavy services,
+integration tests for persistence and command behavior, and script checks for
+the installer/update operational surface.

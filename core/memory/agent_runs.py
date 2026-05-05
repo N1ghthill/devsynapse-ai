@@ -119,6 +119,76 @@ class AgentRunStore:
         conn.close()
         return dict(row) if row else None
 
+    def get_latest_run(self, conversation_id: Optional[str]) -> Optional[dict[str, Any]]:
+        if not conversation_id:
+            return None
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, conversation_id, goal, project_name, status, next_action,
+                   created_at, updated_at, completed_at
+            FROM agent_runs
+            WHERE conversation_id = ?
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 1
+            """,
+            (conversation_id,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def list_runs(
+        self,
+        conversation_id: Optional[str] = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        if conversation_id:
+            cursor.execute(
+                """
+                SELECT id, conversation_id, goal, project_name, status, next_action,
+                       created_at, updated_at, completed_at
+                FROM agent_runs
+                WHERE conversation_id = ?
+                ORDER BY updated_at DESC, id DESC
+                LIMIT ?
+                """,
+                (conversation_id, limit),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT id, conversation_id, goal, project_name, status, next_action,
+                       created_at, updated_at, completed_at
+                FROM agent_runs
+                ORDER BY updated_at DESC, id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+        rows = cursor.fetchall()
+        conn.close()
+        results = []
+        for row in rows:
+            run = dict(row)
+            run["event_count"] = self._count_events(run["id"])
+            results.append(run)
+        return results
+
+    def _count_events(self, run_id: int) -> int:
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) AS cnt FROM agent_run_events WHERE run_id = ?",
+            (run_id,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return row["cnt"] if row else 0
+
     def update_run_status(
         self,
         run_id: int,
@@ -308,10 +378,19 @@ class AgentRunStore:
     def get_run_context(self, conversation_id: Optional[str], limit: int = 8) -> str:
         run = self.get_active_run(conversation_id)
         if run is None:
-            return "Nenhuma tarefa de agente ativa."
+            latest_run = self.get_latest_run(conversation_id)
+            if latest_run is None:
+                return "Nenhuma tarefa de agente ativa."
+            return "\n".join([
+                "Nenhuma tarefa de agente ativa.",
+                self._format_run_context(latest_run, limit=limit, heading="Última tarefa"),
+            ])
 
+        return self._format_run_context(run, limit=limit, heading="Run")
+
+    def _format_run_context(self, run: dict[str, Any], limit: int = 8, heading: str = "Run") -> str:
         lines = [
-            f"Run #{run['id']} - status: {run['status']}",
+            f"{heading} #{run['id']} - status: {run['status']}",
             f"Objetivo: {run['goal']}",
         ]
         if run.get("project_name"):

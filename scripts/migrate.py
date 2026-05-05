@@ -11,30 +11,25 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from config.settings import MEMORY_DB_PATH, MONITORING_DB_PATH
-from core.migrations import apply_all_migrations, get_all_migration_status
+from config.settings import MEMORY_DB_PATH
+from core.migrations import build_memory_migration_manager
 
 
 def command_status() -> int:
-    for item in get_all_migration_status(
-        MEMORY_DB_PATH,
-        MONITORING_DB_PATH,
-    ):
-        print(
-            f"{item['schema_name']}: current={item['current_version']} "
-            f"latest={item['latest_version']} pending={item['pending']} "
-            f"path={item['db_path']}"
-        )
+    manager = build_memory_migration_manager(MEMORY_DB_PATH)
+    status = manager.status()
+    print(
+        f"memory: current={status['current_version']} "
+        f"latest={status['latest_version']} pending={status['pending']} "
+        f"path={status['db_path']}"
+    )
     return 0
 
 
 def command_apply() -> int:
-    results = apply_all_migrations(
-        MEMORY_DB_PATH,
-        MONITORING_DB_PATH,
-    )
-    for schema_name, applied in results.items():
-        print(f"{schema_name}: applied {applied} migration(s)")
+    manager = build_memory_migration_manager(MEMORY_DB_PATH)
+    applied = manager.apply_migrations()
+    print(f"memory: applied {applied} migration(s)")
     return 0
 
 

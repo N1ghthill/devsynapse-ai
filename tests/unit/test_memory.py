@@ -310,16 +310,16 @@ class TestMemorySystem:
 
         run = memory.start_or_resume_agent_run(
             conversation_id="conv_agent_run",
-            goal="Criar um app Tauri",
+            goal="Criar um app Python",
             project_name="devsynapse-ai",
         )
 
         memory.record_agent_command_result(
             conversation_id="conv_agent_run",
-            goal="Criar um app Tauri",
-            command='bash "cargo --version"',
+            goal="Criar um app Python",
+            command='bash "python3 --version"',
             success=False,
-            result="cargo: command not found",
+            result="python3: command not found",
             output=None,
             status="failed",
             reason_code="execution_failed",
@@ -328,7 +328,7 @@ class TestMemorySystem:
         memory.record_agent_final_response(
             run_id=run["id"],
             conversation_id="conv_agent_run",
-            response="Scaffold criado; Rust precisa ser instalado.",
+            response="Scaffold criado; Python precisa ser instalado.",
             has_pending_command=False,
             project_name="devsynapse-ai",
         )
@@ -338,6 +338,9 @@ class TestMemorySystem:
 
         assert active_run is None
         assert "Nenhuma tarefa de agente ativa" in run_context
+        assert "Última tarefa" in run_context
+        assert "Comando não concluiu" in run_context
+        assert "Resposta final gerada" in run_context
 
         conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
@@ -355,7 +358,7 @@ class TestMemorySystem:
 
         assert row[0] == "completed"
         assert "concluída" in row[1].lower()
-        assert ("command_result", 'bash "cargo --version"', "execution_failed") in events
+        assert ("command_result", 'bash "python3 --version"', "execution_failed") in events
 
     @pytest.mark.asyncio
     async def test_save_interaction_infers_project_name(self, tmp_path):
@@ -688,22 +691,3 @@ class TestMemorySystem:
 
         assert user_permissions == ["devsynapse-ai", "sample-site"]
         assert all_permissions["irving"] == ["devsynapse-ai", "sample-site"]
-
-    def test_admin_audit_logs_are_persisted(self, tmp_path):
-        db_path = tmp_path / "test_admin_audit.db"
-        memory = _create_memory(db_path)
-
-        memory.log_admin_action(
-            actor_username="admin",
-            action="update_project_permissions",
-            target_username="irving",
-            details={"project_mutation_allowlist": ["devsynapse-ai"]},
-        )
-
-        logs = memory.get_admin_audit_logs()
-
-        assert len(logs) == 1
-        assert logs[0]["actor_username"] == "admin"
-        assert logs[0]["target_username"] == "irving"
-        assert logs[0]["action"] == "update_project_permissions"
-        assert logs[0]["details"]["project_mutation_allowlist"] == ["devsynapse-ai"]

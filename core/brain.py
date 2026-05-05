@@ -9,25 +9,18 @@ import shlex
 import time
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import config.settings as app_settings
 from config.settings import ALLOWED_COMMANDS, BLACKLISTED_PATTERNS
-from core.deepseek import DeepSeekClient
-from core.llm_optimization import ModelRoute, ModelRouter, build_task_profile
+from core.correlation import generate_tool_run_id
+from core.deepseek import DeepSeekClient, LLMResult
+from core.llm_optimization import ModelRoute
 from core.plugin_system import plugin_manager
+from core.prompts import build_system_prompt
+from core.routing import RouteSelector
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class LLMResult:
-    content: str
-    provider: Optional[str] = None
-    model: Optional[str] = None
-    usage: Optional[Dict[str, int | float | str | None]] = None
-    tool_calls: Optional[List[Dict]] = None
-    reasoning_content: Optional[str] = None
 
 
 @dataclass
@@ -246,6 +239,13 @@ class DevSynapseBrain:
             },
         )
 
+        self.router = RouteSelector(
+            memory=self.memory,
+            deepseek_model=self.deepseek.model,
+            provider_configs=self.deepseek.provider_configs,
+            deepseek_api_key=self.deepseek.api_key,
+        )
+
         if not self.deepseek.configured:
             logger.warning("DeepSeek API key não configurada")
 
@@ -262,8 +262,6 @@ class DevSynapseBrain:
         config["api_key"] = value
         
     def generate_system_prompt(self, context: Dict) -> str:
-        """Gera prompt de sistema personalizado baseado no contexto"""
-        
         user_prefs = self.memory.get_user_preferences()
         projects_info = self.memory.get_projects_context()
         agent_learning = self._get_agent_learning_context()
@@ -281,110 +279,21 @@ class DevSynapseBrain:
                 active_project_path = active_project.get("path") if active_project else None
             except Exception:
                 active_project_path = None
-        active_project_section = (
-            f"\n## PROJETO ATIVO\n- Nome: {active_project_name}\n"
-            f"- Diretório: {active_project_path or 'registrado no backend'}\n"
-            "- Esta conversa está travada neste projeto. Use caminhos relativos ao projeto ou "
-            "caminhos dentro desse diretório.\n"
-            "- Não escreva, edite, remova, instale ou gere arquivos fora do projeto ativo.\n"
-            if active_project_name
-            else ""
+
+        return build_system_prompt(
+            user_prefs=user_prefs,
+            projects_info=projects_info,
+            agent_learning=agent_learning,
+            procedural_memory=procedural_memory,
+            skills_context=skills_context,
+            agent_run_context=agent_run_context,
+            stuck_context=stuck_context,
+            active_project_name=active_project_name,
+            active_project_path=active_project_path,
+            workspace_root=str(settings.dev_workspace_root),
+            repos_root=str(settings.dev_repos_root),
+            default_cwd=str(settings.default_execution_cwd),
         )
-        
-        system_prompt = f"""You are DevSynapse (Development Synapse),
-Irving Ruas (also known as N1ghthill)'s intelligent development assistant.
-
-## YOUR ROLE
-You are a senior software engineer and technical architect who helps Irving with his projects.
-Blend deep technical skills with natural conversational communication.
-
-## IRVING'S PREFERENCES
-{user_prefs}
-
-## AGENT LEARNING
-{agent_learning}
-
-## PROCEDURAL MEMORY
-{procedural_memory}
-
-## CURRENT AGENT RUN
-{agent_run_context}
-
-## SKILLS
-{skills_context}
-
-## CURRENT PROJECTS
-{projects_info}
-{active_project_section}
-{stuck_context}
-## LOCAL WORKSPACE PATHS
-- Workspace root: {settings.dev_workspace_root}
-- Repositories root: {settings.dev_repos_root}
-- Default command cwd: {settings.default_execution_cwd}
-- New standalone projects should be created through the project UI/registration flow first.
-- If no project is active, avoid durable filesystem writes unless the user explicitly asks
-  for a global workspace action and provides/chooses the target project.
-- Do not use placeholder paths such as `/home/user`, `/workspace`, `~/projects`, or `/tmp`
-  for durable project files unless the user explicitly asks for that exact location.
-- The active project is the working directory boundary for this chat.
-
-## CAPABILITIES
-1. **Technical conversation** - Discuss architecture, design patterns, trade-offs
-2. **Code analysis** - Review, suggest improvements, detect issues
-3. **Command execution** - You have tools to run shell commands, read/edit/write files, search code
-4. **Planning** - Help break down complex tasks
-5. **Documentation** - Help document decisions and code
-
-## RESPONSE FORMAT
-- Be direct yet friendly
-- When relevant, use your available tools to take action
-- Explain the "why" behind your suggestions
-- Consider cost, complexity, and Irving's preferences
-- If unsure, be honest
-- Never claim you created, edited, deleted, or executed something before actual execution is confirmed
-- Never write raw shell constructs like `echo file > x.txt`; use your tools instead
-- Never emit commands containing `sudo`; privileged OS setup must be done manually
-  outside chat, then revalidated with safe version checks.
-- On Linux projects, prefer `python3 -m pytest` over `python -m pytest` unless the
-  project documentation explicitly requires another interpreter command.
-- Propose at most one tool call per response
-- When the user asks you to create, change, inspect, run, or continue implementation work,
-  do not stop at "I'll do it". Emit exactly one tool call in that same response.
-- For implementation work, keep ownership of the task after each tool result: inspect,
-  edit, test, and summarize only when the requested work is genuinely complete or blocked.
-- Do not ask "should I continue?" after setup discovery, file listing, or a successful
-  intermediate command. Continue with the next useful project-scoped tool call.
-- For a small new project, use `write` for the first real file instead of `bash mkdir`;
-  the write tool creates parent directories automatically.
-- After a tool result succeeds, keep advancing the same task with the next needed tool call.
-  Stop only when the task is complete or you need missing information.
-- If a dependency or tool is missing (for example Rust/Cargo for Tauri), do not abandon
-  the whole task. Continue with the parts that are still possible, such as creating the
-  project files, documenting the missing prerequisite, or choosing a supported fallback
-  that stays inside the active project.
-- If a command is blocked by permission or project scope, choose the next allowed action
-  inside the active project, or clearly state the exact permission/project selection needed.
-
-## EXAMPLES
-User: "Show me the sample app files"
-You: "I'll list the sample app files for you." [uses bash tool with: ls -la /path/to/sample-app]
-
-User: "Analyze this code's architecture"
-You: "Let me analyze. First, I'll read the code." [uses read tool] "Based on the analysis..."
-
-User: "I need to add caching to the sample app"
-You: "Based on your preference for simple, low-cost solutions, I suggest starting with in-memory cache using node-cache. This avoids additional costs and keeps things simple. Can I help implement this?"
-
-## IMPORTANT
-- Always consider the current project context
-- Learn from Irving's feedback
-- Reuse relevant procedural memory and loaded skills before inventing a workflow
-- After a complex task, command success, or hard-won fix, allow the learning nudge to save
-  reusable memory or skills for future turns
-- Prioritize solutions aligned with his known preferences
-"""
-        
-        return system_prompt
 
     async def process_message(
         self,
@@ -471,10 +380,10 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             aggregated_usage = self._merge_usage(aggregated_usage, llm_result.usage)
 
             if self._should_retry_missing_tool(
-                auto_execute,
-                user_message,
-                response_text,
-                opencode_command,
+                auto_execute=auto_execute,
+                user_message=user_message,
+                response_text=response_text,
+                opencode_command=opencode_command,
             ):
                 messages = self._build_tool_repair_messages(user_message, context, response_text)
                 continue
@@ -487,12 +396,15 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             ):
                 break
 
+            tool_run_id = generate_tool_run_id()
             success, msg, output, status, reason, proj = await self.opencode.execute_command(
                 opencode_command,
                 user_id=user_id,
                 project_name=effective_project_name,
                 user_role=user_role,
                 project_mutation_allowlist=project_mutation_allowlist or [],
+                conversation_id=conversation_id,
+                tool_run_id=tool_run_id,
             )
             self._record_agent_command_result(
                 conversation_id=conversation_id,
@@ -513,6 +425,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
                 "status": status,
                 "reason_code": reason,
                 "project_name": proj,
+                "tool_run_id": tool_run_id,
             }
 
             if not success:
@@ -558,6 +471,10 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             response_text,
             opencode_command,
         )
+        if autoexecuted_command is not None and (
+            not response_text.strip() or self._response_promises_pending_action(response_text)
+        ):
+            response_text = self._command_completion_fallback(autoexecuted_command)
 
         persisted_command = opencode_command
         if persisted_command is None and autoexecuted_command is not None:
@@ -650,119 +567,10 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         return messages
 
     def _select_llm_route(self, user_message: str, context: Dict) -> ModelRoute:
-        persisted = self._get_persisted_app_settings()
-        settings = app_settings.get_settings()
-        profile = build_task_profile(user_message, context=context)
-        learned_policy = self._get_agent_learning(profile.signature)
-        router = ModelRouter(
-            flash_model=str(
-                persisted.get("deepseek_flash_model", settings.deepseek_flash_model)
-            ),
-            pro_model=str(persisted.get("deepseek_pro_model", settings.deepseek_pro_model)),
-            default_model=str(persisted.get("deepseek_model", self.deepseek.model)),
-            routing_enabled=self._as_bool(
-                persisted.get("llm_model_routing_enabled", settings.llm_model_routing_enabled)
-            ),
-            auto_economy_enabled=self._as_bool(
-                persisted.get("llm_auto_economy_enabled", settings.llm_auto_economy_enabled)
-            ),
-        )
-        budget_status = None
-        if router.auto_economy_enabled and hasattr(self.memory, "get_llm_budget_status"):
-            try:
-                budget_status = self.memory.get_llm_budget_status()
-            except Exception:
-                logger.debug("Could not read LLM budget status for routing", exc_info=True)
-
-        route = router.select_model(
-            user_message,
-            context=context,
-            budget_status=budget_status,
-            learned_policy=learned_policy,
-        )
-        route = self._apply_adaptive_model_override(route, budget_status)
-        logger.info(
-            "LLM route selected: model=%s complexity=%s reason=%s budget=%s fallback=%s",
-            route.model,
-            route.complexity,
-            route.reason,
-            route.budget_mode,
-            route.fallback_model,
-        )
-        return route
-
-    def _apply_adaptive_model_override(
-        self,
-        route: ModelRoute,
-        budget_status: Optional[Dict[str, Any]],
-    ) -> ModelRoute:
-        if not self._as_bool(
-            self._get_persisted_app_settings().get("llm_adaptive_routing_enabled", True)
-        ):
-            return route
-        catalog = getattr(self.memory, "list_llm_models", lambda **kwargs: [])()
-        if not isinstance(catalog, list):
-            return route
-        candidates = [
-            model for model in catalog
-            if model.get("enabled")
-            and model.get("input_cost_per_token") is not None
-            and model.get("output_cost_per_token") is not None
-            and self._provider_configured(model.get("provider"))
-        ]
-        if not candidates:
-            return route
-
-        budget_level = str((budget_status or {}).get("overall_status") or route.budget_mode)
-        should_economize = route.complexity in {"simple", "economy"} or budget_level in {
-            "warning",
-            "critical",
-        }
-        if not should_economize:
-            return route
-
-        selected = min(
-            candidates,
-            key=lambda model: float(model["input_cost_per_token"])
-            + float(model["output_cost_per_token"]),
-        )
-        selected_model = f"{selected['provider']}:{selected['model_id']}"
-        if selected_model == route.model:
-            return route
-        return ModelRoute(
-            model=selected_model,
-            complexity=route.complexity,
-            reason=f"adaptive_cheapest:{route.reason}",
-            task_type=route.task_type,
-            task_signature=route.task_signature,
-            fallback_model=route.model,
-            budget_mode=route.budget_mode,
-            learned_preference=route.learned_preference,
-            learned_confidence=route.learned_confidence,
-        )
-
-    def _provider_configured(self, provider: Optional[str]) -> bool:
-        if provider == "deepseek":
-            return bool(self.deepseek.api_key)
-        return bool((self.deepseek.provider_configs.get(str(provider)) or {}).get("api_key"))
-
-    def _get_agent_learning(self, task_signature: str) -> Optional[Dict]:
-        if not hasattr(self.memory, "get_agent_learning"):
-            return None
-        try:
-            return self.memory.get_agent_learning(task_signature)
-        except Exception:
-            logger.debug("Could not load agent learning for routing", exc_info=True)
-            return None
+        return self.router.select_route(user_message, context)
 
     def _get_agent_learning_context(self) -> str:
-        if not hasattr(self.memory, "get_agent_learning_context"):
-            return "Nenhum padrão de agente aprendido ainda."
-        try:
-            return self.memory.get_agent_learning_context()
-        except Exception:
-            logger.debug("Could not load agent learning context", exc_info=True)
-            return "Nenhum padrão de agente aprendido ainda."
+        return self.router.get_agent_learning_context()
 
     def _detect_stuck_context(self, context: Dict) -> str:
         conversation_messages = context.get("conversation_messages") or []
@@ -984,22 +792,6 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         except Exception:
             logger.debug("Could not persist generated project %s", project_name, exc_info=True)
 
-    def _get_persisted_app_settings(self) -> Dict[str, str]:
-        if not hasattr(self.memory, "get_app_settings"):
-            return {}
-        try:
-            persisted = self.memory.get_app_settings()
-            return persisted if isinstance(persisted, dict) else {}
-        except Exception:
-            logger.debug("Could not load persisted app settings", exc_info=True)
-            return {}
-
-    @staticmethod
-    def _as_bool(value: object) -> bool:
-        if isinstance(value, bool):
-            return value
-        return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
     async def _call_llm_api(
         self,
         messages: List[Dict],
@@ -1010,101 +802,73 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
     ) -> LLMResult:
         """Chama API do DeepSeek e retorna resposta degradada se a API falhar."""
 
-        if self.deepseek.configured:
-            model = route.model if route else self.deepseek.model
-            start_time = time.perf_counter()
-            try:
-                result = await asyncio.to_thread(
-                    self.deepseek.chat_completion,
-                    messages,
-                    OPENCODE_TOOLS,
-                    model=model,
-                    tool_choice=tool_choice,
-                )
-                usage = self._enrich_usage_cost(result["provider"], result["model"], result["usage"])
-                elapsed_ms = (time.perf_counter() - start_time) * 1000
-                self._record_llm_request_telemetry(
-                    user_id=user_id,
-                    conversation_id=conversation_id,
-                    provider=result["provider"],
-                    model=result["model"],
-                    route=route,
-                    success=True,
-                    usage=usage,
-                    first_token_latency_ms=elapsed_ms,
-                    total_latency_ms=elapsed_ms,
-                )
-                return LLMResult(
-                    content=result["content"],
-                    provider=result["provider"],
-                    model=result["model"],
-                    usage=usage,
-                    tool_calls=result["tool_calls"],
-                    reasoning_content=result["reasoning_content"],
-                )
-            except Exception as e:
-                fallback_model = route.fallback_model if route else None
-                if fallback_model and fallback_model != model:
-                    try:
-                        logger.warning(
-                            "DeepSeek %s call failed (%s); retrying with %s",
-                            model,
-                            e,
-                            fallback_model,
-                        )
-                        result = await asyncio.to_thread(
-                            self.deepseek.chat_completion,
-                            messages,
-                            OPENCODE_TOOLS,
-                            model=fallback_model,
-                            tool_choice=tool_choice,
-                        )
-                        usage = self._enrich_usage_cost(
-                            result["provider"],
-                            result["model"],
-                            result["usage"],
-                        )
-                        elapsed_ms = (time.perf_counter() - start_time) * 1000
-                        self._record_llm_request_telemetry(
-                            user_id=user_id,
-                            conversation_id=conversation_id,
-                            provider=result["provider"],
-                            model=result["model"],
-                            route=route,
-                            success=True,
-                            usage=usage,
-                            first_token_latency_ms=elapsed_ms,
-                            total_latency_ms=elapsed_ms,
-                        )
-                        return LLMResult(
-                            content=result["content"],
-                            provider=result["provider"],
-                            model=result["model"],
-                            usage=usage,
-                            tool_calls=result["tool_calls"],
-                            reasoning_content=result["reasoning_content"],
-                        )
-                    except Exception as fallback_error:
-                        logger.warning(
-                            "DeepSeek fallback model %s failed: %s",
-                            fallback_model,
-                            fallback_error,
-                        )
-                self._record_llm_request_telemetry(
-                    user_id=user_id,
-                    conversation_id=conversation_id,
-                    provider=None,
-                    model=model,
-                    route=route,
-                    success=False,
-                    usage=None,
-                    total_latency_ms=(time.perf_counter() - start_time) * 1000,
-                    error_message=str(e),
-                )
-                logger.warning(f"DeepSeek API falhou: {e}. Usando resposta degradada.")
-                return LLMResult(content=self._get_fallback_response(messages))
+        if not self.deepseek.configured:
+            return LLMResult(content=self._get_fallback_response(messages))
 
-        return LLMResult(content=self._get_fallback_response(messages))
+        model = route.model if route else self.deepseek.model
+        start_time = time.perf_counter()
+        try:
+            return await self._complete_and_record(
+                messages, model, tool_choice, route, user_id, conversation_id, start_time,
+            )
+        except Exception as e:
+            fallback_model = route.fallback_model if route else None
+            if fallback_model and fallback_model != model:
+                try:
+                    logger.warning(
+                        "DeepSeek %s call failed (%s); retrying with %s",
+                        model, e, fallback_model,
+                    )
+                    return await self._complete_and_record(
+                        messages, fallback_model, tool_choice, route, user_id,
+                        conversation_id, start_time,
+                    )
+                except Exception as fallback_error:
+                    logger.warning(
+                        "DeepSeek fallback model %s failed: %s",
+                        fallback_model, fallback_error,
+                    )
+
+            self._record_llm_request_telemetry(
+                user_id=user_id, conversation_id=conversation_id,
+                provider=None, model=model, route=route, success=False,
+                usage=None,
+                total_latency_ms=(time.perf_counter() - start_time) * 1000,
+                error_message=str(e),
+            )
+            logger.warning(f"DeepSeek API falhou: {e}. Usando resposta degradada.")
+            return LLMResult(content=self._get_fallback_response(messages))
+
+    async def _complete_and_record(
+        self,
+        messages: List[Dict],
+        model: str,
+        tool_choice: object,
+        route: Optional[ModelRoute],
+        user_id: Optional[str],
+        conversation_id: Optional[str],
+        start_time: float,
+    ) -> LLMResult:
+        result = await asyncio.to_thread(
+            self.deepseek.chat_completion,
+            messages, OPENCODE_TOOLS, model=model, tool_choice=tool_choice,
+        )
+        usage = self._enrich_usage_cost(result.provider, result.model, result.usage)
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        self._record_llm_request_telemetry(
+            user_id=user_id, conversation_id=conversation_id,
+            provider=result.provider, model=result.model,
+            route=route, success=True, usage=usage,
+            first_token_latency_ms=elapsed_ms, total_latency_ms=elapsed_ms,
+        )
+        return LLMResult(
+            content=result.content,
+            provider=result.provider,
+            model=result.model,
+            usage=usage,
+            tool_calls=result.tool_calls,
+            reasoning_content=result.reasoning_content,
+        )
 
     def _enrich_usage_cost(
         self,
@@ -1149,357 +913,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         except Exception:
             logger.debug("Could not record LLM request telemetry", exc_info=True)
 
-    async def process_message_streaming(
-        self,
-        user_message: str,
-        conversation_id: Optional[str] = None,
-        project_name: Optional[str] = None,
-        user_id: Optional[str] = None,
-        user_role: Optional[str] = None,
-        project_mutation_allowlist: Optional[List[str]] = None,
-        auto_execute: bool = False,
-    ) -> AsyncIterator[Dict]:
-        """Process a message and stream the response as SSE events.
 
-        Yields:
-            {"type": "text", "content": "..."}
-            {"type": "command", "command": "..."}
-            {"type": "command_status", "command": "...", "status": "running"}
-            {"type": "command_result", "command": "...", "status": "...", ...}
-            {"type": "done", "usage": {...}, ...}
-        """
-
-        context = await self.memory.get_conversation_context(conversation_id)
-        effective_project_name = project_name or context.get("project_name")
-        if effective_project_name:
-            context["project_name"] = effective_project_name
-        agent_run = self._start_agent_run_if_needed(
-            conversation_id,
-            user_message,
-            effective_project_name,
-            context,
-        )
-
-        messages = self._prepare_messages(user_message, context)
-        route = self._select_llm_route(user_message, context)
-        checklist = self._build_task_checklist(user_message)
-
-        if not self.deepseek.configured:
-            fallback = self._get_fallback_response(messages)
-            yield {"type": "text", "content": fallback}
-            yield {"type": "done", "usage": None}
-            return
-
-        max_autoexec_rounds = self._max_autoexec_rounds(auto_execute, user_role)
-        round_count = 0
-        aggregated_usage = None
-        persisted_command = None
-        opencode_command = None
-        final_response = ""
-        response_parts: List[str] = []
-        executed_command = None
-
-        while round_count < max_autoexec_rounds:
-            round_count += 1
-            full_response = ""
-            collected_tool_calls = None
-            usage = None
-            request_started_at = time.perf_counter()
-            first_token_latency_ms = None
-            active_model = route.model
-            try:
-                async for chunk in self.deepseek.chat_completion_streaming(
-                    messages,
-                    OPENCODE_TOOLS,
-                    model=route.model,
-                ):
-                    if chunk["type"] == "text":
-                        if first_token_latency_ms is None:
-                            first_token_latency_ms = (
-                                time.perf_counter() - request_started_at
-                            ) * 1000
-                        full_response += chunk["content"]
-                        yield chunk
-                    elif chunk["type"] == "reasoning":
-                        continue
-                    elif chunk["type"] == "done":
-                        full_response = chunk.get("content", full_response)
-                        usage = chunk.get("usage")
-                        collected_tool_calls = chunk.get("tool_calls")
-                        break
-            except Exception as e:
-                if route.fallback_model and not full_response:
-                    try:
-                        active_model = route.fallback_model
-                        request_started_at = time.perf_counter()
-                        first_token_latency_ms = None
-                        logger.warning(
-                            "DeepSeek streaming with %s failed (%s); retrying with %s",
-                            route.model,
-                            e,
-                            route.fallback_model,
-                        )
-                        async for chunk in self.deepseek.chat_completion_streaming(
-                            messages,
-                            OPENCODE_TOOLS,
-                            model=route.fallback_model,
-                        ):
-                            if chunk["type"] == "text":
-                                if first_token_latency_ms is None:
-                                    first_token_latency_ms = (
-                                        time.perf_counter() - request_started_at
-                                    ) * 1000
-                                full_response += chunk["content"]
-                                yield chunk
-                            elif chunk["type"] == "reasoning":
-                                continue
-                            elif chunk["type"] == "done":
-                                full_response = chunk.get("content", full_response)
-                                usage = chunk.get("usage")
-                                collected_tool_calls = chunk.get("tool_calls")
-                                break
-                    except Exception as fallback_error:
-                        self._record_llm_request_telemetry(
-                            user_id=user_id,
-                            conversation_id=conversation_id,
-                            provider=None,
-                            model=active_model,
-                            route=route,
-                            success=False,
-                            usage=None,
-                            total_latency_ms=(time.perf_counter() - request_started_at) * 1000,
-                            error_message=str(fallback_error),
-                        )
-                        logger.warning(f"DeepSeek streaming fallback failed: {fallback_error}")
-                        fallback = self._get_fallback_response(messages)
-                        yield {"type": "text", "content": fallback}
-                        yield {"type": "done", "usage": None}
-                        return
-                else:
-                    self._record_llm_request_telemetry(
-                        user_id=user_id,
-                        conversation_id=conversation_id,
-                        provider=None,
-                        model=active_model,
-                        route=route,
-                        success=False,
-                        usage=None,
-                        total_latency_ms=(time.perf_counter() - request_started_at) * 1000,
-                        error_message=str(e),
-                    )
-                    logger.warning(f"DeepSeek streaming failed: {e}")
-                    fallback = self._get_fallback_response(messages)
-                    yield {"type": "text", "content": fallback}
-                    yield {"type": "done", "usage": None}
-                    return
-
-            if usage:
-                usage = self._enrich_usage_cost(
-                    usage.get("provider"),
-                    usage.get("model"),
-                    usage,
-                )
-            self._record_llm_request_telemetry(
-                user_id=user_id,
-                conversation_id=conversation_id,
-                provider=(usage or {}).get("provider"),
-                model=(usage or {}).get("model") or active_model,
-                route=route,
-                success=True,
-                usage=usage,
-                first_token_latency_ms=first_token_latency_ms,
-                total_latency_ms=(time.perf_counter() - request_started_at) * 1000,
-            )
-            aggregated_usage = self._merge_usage(aggregated_usage, usage)
-            if full_response:
-                response_parts.append(full_response)
-
-            opencode_command = self._tool_calls_to_opencode_command(collected_tool_calls)
-            if opencode_command is None:
-                opencode_command = self._extract_opencode_command(full_response)
-
-            if self._should_retry_missing_tool(
-                auto_execute,
-                user_message,
-                full_response,
-                opencode_command,
-            ):
-                messages = self._build_tool_repair_messages(user_message, context, full_response)
-                continue
-
-            if (
-                auto_execute
-                and checklist
-                and not opencode_command
-                and not self._task_checklist_complete(checklist)
-                and round_count < max_autoexec_rounds
-            ):
-                messages.extend(self._build_checklist_repair_messages(full_response, checklist))
-                continue
-
-            if opencode_command:
-                yield {
-                    "type": "command",
-                    "command": opencode_command,
-                    "auto_execute": bool(auto_execute),
-                }
-
-            autoexec_enabled = bool(
-                auto_execute
-                and self.api_key
-                and user_id
-                and user_role
-                and opencode_command
-                and self._can_autoexecute_command(opencode_command, user_role)
-            )
-            if not autoexec_enabled:
-                final_response = self._sanitize_unconfirmed_execution_claims(
-                    full_response,
-                    opencode_command,
-                )
-                if opencode_command or executed_command is None:
-                    persisted_command = opencode_command
-                break
-
-            yield {
-                "type": "command_status",
-                "command": opencode_command,
-                "status": "running",
-            }
-            success, msg, output, status, reason, proj = await self.opencode.execute_command(
-                opencode_command,
-                user_id=user_id,
-                project_name=effective_project_name,
-                user_role=user_role,
-                project_mutation_allowlist=project_mutation_allowlist or [],
-            )
-            self._record_agent_command_result(
-                conversation_id=conversation_id,
-                goal=user_message,
-                command=opencode_command,
-                success=success,
-                result=msg,
-                output=output,
-                status=status,
-                reason_code=reason,
-                project_name=proj,
-            )
-            executed_command = {
-                "command": opencode_command,
-                "success": success,
-                "result": msg,
-                "output": output,
-                "status": status,
-                "reason_code": reason,
-                "project_name": proj,
-            }
-            if success and checklist:
-                self._update_task_checklist(checklist, opencode_command, output)
-            persisted_command = opencode_command
-            yield {
-                "type": "command_result",
-                "command": opencode_command,
-                "success": success,
-                "message": msg,
-                "output": output,
-                "status": status,
-                "reason_code": reason,
-                "project_name": proj,
-            }
-
-            if not success:
-                if self._should_replay_command_result(
-                    auto_execute,
-                    user_role,
-                    status,
-                    reason,
-                    msg,
-                    output,
-                ):
-                    messages.extend(
-                        self._build_command_result_replay_messages(
-                            full_response,
-                            opencode_command,
-                            success,
-                            msg,
-                            output,
-                        )
-                    )
-                    opencode_command = None
-                    continue
-                error_text = (
-                    f"\n\n{self._command_failure_message(opencode_command, msg, reason, proj)}"
-                )
-                final_response = f"{full_response}{error_text}"
-                yield {"type": "text", "content": error_text}
-                break
-
-            messages.extend(
-                self._build_command_result_replay_messages(
-                    full_response,
-                    opencode_command,
-                    success,
-                    msg,
-                    output,
-                )
-            )
-
-            opencode_command = None
-        else:
-            final_response = response_parts[-1] if response_parts else ""
-
-        if executed_command is not None and not final_response.strip():
-            final_response = self._command_completion_fallback(executed_command)
-            yield {"type": "text", "content": final_response}
-
-        persisted_project_name = await self.memory.save_interaction(
-            conversation_id=conversation_id,
-            user_message=user_message,
-            ai_response="\n\n".join(part for part in response_parts if part) or final_response,
-            opencode_command=persisted_command,
-            llm_usage=aggregated_usage,
-            project_name=effective_project_name,
-        )
-        if executed_command is not None and persisted_command == executed_command["command"]:
-            await self.memory.save_command_execution(
-                conversation_id=conversation_id,
-                command=executed_command["command"],
-                success=executed_command["success"],
-                result=executed_command["result"],
-                output=executed_command["output"],
-                status=executed_command["status"],
-                reason_code=executed_command["reason_code"],
-                project_name=executed_command["project_name"],
-                record_agent_event=False,
-            )
-            if executed_command["success"]:
-                self._persist_repos_project_if_needed(executed_command["project_name"])
-        self._record_agent_route_decision(
-            conversation_id=conversation_id,
-            route=route,
-            usage=aggregated_usage,
-            project_name=persisted_project_name,
-            opencode_command=persisted_command,
-        )
-        review_project_name = persisted_project_name if isinstance(persisted_project_name, str) else None
-        self._review_completed_task(
-            conversation_id=conversation_id,
-            user_message=user_message,
-            ai_response=final_response,
-            project_name=review_project_name,
-            opencode_command=persisted_command,
-            route=route,
-            tool_iterations=max(0, round_count - 1) + (1 if persisted_command else 0),
-        )
-        self._record_agent_final_response(
-            agent_run,
-            conversation_id,
-            final_response,
-            has_pending_command=bool(opencode_command),
-            project_name=review_project_name,
-        )
-
-        yield {"type": "done", "usage": aggregated_usage, "project_name": persisted_project_name}
 
     @staticmethod
     def _command_completion_fallback(executed_command: Dict) -> str:
@@ -1624,6 +1038,7 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         if status == "failed" and reason_code == "execution_failed":
             if DevSynapseBrain._looks_like_interactive_sudo_failure(message, output):
                 return False
+
             return True
 
         return status == "blocked" and reason_code in {
@@ -1637,8 +1052,6 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
         message: Optional[str],
         output: Optional[str],
     ) -> bool:
-        """Detect sudo failures that require a terminal/password outside the chat loop."""
-
         text = f"{message or ''}\n{output or ''}".lower()
         sudo_markers = [
             "sudo:",
@@ -2144,52 +1557,6 @@ You: "Based on your preference for simple, low-cost solutions, I suggest startin
             "to be confirmed in the interface. Ask me to try again and I'll respond "
             "with a single executable command."
         )
-
-    async def interpret_execution_result(
-        self,
-        conversation_id: str,
-        command: str,
-        output: str,
-        project_name: Optional[str] = None,
-    ) -> Optional[str]:
-        """Feed command output back to the LLM for natural language interpretation."""
-        if not self.deepseek.configured:
-            return None
-
-        try:
-            context = await self.memory.get_conversation_context(conversation_id)
-            system_prompt = self.generate_system_prompt(context)
-
-            messages = [{"role": "system", "content": system_prompt}]
-
-            history = context.get("conversation_history") or []
-            for msg in history[-6:]:
-                messages.append(msg)
-
-            result_text = output[:2000] if output else "(no output)"
-
-            if result_text:
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        f"I executed this command: `{command}`\n\n"
-                        f"Output:\n```\n{result_text}\n```\n\n"
-                        f"Briefly explain what this output means in natural language. "
-                        f"Be concise — 1 to 3 sentences max."
-                    ),
-                })
-
-            result = await asyncio.to_thread(
-                self.deepseek.chat_completion,
-                messages,
-                max_tokens=400,
-                thinking={"type": "disabled"},
-            )
-            return result["content"].strip()
-
-        except Exception:
-            logger.debug("Failed to interpret execution result", exc_info=True)
-            return None
 
     def _get_fallback_response(self, messages: List[Dict]) -> str:
         """Resposta degradada quando a API DeepSeek falha."""

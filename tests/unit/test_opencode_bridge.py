@@ -26,19 +26,6 @@ PROJECTS = {
 ALLOWED_TEST_DIRECTORIES = [str(PROJECT_ROOT.parent), "/tmp", "/var/tmp"]
 
 
-class _MonitoringStub:
-    def log_command_execution(self, *args, **kwargs):
-        return None
-
-    def log_system_metric(self, *args, **kwargs):
-        return None
-
-
-@pytest.fixture(autouse=True)
-def isolate_bridge_monitoring(monkeypatch):
-    monkeypatch.setattr("core.opencode_bridge.default_monitoring_system", _MonitoringStub())
-
-
 def _bridge():
     return OpenCodeBridge(
         known_projects=PROJECTS,
