@@ -147,8 +147,8 @@ budget state and common commands visible in one terminal screen. The right panel
 summarizes the active session, selected model, 24h request/token/cost telemetry,
 cache rate, error rate, latency, budget usage and the top recent model. The sidebar
 panels (Model, Telemetry) are collapsible for a cleaner view. Shell outputs that
-look like unified diffs or git patches are rendered with diff highlighting and a
-compact file/hunk/add/remove summary.
+look like unified diffs, git patches, JSON or YAML are rendered with syntax
+highlighting; diffs also include a compact file/hunk/add/remove summary.
 
 Typing `/` opens contextual command suggestions; `Up` and `Down` move through
 suggestions, and `Tab` or `Enter` completes the highlighted command or

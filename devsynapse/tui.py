@@ -340,11 +340,10 @@ class DevSynapseTUI(App):
         input_w.add_to_history(task)
         input_w.clear()
         input_w.disabled = True
-        self._set_busy(True)
-
         self._write_user_message(task)
 
         if task.startswith("/"):
+            self._set_busy(True, "Running slash command...")
             await self._command_dispatcher().handle(task)
             self._set_busy(False)
             input_w.disabled = False
@@ -352,11 +351,14 @@ class DevSynapseTUI(App):
             return
 
         if task.startswith("!"):
+            self._set_busy(True, "Executing shell command...")
             await self._handle_shell_message(task[1:].strip())
             self._set_busy(False)
             input_w.disabled = False
             input_w.focus()
             return
+
+        self._set_busy(True, "DevSynapse is thinking...")
 
         if not self.brain or not self.brain.deepseek.configured:
             chat.write("[red]No provider key configured.[/]")
@@ -425,18 +427,19 @@ class DevSynapseTUI(App):
             logger.exception("Could not refresh TUI CSS after preference change")
             return "saved"
 
-    def _set_busy(self, busy: bool) -> None:
+    def _set_busy(self, busy: bool, message: str | None = None) -> None:
         """Set busy state with visual indicators."""
         self._is_busy = busy
         typing = self._typing_indicator()
         if busy:
-            typing.update(f"[bold {self._state_color('thinking')}]DevSynapse is thinking...[/]")
+            text = message or "DevSynapse is thinking..."
+            typing.update(f"[bold {self._state_color('thinking')}]{text}[/]")
             typing.add_class("pulse")
         else:
             typing.update("")
             typing.remove_class("pulse")
         self._sidebar().set_busy(busy)
-        self._update_status_bar(message="busy" if busy else None)
+        self._update_status_bar(message=message or "busy" if busy else None)
 
     async def _process(self, task, chat, input_w):
         streamed_chunks: list[str] = []
@@ -586,6 +589,7 @@ class DevSynapseTUI(App):
         if self.opencode is None:
             chat.write("[red]Command bridge is not initialized.[/]")
             return
+        self._update_status_bar(message=f"executing: {command[:60]}")
         escaped_command = command.replace("\\", "\\\\").replace('"', '\\"')
         result = await self.opencode.execute_command(
             f'bash "{escaped_command}"',
@@ -760,7 +764,11 @@ class DevSynapseTUI(App):
         )
 
         if message:
-            bar.update(f"[bold {self._state_color('thinking')}]*[/] {message}")
+            project = self.project_name or "no project"
+            bar.update(
+                f"[bold {self._state_color('thinking')}]*[/] {message}  "
+                f"[dim]{project}[/]"
+            )
             return
 
         if usage:
@@ -773,9 +781,12 @@ class DevSynapseTUI(App):
                 f"[{budget_color}]{cost}[/]"
             )
         else:
+            short_id = self.conversation_id.removeprefix("chat_")[-12:]
+            project = self.project_name or "no project"
             bar.update(
                 f"[dim]DevSynapse AI[/] [bold {self._state_color('success')}]ready[/]  "
-                f"budget:[{budget_color}]{budget_str}[/]"
+                f"budget:[{budget_color}]{budget_str}[/]  "
+                f"[dim]project:{project} session:{short_id}[/]"
             )
 
 

@@ -1,6 +1,7 @@
 """Rich renderers for TUI command and tool output."""
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 
@@ -100,10 +101,65 @@ def render_command_result(
         )
         return Group(*sections)
 
+    structured = structured_output_lexer(output)
+    if structured is not None:
+        lexer, normalized = structured
+        sections.append(
+            Text.assemble(
+                ("structured ", "bold"),
+                (lexer.upper(), "dim"),
+            )
+        )
+        sections.append(
+            Syntax(
+                normalized,
+                lexer,
+                word_wrap=False,
+                theme="ansi_dark",
+                line_numbers=False,
+            )
+        )
+        return Group(*sections)
+
     sections.append(Text(output))
     return Group(*sections)
+
+
+def structured_output_lexer(text: str) -> tuple[str, str] | None:
+    """Return a syntax lexer and normalized text for JSON/YAML-like output."""
+    stripped = text.strip()
+    if not stripped:
+        return None
+
+    if stripped.startswith(("{", "[")):
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            pass
+        else:
+            return "json", json.dumps(parsed, indent=2, ensure_ascii=False)
+
+    if _looks_like_yaml(stripped):
+        return "yaml", stripped
+
+    return None
 
 
 def strip_ansi(text: str) -> str:
     """Remove ANSI control sequences before diff detection."""
     return re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
+
+
+def _looks_like_yaml(text: str) -> bool:
+    lines = [line for line in text.splitlines() if line.strip()]
+    if len(lines) < 2:
+        return False
+    yamlish = 0
+    for line in lines[:20]:
+        stripped = line.strip()
+        if stripped.startswith(("- ", "---", "...")):
+            yamlish += 1
+            continue
+        if re.match(r"^[A-Za-z0-9_.-]+:\s+.+$", stripped):
+            yamlish += 1
+    return yamlish >= 2

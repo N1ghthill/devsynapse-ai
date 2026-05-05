@@ -10,7 +10,12 @@ from textual.widgets import OptionList, RichLog, Static
 
 from devsynapse.tui_input import EnhancedInput
 from devsynapse.tui_preferences import load_tui_preferences
-from devsynapse.tui_rendering import diff_stats, is_unified_diff, render_command_result
+from devsynapse.tui_rendering import (
+    diff_stats,
+    is_unified_diff,
+    render_command_result,
+    structured_output_lexer,
+)
 from devsynapse.tui_sidebar import DynamicSidebar
 
 
@@ -82,6 +87,17 @@ def test_tui_diff_renderer_detects_and_summarizes_unified_diff():
     assert render_command_result(message="ok", output=diff) is not None
 
 
+def test_tui_renderer_detects_json_and_yaml_outputs():
+    json_result = structured_output_lexer('{"ok": true, "items": [1, 2]}')
+    yaml_result = structured_output_lexer("name: devsynapse\nstatus: ready\n")
+
+    assert json_result is not None
+    assert json_result[0] == "json"
+    assert '"ok": true' in json_result[1]
+    assert yaml_result == ("yaml", "name: devsynapse\nstatus: ready")
+    assert render_command_result(message="ok", output='{"status": "ready"}') is not None
+
+
 @pytest.mark.asyncio
 async def test_tui_mounts_and_handles_status_command(tmp_path, monkeypatch):
     _configure_runtime(monkeypatch, tmp_path / "runtime")
@@ -116,6 +132,7 @@ async def test_tui_mounts_and_handles_status_command(tmp_path, monkeypatch):
         assert "DevSynapse AI" in content
         assert "ready" in content
         assert "budget:" in content
+        assert "session:" in content
         assert "DevSynapse AI" in str(header.content)
         assert "/theme" in str(footer.content)
 
