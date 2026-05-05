@@ -31,6 +31,12 @@ def _create_script_repo(tmp_path: Path) -> tuple[Path, Path, Path]:
     shutil.copy2(REPO_ROOT / "scripts" / "uninstall.sh", repo / "scripts" / "uninstall.sh")
     shutil.copy2(REPO_ROOT / "scripts" / "update.sh", repo / "scripts" / "update.sh")
     shutil.copy2(REPO_ROOT / ".env.example", repo / ".env.example")
+    (repo / "pyproject.toml").write_text(
+        '[project]\nname = "devsynapse-ai"\nversion = "1.0.0"\n',
+        encoding="utf-8",
+    )
+    (repo / "devsynapse.sh").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    (repo / "devsynapse.sh").chmod(0o755)
     (repo / "config").mkdir()
     (repo / "config" / "settings.py").write_text(
         'class AppSettings:\n    app_version: str = "0.3.4"\n',
@@ -117,13 +123,14 @@ def _run_script(
     )
 
 
-def test_install_script_writes_env_and_aliases_portably(tmp_path: Path) -> None:
+def test_install_script_writes_env_and_command_wrappers_portably(tmp_path: Path) -> None:
     repo, fake_bin, home = _create_script_repo(tmp_path)
     repos_root = tmp_path / "repos&root"
     repos_root.mkdir()
     config_file = home / ".config" / "devsynapse-ai" / ".env"
     data_dir = home / ".local" / "share" / "devsynapse-ai" / "data"
     logs_dir = home / ".local" / "state" / "devsynapse-ai" / "logs"
+    bin_dir = home / ".local" / "bin"
 
     first = _run_script(
         repo,
@@ -153,12 +160,24 @@ def test_install_script_writes_env_and_aliases_portably(tmp_path: Path) -> None:
     assert (repo / "venv").is_dir()
     assert (data_dir / "devsynapse_memory.db").is_file()
 
+    for command in ("devsynapse", "update-devsynapse", "uninstall-devsynapse"):
+        command_path = bin_dir / command
+        assert command_path.is_file()
+        assert os.access(command_path, os.X_OK)
+
+    assert "devsynapse.sh" in (bin_dir / "devsynapse").read_text(encoding="utf-8")
+    assert "scripts/update.sh" in (bin_dir / "update-devsynapse").read_text(encoding="utf-8")
+    assert "scripts/uninstall.sh" in (bin_dir / "uninstall-devsynapse").read_text(
+        encoding="utf-8"
+    )
+
     for rc_file in (home / ".bashrc", home / ".zshrc"):
         rc_text = rc_file.read_text(encoding="utf-8")
-        assert rc_text.count("alias devsynapse=") == 1
-        assert rc_text.count("alias update-devsynapse=") == 1
-        assert rc_text.count("alias uninstall-devsynapse=") == 1
-        assert str(config_file) in rc_text
+        assert "alias devsynapse=" not in rc_text
+        assert "alias update-devsynapse=" not in rc_text
+        assert "alias uninstall-devsynapse=" not in rc_text
+        assert str(bin_dir) in rc_text
+        assert rc_text.count("devsynapse path (managed by scripts/install.sh)") == 1
 
 
 def test_install_script_preserves_existing_api_key_on_blank_input(tmp_path: Path) -> None:
@@ -191,6 +210,7 @@ def test_uninstall_script_removes_artifacts_and_respects_data_choices(tmp_path: 
     config_file = home / ".config" / "devsynapse-ai" / ".env"
     data_dir = home / ".local" / "share" / "devsynapse-ai" / "data"
     logs_dir = home / ".local" / "state" / "devsynapse-ai" / "logs"
+    bin_dir = home / ".local" / "bin"
 
     installed = _run_script(
         repo,
@@ -204,6 +224,9 @@ def test_uninstall_script_removes_artifacts_and_respects_data_choices(tmp_path: 
     keep_data = _run_script(repo, fake_bin, home, "scripts/uninstall.sh", "n\nn\n")
     assert keep_data.returncode == 0, keep_data.stdout + keep_data.stderr
     assert not (repo / "venv").exists()
+    assert not (bin_dir / "devsynapse").exists()
+    assert not (bin_dir / "update-devsynapse").exists()
+    assert not (bin_dir / "uninstall-devsynapse").exists()
     assert data_dir.is_dir()
     assert logs_dir.is_dir()
     assert config_file.is_file()
@@ -213,6 +236,7 @@ def test_uninstall_script_removes_artifacts_and_respects_data_choices(tmp_path: 
         assert "alias devsynapse=" not in rc_text
         assert "alias update-devsynapse=" not in rc_text
         assert "alias uninstall-devsynapse=" not in rc_text
+        assert "devsynapse path" not in rc_text
 
     delete_data = _run_script(repo, fake_bin, home, "scripts/uninstall.sh", "s\ns\n")
     assert delete_data.returncode == 0, delete_data.stdout + delete_data.stderr
@@ -227,6 +251,7 @@ def test_update_script_refreshes_existing_install_without_prompts(tmp_path: Path
     repos_root.mkdir()
     config_file = home / ".config" / "devsynapse-ai" / ".env"
     data_dir = home / ".local" / "share" / "devsynapse-ai" / "data"
+    bin_dir = home / ".local" / "bin"
 
     installed = _run_script(
         repo,
@@ -250,4 +275,6 @@ def test_update_script_refreshes_existing_install_without_prompts(tmp_path: Path
     env_text = config_file.read_text(encoding="utf-8")
     assert "DEEPSEEK_API_KEY=sk-update-test" in env_text
     assert "Update complete" in updated.stdout
+    assert (bin_dir / "devsynapse").is_file()
+    assert (bin_dir / "update-devsynapse").is_file()
     assert any((data_dir / "backups").glob("update-*"))

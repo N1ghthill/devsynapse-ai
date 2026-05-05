@@ -6,9 +6,13 @@ venv/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+.hypothesis/
 *.pyc
 *.pyo
 *.pyd
+.coverage
+.coverage.*
+htmlcov/
 
 data/
 logs/

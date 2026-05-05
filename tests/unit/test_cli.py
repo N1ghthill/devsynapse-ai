@@ -56,6 +56,23 @@ def test_tui_launcher_help_does_not_require_writable_runtime_config(tmp_path):
     assert "providers" not in result.stdout.split("usage:", 1)[1].splitlines()[0]
 
 
+def test_tui_launcher_version_does_not_create_runtime_state(tmp_path):
+    runtime_root = tmp_path / "runtime"
+
+    result = subprocess.run(
+        [sys.executable, "-m", "devsynapse.cli", "--version"],
+        cwd=PROJECT_ROOT,
+        env=_cli_env(runtime_root),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.startswith("devsynapse ")
+    assert not (runtime_root / "data" / "devsynapse_memory.db").exists()
+
+
 @pytest.mark.parametrize(
     "command",
     [

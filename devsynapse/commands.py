@@ -289,28 +289,8 @@ class CommandDispatcher:
         await handler(args)
 
     async def cmd_help(self, _args: list[str]) -> None:
-        chat = self.tui._chat()
-        chat.write("[bold]DevSynapse commands[/]")
-        chat.write("  /connect                         open provider setup")
-        chat.write("  /connect <provider>              open setup with provider selected")
-        chat.write("  /connect <provider> <api-key>    save provider key")
-        chat.write("  /providers                       show provider key status")
-        chat.write("  /status                          show runtime status")
-        chat.write("  /projects                        list registered projects")
-        chat.write("  /project <name>                  set active project")
-        chat.write("  /project                         clear active project")
-        chat.write("  /discover                        refresh model catalog")
-        chat.write("  /model                           search and select active model")
-        chat.write("  /models [provider]               list model catalog")
-        chat.write("  /copy                            copy last assistant answer")
-        chat.write("  /budget                          show usage plan and limits")
-        chat.write("  /budget daily|monthly <usd>      set budget limit")
-        chat.write("  /budget warning|critical <pct>   set thresholds")
-        chat.write("  /router                          show manual model status")
-        chat.write("  /usage                           show recent provider/model telemetry")
-        chat.write("  /details                         toggle route/tool detail display")
-        chat.write("  /new                             start a new conversation")
-        chat.write("  !<command>                       run shell command as a tool result")
+        from devsynapse.screens.help_screen import HelpScreen
+        await self.tui.push_screen(HelpScreen())
 
     async def cmd_copy(self, _args: list[str]) -> None:
         chat = self.tui._chat()

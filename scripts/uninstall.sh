@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
-# DevSynapse AI — Uninstaller
+# DevSynapse AI - Uninstaller
 #
-# Remove os artefatos locais do DevSynapse, os aliases do shell,
+# Remove os artefatos locais do DevSynapse, os comandos do shell,
 # e opcionalmente os dados runtime e o diretório do projeto.
 #
 # Uso:
-#   uninstall-devsynapse     # via alias (configurado pelo install.sh)
+#   uninstall-devsynapse     # command installed by install.sh
 #   bash scripts/uninstall.sh
 
 set -euo pipefail
@@ -26,6 +26,7 @@ else
     LOGS_DIR="${DEVSYNAPSE_LOGS_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/$APP_ID/logs}"
 fi
 CONFIG_FILE="${DEVSYNAPSE_CONFIG_FILE:-$CONFIG_DIR/.env}"
+BIN_DIR="${DEVSYNAPSE_BIN_DIR:-$HOME/.local/bin}"
 
 get_config_value() {
     local key="$1"
@@ -63,12 +64,12 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-ok()   { echo -e "  ${GREEN}✓${NC} $1"; }
-warn() { echo -e "  ${YELLOW}⚠${NC} $1"; }
+ok()   { echo -e "  ${GREEN}OK${NC} $1"; }
+warn() { echo -e "  ${YELLOW}WARN${NC} $1"; }
 info() { echo -e "  ${CYAN}→${NC} $1"; }
 
-ALIAS_BLOCK_START="# >>> devsynapse"
-ALIAS_BLOCK_END="# <<< devsynapse"
+MANAGED_BLOCK_START="# >>> devsynapse"
+MANAGED_BLOCK_END="# <<< devsynapse"
 
 REMOVED_ANYTHING=0
 
@@ -84,7 +85,7 @@ remove_if_exists() {
     fi
 }
 
-remove_alias_block() {
+remove_shell_entries() {
     local rc_file="$1"
     local rc_name
     rc_name=$(basename "$rc_file")
@@ -93,34 +94,38 @@ remove_alias_block() {
         return
     fi
 
-    if ! grep -qF "$ALIAS_BLOCK_START" "$rc_file" 2>/dev/null; then
-        return
-    fi
-
     local tmp_file
     tmp_file="${rc_file}.devsynapse_tmp"
 
-    sed -e "/^${ALIAS_BLOCK_START}/,/^${ALIAS_BLOCK_END}/d" "$rc_file" > "$tmp_file"
+    sed \
+        -e "/^${MANAGED_BLOCK_START}/,/^${MANAGED_BLOCK_END}/d" \
+        -e '/^alias devsynapse=/d' \
+        -e '/^alias update-devsynapse=/d' \
+        -e '/^alias uninstall-devsynapse=/d' \
+        "$rc_file" > "$tmp_file"
     mv "$tmp_file" "$rc_file"
 
-    ok "Aliases removidos de $rc_name"
+    ok "Entradas DevSynapse removidas de $rc_name"
     REMOVED_ANYTHING=1
 }
 
 main() {
     echo ""
     echo -e "${BOLD}${RED}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}${RED}║         DevSynapse AI — Desinstalação           ║${NC}"
+    echo -e "${BOLD}${RED}║         DevSynapse AI - Desinstalação           ║${NC}"
     echo -e "${BOLD}${RED}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
     echo "Este script remove artefatos locais do DevSynapse."
     echo "Seus arquivos de projeto e repositórios NÃO serão afetados."
     echo ""
 
-    # 1. Shell aliases
-    echo -e "${BOLD}1. Removendo aliases do shell...${NC}"
+    # 1. Shell commands and legacy aliases
+    echo -e "${BOLD}1. Removendo comandos e aliases antigos do shell...${NC}"
+    remove_if_exists "$BIN_DIR/devsynapse" "comando devsynapse"
+    remove_if_exists "$BIN_DIR/update-devsynapse" "comando update-devsynapse"
+    remove_if_exists "$BIN_DIR/uninstall-devsynapse" "comando uninstall-devsynapse"
     for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.bash_aliases"; do
-        remove_alias_block "$rc"
+        remove_shell_entries "$rc"
     done
 
     # 2. Python venv
@@ -134,7 +139,7 @@ main() {
 
     local delete_data="n"
     echo ""
-    echo -e "  ${YELLOW}⚠  Isso inclui historico de conversas, memoria local e logs em:${NC}"
+    echo -e "  ${YELLOW}WARN${NC} Isso inclui historico de conversas, memoria local e logs em:"
     echo -e "     ${CYAN}$DATA_DIR${NC}"
     echo -e "     ${CYAN}$LOGS_DIR${NC}"
     echo ""

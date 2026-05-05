@@ -1,5 +1,6 @@
 """
-DevSynapse AI — Textual TUI (terminal chat interface).
+DevSynapse AI - Textual TUI (terminal chat interface).
+Enhanced with a command menu, help overlay, notifications and dynamic sidebar.
 """
 
 import asyncio
@@ -21,7 +22,8 @@ if str(ROOT_DIR) not in sys.path:
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Header, Input, RichLog, Static
+from textual.widgets import Footer, Header, OptionList, RichLog, Static
+from textual.widgets.option_list import Option
 
 import config.settings as app_settings
 from core.brain import DevSynapseBrain
@@ -30,6 +32,7 @@ from core.memory import MemorySystem
 from core.opencode_bridge import OpenCodeBridge
 from core.plugin_system import plugin_manager
 from core.runtime_config import ensure_runtime_config_file, set_runtime_config_values
+from devsynapse.command_catalog import CommandSuggestion, build_command_suggestions
 from devsynapse.commands import (
     OPENROUTER_CURATED_FREE_MODELS,
     PROVIDER_CONFIGS,
@@ -38,23 +41,25 @@ from devsynapse.commands import (
     _provider_config,
     _provider_key,
     _provider_model,
-    _shorten_middle,
     _sort_models_for_ui,
 )
 from devsynapse.screens import ModelSelectionScreen, ProviderConnectionScreen
+from devsynapse.tui_input import EnhancedInput
+from devsynapse.tui_notifications import NotificationManager
+from devsynapse.tui_sidebar import DynamicSidebar
 
 logger = logging.getLogger(__name__)
 
 
 class DevSynapseTUI(App):
-    """Textual TUI for DevSynapse AI."""
+    """Enhanced Textual TUI for DevSynapse AI."""
 
     TITLE = "DevSynapse AI"
     SUB_TITLE = "terminal coding agent"
     CSS = """
     Screen {
         layout: vertical;
-        background: $surface;
+        background: #0d1117;
     }
 
     #workspace {
@@ -67,68 +72,117 @@ class DevSynapseTUI(App):
         min-width: 0;
     }
 
-    #side-pane {
-        width: 36;
-        min-width: 32;
-        background: $panel;
-        border-left: solid $border;
-        padding: 1;
-        overflow: hidden;
-    }
-
     #chat {
         height: 1fr;
         border: none;
         padding: 1 2 0 2;
-        background: $surface;
+        background: #0d1117;
+        scrollbar-color: #58a6ff;
+        scrollbar-background: #21262d;
+    }
+
+    #input-container {
+        height: auto;
+        max-height: 20;
+        min-height: 3;
+        background: #161b22;
+        border-top: solid #30363d;
+        padding: 0 1;
+    }
+
+    #command-suggestions {
+        height: auto;
+        max-height: 8;
+        border: tall #30363d;
+        background: #161b22;
+        margin-bottom: 1;
+    }
+
+    #command-suggestions.hidden {
+        display: none;
     }
 
     #input {
-        height: 3;
-        background: $surface;
-        border: solid $border;
-        padding: 0 1 0 1;
+        height: auto;
+        min-height: 3;
+        background: #0d1117;
+        border: solid #30363d;
+        padding: 0 1;
     }
 
     #input:focus {
-        border: solid $primary;
+        border: solid #58a6ff;
+        background: #0d1117;
+    }
+
+    #input:disabled {
+        opacity: 0.5;
+    }
+
+    #status-bar {
+        height: 1;
+        background: #161b22;
+        color: #8b949e;
+        padding: 0 2;
+    }
+
+    #typing-indicator {
+        height: 1;
+        padding: 0 2;
+        background: #0d1117;
+        color: #8b949e;
     }
 
     .panel {
         width: 100%;
         margin-bottom: 1;
         padding: 1;
-        border: tall $border;
-        background: $boost;
-    }
-
-    #session-panel {
-        height: 7;
-    }
-
-    #providers-panel {
-        height: 10;
-    }
-
-    #commands-panel {
-        height: 1fr;
+        border: tall #30363d;
+        background: #161b22;
     }
 
     .panel-title {
         text-style: bold;
-        color: $accent;
+        color: #58a6ff;
     }
 
-    #bar {
-        height: 1;
-        background: $primary;
-        color: $text;
-        padding: 0 2;
+    .message-user {
+        border: round #1f6feb;
+        background: #0d1117;
+        padding: 1 2;
+        margin-left: 2;
+    }
+
+    .message-assistant {
+        border: round #238636;
+        background: #0d1117;
+        padding: 1 2;
+        margin-right: 2;
+    }
+
+    .message-command {
+        border: round #d29922;
+        background: #161b22;
+    }
+
+    .message-tool {
+        border: round #8957e5;
+        background: #161b22;
+    }
+
+    .message-system {
+        border: round #6e7681;
+        background: #161b22;
     }
 
     RichLog {
-        scrollbar-color: $primary;
-        scrollbar-background: $panel;
+        scrollbar-color: #58a6ff;
+        scrollbar-background: #21262d;
+    }
+
+    .spinner {
+        color: #58a6ff;
+        text-style: bold;
     }
     """
 
@@ -155,34 +209,57 @@ class DevSynapseTUI(App):
         self.last_model = None
         self.last_response_text = ""
         self._dispatcher: CommandDispatcher | None = None
+        self._is_busy = False
+        self._streaming_panel_id = None
+        self._total_tokens = 0
+        self._total_cost = 0.0
+        self._command_suggestions: list[CommandSuggestion] = []
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
+        yield NotificationManager(id="notifications")
         with Horizontal(id="workspace"):
             with Vertical(id="main-pane"):
                 yield RichLog(id="chat", highlight=True, markup=True, wrap=True)
-                yield Input(
-                    id="input",
-                    placeholder="Message DevSynapse, /help, /status, or !<shell command>",
-                )
-            with Vertical(id="side-pane"):
-                yield Static(id="session-panel", classes="panel")
-                yield Static(id="providers-panel", classes="panel")
-                yield Static(id="commands-panel", classes="panel")
-        yield Static(id="bar")
+                yield Static("", id="typing-indicator")
+                with Vertical(id="input-container"):
+                    yield OptionList(id="command-suggestions", classes="hidden")
+                    yield EnhancedInput(
+                        id="input",
+                        placeholder="Message /help or !cmd (Shift+Enter for new line)",
+                    )
+            yield DynamicSidebar(id="sidebar")
+        yield Static(id="status-bar")
         yield Footer()
 
     async def on_mount(self):
         input_w = self._input()
         input_w.focus()
+        self._sidebar().refresh_all(
+            session_id=self.conversation_id,
+            project_name=self.project_name,
+        )
         await self._init_engine()
-        self._refresh_sidebar()
 
     def _chat(self) -> RichLog:
         return self.query_one("#chat", RichLog)
 
-    def _input(self) -> Input:
-        return self.query_one("#input", Input)
+    def _input(self) -> EnhancedInput:
+        return self.query_one("#input", EnhancedInput)
+
+    def _sidebar(self) -> DynamicSidebar:
+        return self.query_one("#sidebar", DynamicSidebar)
+
+    def _notifications(self) -> NotificationManager:
+        return self.query_one("#notifications", NotificationManager)
+
+    def _typing_indicator(self) -> Static:
+        return self.query_one("#typing-indicator", Static)
+
+    def _command_dispatcher(self) -> CommandDispatcher:
+        if self._dispatcher is None:
+            self._dispatcher = CommandDispatcher(self)
+        return self._dispatcher
 
     def _write_panel(
         self,
@@ -248,21 +325,19 @@ class DevSynapseTUI(App):
                     "Use [bold]/connect[/] to open provider setup, or "
                     "[bold]/connect deepseek <api-key>[/]."
                 )
-                self._update_status_bar()
             else:
                 self._write_welcome()
                 chat.write(
                     "[green]Ready.[/] Type a task, [bold]/help[/], [bold]/model[/], "
                     "[bold]/copy[/], [bold]/budget[/], [bold]/router[/] or [bold]/usage[/]."
                 )
-                self._update_status_bar()
             chat.write("")
             self._refresh_sidebar()
 
         except Exception as e:
             chat.write(f"[red]Init error: {e}[/]")
             logger.exception("Init failed")
-            self._refresh_sidebar()
+            self._notifications().show(f"Init failed: {e}", "error")
 
     def _write_welcome(self) -> None:
         chat = self.query_one("#chat", RichLog)
@@ -297,76 +372,53 @@ class DevSynapseTUI(App):
 
     def _refresh_sidebar(self) -> None:
         try:
-            settings = app_settings.get_settings()
             project_count = len(self.memory.get_project_lookup()) if self.memory else 0
             budget = self.memory.get_llm_budget_status() if self.memory else {}
-            budget_status = budget.get("overall_status", "unknown")
-            provider_count = sum(
-                bool(_provider_key(settings, provider))
-                for provider in PROVIDER_CONFIGS
+            usage_stats = self.memory.get_llm_usage_stats(hours=24) if self.memory else {}
+            telemetry_stats = (
+                self.memory.get_llm_telemetry_stats(hours=24) if self.memory else {}
             )
-            default_provider = (settings.llm_default_provider or "deepseek").strip().lower()
-            active_model = _provider_model(settings, default_provider)
-            short_conversation_id = self.conversation_id.removeprefix("chat_")
+            catalog_count = (
+                len(self.memory.list_llm_models(limit=500)) if self.memory else 0
+            )
 
-            self.query_one("#session-panel", Static).update(
-                "\n".join(
-                    [
-                        "[bold accent]Session[/]",
-                        f"chat: {short_conversation_id}",
-                        f"project: {self.project_name or 'none'}",
-                        f"projects: {project_count}",
-                        f"budget: {budget_status}",
-                    ]
-                )
-            )
-            self.query_one("#providers-panel", Static).update(
-                "\n".join(
-                    [
-                        "[bold accent]Model[/]",
-                        f"provider: {default_provider}",
-                        f"model: {_shorten_middle(active_model, 30)}",
-                        f"configured keys: {provider_count}",
-                        f"last: {_shorten_middle(self.last_model, 28) if self.last_model else 'none'}",
-                        "[dim]F2 or /model[/]",
-                    ]
-                )
-            )
-            self.query_one("#commands-panel", Static).update(
-                "\n".join(
-                    [
-                        "[bold accent]Commands[/]",
-                        "F2  model picker",
-                        "^p  providers",
-                        "F3  copy answer",
-                        "^r  refresh",
-                        "^n  new chat",
-                        "",
-                        "/connect  provider setup",
-                        "/model    choose model",
-                        "/models   catalog",
-                        "/usage    telemetry",
-                        "!cmd      shell tool",
-                    ]
-                )
+            self._sidebar().refresh_all(
+                session_id=self.conversation_id,
+                project_name=self.project_name,
+                project_count=project_count,
+                budget_status=budget,
+                provider=self.last_provider,
+                model=self.last_model,
+                tokens=self._total_tokens,
+                cost=self._total_cost,
+                usage_stats=usage_stats,
+                telemetry_stats=telemetry_stats,
+                catalog_count=catalog_count,
             )
         except Exception as e:
             logger.exception("Could not refresh TUI sidebar: %s", e)
 
     async def action_clear_chat(self):
         self._chat().clear()
+        self._notifications().show("Chat cleared", "info")
 
     async def action_show_help(self):
-        if self._dispatcher:
-            await self._dispatcher.cmd_help([])
+        await self._command_dispatcher().cmd_help([])
 
     async def action_new_session(self):
         if self._dispatcher:
             await self._dispatcher.cmd_new([])
+        else:
+            self.conversation_id = generate_conversation_id()
+            self._chat().clear()
+            self._write_welcome()
+            self._refresh_sidebar()
+            self._notifications().show("New session started", "success")
 
     async def action_refresh_status(self):
-        if self._dispatcher:
-            await self._dispatcher.cmd_status([])
+        await self._command_dispatcher().cmd_status([])
+        self._refresh_sidebar()
+        self._notifications().show("Status refreshed", "info")
 
     async def action_open_connect(self):
         await self._open_connect_screen()
@@ -375,8 +427,7 @@ class DevSynapseTUI(App):
         await self._open_model_screen()
 
     async def action_copy_last_response(self):
-        if self._dispatcher:
-            await self._dispatcher.cmd_copy([])
+        await self._command_dispatcher().cmd_copy([])
 
     async def on_input_submitted(self, event):
         task = event.value.strip()
@@ -386,26 +437,26 @@ class DevSynapseTUI(App):
         input_w = self._input()
         chat = self._chat()
 
+        self._hide_command_suggestions()
+        input_w.add_to_history(task)
         input_w.clear()
         input_w.disabled = True
-        self._update_status_bar(message="busy")
+        self._set_busy(True)
 
         self._write_user_message(task)
 
         if task.startswith("/"):
-            if self._dispatcher is None:
-                self._dispatcher = CommandDispatcher(self)
-            await self._dispatcher.handle(task)
+            await self._command_dispatcher().handle(task)
+            self._set_busy(False)
             input_w.disabled = False
             input_w.focus()
-            self._update_status_bar()
             return
 
         if task.startswith("!"):
             await self._handle_shell_message(task[1:].strip())
+            self._set_busy(False)
             input_w.disabled = False
             input_w.focus()
-            self._update_status_bar()
             return
 
         if not self.brain or not self.brain.deepseek.configured:
@@ -414,18 +465,47 @@ class DevSynapseTUI(App):
                 "Use [bold]/connect[/] to open provider setup, or "
                 "[bold]/connect deepseek <api-key>[/].\n"
             )
+            self._set_busy(False)
             input_w.disabled = False
             input_w.focus()
-            self._update_status_bar()
             return
 
         await self._process(task, chat, input_w)
 
+    def _get_color(self, color_name: str) -> str:
+        """Get color from palette for status bar."""
+        color_map = {
+            "accent_blue": "#58a6ff",
+            "accent_green": "#3fb950",
+            "accent_orange": "#d29922",
+            "accent_red": "#f85149",
+            "accent_purple": "#a371f7",
+            "foreground_secondary": "#8b949e",
+        }
+        return color_map.get(color_name, "#58a6ff")
+
+    def _set_busy(self, busy: bool) -> None:
+        """Set busy state with visual indicators."""
+        self._is_busy = busy
+        typing = self._typing_indicator()
+        if busy:
+            typing.update(f"[bold {self._get_color('accent_blue')}]DevSynapse is thinking...[/]")
+            typing.add_class("pulse")
+        else:
+            typing.update("")
+            typing.remove_class("pulse")
+        self._sidebar().set_busy(busy)
+        self._update_status_bar(message="busy" if busy else None)
+
     async def _process(self, task, chat, input_w):
         streamed_chunks: list[str] = []
+        typing_shown = False
 
         def on_token(chunk: str) -> None:
+            nonlocal typing_shown
             streamed_chunks.append(chunk)
+            if not typing_shown:
+                typing_shown = True
 
         try:
             response_text, command, usage = await self.brain.process_message(
@@ -451,6 +531,10 @@ class DevSynapseTUI(App):
                 self.last_model = usage.get("model") or self.last_model
                 if self.last_provider and self.last_model:
                     self._write_model_message(self.last_provider, self.last_model)
+                tokens = usage.get("total_tokens") or 0
+                cost = usage.get("estimated_cost_usd") or 0.0
+                self._total_tokens += tokens
+                self._total_cost += cost
                 self._update_status_bar(usage)
 
             chat.write("")
@@ -458,11 +542,100 @@ class DevSynapseTUI(App):
         except Exception as e:
             chat.write(f"[red]Error: {e}[/]\n")
             logger.exception("process failed")
+            self._notifications().show(f"Error: {e}", "error")
         finally:
+            self._set_busy(False)
             input_w.disabled = False
             input_w.focus()
             self._update_status_bar()
             self._refresh_sidebar()
+
+    def on_input_changed(self, event) -> None:
+        if event.input.id == "input":
+            self.refresh_command_suggestions(event.value)
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        if event.option_list.id != "command-suggestions":
+            return
+        event.stop()
+        self.accept_command_suggestion(event.index)
+        self._input().focus()
+
+    def refresh_command_suggestions(self, value: str | None = None, *, force: bool = False) -> None:
+        """Refresh the slash command suggestion menu for the current input."""
+        text = self._input().value if value is None else value
+        if self._is_busy and not force:
+            self._hide_command_suggestions()
+            return
+
+        project_names = self.memory.get_project_lookup().keys() if self.memory else ()
+        suggestions = build_command_suggestions(text, project_names=project_names)
+        if force and not suggestions:
+            suggestions = build_command_suggestions("/", project_names=project_names)
+        self._command_suggestions = suggestions
+
+        menu = self.query_one("#command-suggestions", OptionList)
+        menu.clear_options()
+        if not suggestions:
+            self._hide_command_suggestions()
+            return
+
+        menu.add_options(
+            [
+                Option(
+                    (
+                        f"[dim]{suggestion.category:<7}[/] "
+                        f"[bold]{suggestion.label:<26}[/] "
+                        f"[dim]{suggestion.description}[/]"
+                    ),
+                    id=f"command-suggestion-{index}",
+                )
+                for index, suggestion in enumerate(suggestions)
+            ]
+        )
+        menu.highlighted = 0
+        menu.remove_class("hidden")
+
+    def move_command_suggestion(self, direction: int) -> bool:
+        """Move the active command suggestion while the input keeps focus."""
+        menu = self.query_one("#command-suggestions", OptionList)
+        if not self._command_suggestions or menu.has_class("hidden"):
+            return False
+        current = menu.highlighted if isinstance(menu.highlighted, int) else 0
+        next_index = max(0, min(menu.option_count - 1, current + direction))
+        menu.highlighted = next_index
+        menu.scroll_to_highlight()
+        return True
+
+    def accept_command_suggestion(self, index: int | None = None) -> bool:
+        """Apply the highlighted command suggestion to the input."""
+        menu = self.query_one("#command-suggestions", OptionList)
+        if not self._command_suggestions or menu.has_class("hidden"):
+            return False
+        selected_index = index
+        if selected_index is None:
+            selected_index = menu.highlighted if isinstance(menu.highlighted, int) else 0
+        if selected_index is None or selected_index >= len(self._command_suggestions):
+            return False
+
+        suggestion = self._command_suggestions[selected_index]
+        input_w = self._input()
+        if input_w.value == suggestion.value:
+            self._hide_command_suggestions()
+            return False
+        input_w.value = suggestion.value
+        input_w.cursor_position = len(input_w.value)
+        self.refresh_command_suggestions(input_w.value)
+        return True
+
+    def _hide_command_suggestions(self) -> None:
+        self._command_suggestions = []
+        try:
+            menu = self.query_one("#command-suggestions", OptionList)
+        except Exception:
+            return
+        menu.clear_options()
+        menu.add_class("hidden")
 
     async def _handle_shell_message(self, command: str) -> None:
         chat = self._chat()
@@ -517,6 +690,7 @@ class DevSynapseTUI(App):
         chat = self.query_one("#chat", RichLog)
         if not result:
             chat.write("[yellow]Provider setup cancelled.[/]")
+            self._notifications().show("Provider setup cancelled", "warning")
             return
         try:
             await self._save_provider_credentials(
@@ -527,9 +701,11 @@ class DevSynapseTUI(App):
         except Exception as exc:
             chat.write(f"[red]Could not save provider key:[/] {exc}")
             logger.exception("Could not save provider key")
+            self._notifications().show(f"Save failed: {exc}", "error")
             return
         chat.write(f"[green]Provider ready:[/] {result['provider']}")
         chat.write("Use [bold]/discover[/] to refresh available model data.")
+        self._notifications().show(f"Provider {result['provider']} ready", "success")
 
     async def _save_provider_credentials(
         self,
@@ -581,6 +757,7 @@ class DevSynapseTUI(App):
         chat = self.query_one("#chat", RichLog)
         if not result:
             chat.write("[yellow]Model selection cancelled.[/]")
+            self._notifications().show("Model selection cancelled", "warning")
             return
         provider = result["provider"]
         model = result["model"]
@@ -596,6 +773,7 @@ class DevSynapseTUI(App):
         )
         await self._rebuild_engine()
         chat.write(f"[green]Model selected:[/] {provider}:{model}")
+        self._notifications().show(f"Model set to {model}", "success")
 
     def _model_picker_catalog(self, selected_provider: str) -> list[dict[str, Any]]:
         models: list[dict[str, Any]] = []
@@ -628,38 +806,28 @@ class DevSynapseTUI(App):
     def _update_status_bar(self, usage: dict | None = None, message: str | None = None) -> None:
         if self.memory is None:
             return
-        bar = self.query_one("#bar", Static)
-        settings = app_settings.get_settings()
-        provider_count = sum(
-            bool(_provider_key(settings, provider))
-            for provider in PROVIDER_CONFIGS
-        )
+        bar = self.query_one("#status-bar", Static)
         budget = self.memory.get_llm_budget_status()
-        project = self.project_name or "-"
+        budget_str = budget.get("overall_status", "unknown")
+        budget_color = "green" if budget_str == "healthy" else ("yellow" if budget_str == "warning" else "red")
+
         if message:
-            bar.update(
-                f" providers:{provider_count}  budget:{budget['overall_status']}  "
-                f"project:{project}  {message}"
-            )
+            bar.update(f"[bold {self._get_color('accent_blue')}]*[/] {message}")
             return
+
         if usage:
             provider = usage.get("provider", "?")
-            model = usage.get("model", "?")
+            model = (usage.get("model", "?") or "")[:20]
             tokens = usage.get("total_tokens") or 0
             cost = _format_money(usage.get("estimated_cost_usd"))
             bar.update(
-                f" providers:{provider_count}  budget:{budget['overall_status']}  "
-                f"project:{project}  {provider}/{model}  tokens:{tokens}  cost:{cost}"
+                f"[dim]{provider}[/] [bold]{model}[/] [dim]{tokens} tok[/] "
+                f"[{budget_color}]{cost}[/]"
             )
         else:
-            model_status = (
-                f" {self.last_provider}/{self.last_model}"
-                if self.last_provider and self.last_model
-                else ""
-            )
             bar.update(
-                f" providers:{provider_count}  budget:{budget['overall_status']}  "
-                f"project:{project}{model_status}  conversation:{self.conversation_id}"
+                f"[dim]DevSynapse AI[/] [bold {self._get_color('accent_green')}]ready[/]  "
+                f"budget:[{budget_color}]{budget_str}[/]"
             )
 
 

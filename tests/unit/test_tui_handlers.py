@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from devsynapse.command_catalog import build_command_suggestions, slash_command_help_lines
 from devsynapse.commands import (
     OPENROUTER_CURATED_FREE_MODELS,
     CommandDispatcher,
@@ -63,6 +64,19 @@ class TestPureHelpers:
         assert "free" in _model_option_label(model)
         assert "tools" in _model_option_label(model)
 
+    def test_command_catalog_suggests_provider_arguments(self):
+        suggestions = build_command_suggestions("/connect o")
+        values = [suggestion.value for suggestion in suggestions]
+        assert "/connect openrouter " in values
+        assert "/connect opencode-go " in values
+
+    def test_command_help_uses_catalog(self):
+        lines = slash_command_help_lines()
+        text = " ".join(lines)
+        assert "/connect <provider>" in text
+        assert "/providers" in text
+        assert "/details" in text
+
 
 def _configure_runtime(monkeypatch: pytest.MonkeyPatch, runtime_root: Path) -> None:
     """Set up isolated runtime environment for TUI tests."""
@@ -86,6 +100,21 @@ def _mock_chat(app):
     def patched_query_one(selector, *args, **kwargs):
         if selector == "#chat" or (isinstance(selector, str) and selector.startswith("#chat")):
             return mock_widget
+        if selector == "#typing-indicator":
+            mock_indicator = MagicMock()
+            mock_indicator.update = MagicMock()
+            mock_indicator.add_class = MagicMock()
+            mock_indicator.remove_class = MagicMock()
+            return mock_indicator
+        if selector == "#status-bar":
+            mock_bar = MagicMock()
+            mock_bar.update = MagicMock()
+            return mock_bar
+        if selector == "#sidebar":
+            mock_sidebar = MagicMock()
+            mock_sidebar.refresh_all = MagicMock()
+            mock_sidebar.set_busy = MagicMock()
+            return mock_sidebar
         return original_query_one(selector, *args, **kwargs)
 
     app.query_one = patched_query_one
@@ -166,17 +195,14 @@ class TestSlashCommandHandlers:
         app = DevSynapseTUI()
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            mock_chat = _mock_chat(app)
             dispatcher = CommandDispatcher(app)
             await dispatcher.cmd_help([])
             await pilot.pause()
 
-            calls = [c[0][0] for c in mock_chat.write.call_args_list]
-            text = " ".join(calls)
-            assert "/connect" in text
-            assert "/status" in text
-            assert "/budget" in text
-            assert "/router" in text
+            assert len(app.screen_stack) > 1
+            from devsynapse.screens.help_screen import HelpScreen
+            top_screen = app.screen_stack[-1]
+            assert isinstance(top_screen, HelpScreen)
 
     @pytest.mark.asyncio
     async def test_status_shows_session_info(self, tmp_path, monkeypatch):
