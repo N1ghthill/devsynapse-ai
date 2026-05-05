@@ -1,12 +1,15 @@
 """Rich renderers for TUI command and tool output."""
 from __future__ import annotations
 
+import csv
+import io
 import json
 import re
 from dataclasses import dataclass
 
 from rich.console import Group, RenderableType
 from rich.syntax import Syntax
+from rich.table import Table
 from rich.text import Text
 
 
@@ -101,6 +104,20 @@ def render_command_result(
         )
         return Group(*sections)
 
+    table = render_table_output(output)
+    if table is not None:
+        rows = tabular_output_rows(output)
+        row_count = max(len(rows or []) - 1, 0)
+        col_count = len(rows[0]) if rows else 0
+        sections.append(
+            Text.assemble(
+                ("table ", "bold"),
+                (f"{row_count} rows  {col_count} cols", "dim"),
+            )
+        )
+        sections.append(table)
+        return Group(*sections)
+
     structured = structured_output_lexer(output)
     if structured is not None:
         lexer, normalized = structured
@@ -143,6 +160,63 @@ def structured_output_lexer(text: str) -> tuple[str, str] | None:
         return "yaml", stripped
 
     return None
+
+
+def tabular_output_rows(text: str) -> list[list[str]] | None:
+    """Return normalized CSV/TSV rows when text is safe to render as a table."""
+    stripped = strip_ansi(text).strip()
+    if not stripped:
+        return None
+
+    lines = [line for line in stripped.splitlines() if line.strip()]
+    if len(lines) < 2:
+        return None
+
+    first_line = lines[0]
+    delimiter = "\t" if "\t" in first_line else ","
+    if delimiter not in first_line:
+        return None
+
+    try:
+        rows = list(csv.reader(io.StringIO("\n".join(lines)), delimiter=delimiter))
+    except csv.Error:
+        return None
+
+    if len(rows) < 2:
+        return None
+
+    rows = [[cell.strip() for cell in row] for row in rows]
+    col_count = len(rows[0])
+    if col_count < 2 or col_count > 10:
+        return None
+    if any(len(row) != col_count for row in rows):
+        return None
+    if any(not cell for cell in rows[0]):
+        return None
+    if all(not any(cell for cell in row) for row in rows[1:]):
+        return None
+
+    return rows
+
+
+def render_table_output(text: str, *, max_rows: int = 30) -> Table | None:
+    """Build a Rich table for CSV/TSV output."""
+    rows = tabular_output_rows(text)
+    if rows is None:
+        return None
+
+    headers, data_rows = rows[0], rows[1:]
+    table = Table(show_header=True, header_style="bold cyan", expand=False)
+    for index, header in enumerate(headers, start=1):
+        table.add_column(header or f"column {index}", overflow="fold")
+
+    visible_rows = data_rows[:max_rows]
+    for row in visible_rows:
+        table.add_row(*row)
+    if len(data_rows) > max_rows:
+        table.add_row(*(["..."] * len(headers)))
+
+    return table
 
 
 def strip_ansi(text: str) -> str:

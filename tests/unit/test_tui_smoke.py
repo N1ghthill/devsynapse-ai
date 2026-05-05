@@ -16,6 +16,7 @@ from devsynapse.tui_rendering import (
     is_unified_diff,
     render_command_result,
     structured_output_lexer,
+    tabular_output_rows,
 )
 from devsynapse.tui_sidebar import DynamicSidebar
 
@@ -97,6 +98,24 @@ def test_tui_renderer_detects_json_and_yaml_outputs():
     assert '"ok": true' in json_result[1]
     assert yaml_result == ("yaml", "name: devsynapse\nstatus: ready")
     assert render_command_result(message="ok", output='{"status": "ready"}') is not None
+
+
+def test_tui_renderer_detects_csv_and_tsv_table_outputs():
+    csv_output = "name,status\napi,ready\nworker,queued\n"
+    tsv_output = "name\tstatus\napi\tready\nworker\tqueued\n"
+
+    assert tabular_output_rows(csv_output) == [
+        ["name", "status"],
+        ["api", "ready"],
+        ["worker", "queued"],
+    ]
+    assert tabular_output_rows(tsv_output) == [
+        ["name", "status"],
+        ["api", "ready"],
+        ["worker", "queued"],
+    ]
+    assert tabular_output_rows("hello, world\n") is None
+    assert render_command_result(message="ok", output=csv_output) is not None
 
 
 @pytest.mark.asyncio

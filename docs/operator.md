@@ -143,9 +143,9 @@ Supported provider names:
 !<command>                       run a shell command through the command bridge
 ```
 
-Shell output that looks like a unified diff, git patch, JSON or YAML is rendered
-with syntax highlighting. Diffs also include a compact file, hunk, addition and
-deletion summary.
+Shell output that looks like a unified diff, git patch, JSON, YAML, CSV or TSV
+is rendered with richer formatting. Diffs also include a compact file, hunk,
+addition and deletion summary.
 
 When an active project is selected, the sidebar Files panel summarizes git
 worktree changes and links the next inspection path to `!git diff`.
