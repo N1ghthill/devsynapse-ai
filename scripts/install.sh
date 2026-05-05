@@ -3,16 +3,42 @@
 # DevSynapse AI - TUI installer
 #
 # Usage:
+#   curl -fsSL https://raw.githubusercontent.com/N1ghthill/devsynapse-ai/main/scripts/install.sh | bash
 #   bash scripts/install.sh
 #
 # Installs the Python runtime, creates user-scoped config/data/log directories,
-# applies SQLite migrations and configures shell aliases for the canonical TUI.
+# applies SQLite migrations and installs canonical shell commands.
 
 set -euo pipefail
 
+APP_ID="devsynapse-ai"
+REPO_URL="${DEVSYNAPSE_REPO_URL:-https://github.com/N1ghthill/devsynapse-ai.git}"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-APP_ID="devsynapse-ai"
+
+if [ -n "${DEVSYNAPSE_INSTALL_DIR:-}" ]; then
+    INSTALL_DIR="${DEVSYNAPSE_INSTALL_DIR/#\~/$HOME}"
+else
+    INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/$APP_ID/source"
+fi
+
+if [ ! -f "$ROOT_DIR/pyproject.toml" ] || [ ! -f "$ROOT_DIR/.env.example" ]; then
+    echo "DevSynapse source checkout not found; bootstrapping from $REPO_URL"
+    if ! command -v git >/dev/null 2>&1; then
+        echo "Missing dependency: git" >&2
+        echo "Install with: sudo apt update && sudo apt install -y git python3 python3-venv python3-pip" >&2
+        exit 1
+    fi
+    if [ -d "$INSTALL_DIR/.git" ]; then
+        git -C "$INSTALL_DIR" fetch --tags origin
+        git -C "$INSTALL_DIR" pull --ff-only
+    else
+        mkdir -p "$(dirname "$INSTALL_DIR")"
+        git clone "$REPO_URL" "$INSTALL_DIR"
+    fi
+    exec bash "$INSTALL_DIR/scripts/install.sh" "$@"
+fi
 
 if [ -n "${DEVSYNAPSE_HOME:-}" ]; then
     RUNTIME_HOME="${DEVSYNAPSE_HOME/#\~/$HOME}"
@@ -29,6 +55,7 @@ CONFIG_FILE="${DEVSYNAPSE_CONFIG_FILE:-$CONFIG_DIR/.env}"
 CONFIG_FILE_DIR="$(dirname "$CONFIG_FILE")"
 MEMORY_DB_FILE="$DATA_DIR/devsynapse_memory.db"
 LOG_FILE="$LOGS_DIR/devsynapse.log"
+BIN_DIR="${DEVSYNAPSE_BIN_DIR:-$HOME/.local/bin}"
 export DEVSYNAPSE_CONFIG_FILE="$CONFIG_FILE"
 
 APP_VERSION="$(awk -F\" '/app_version: str =/ {print $2; exit}' "$ROOT_DIR/config/settings.py" 2>/dev/null || true)"
@@ -45,6 +72,27 @@ step() { echo -e "\n${BOLD}${CYAN}[$1]${NC} ${BOLD}$2${NC}"; }
 ok() { echo -e "  ${GREEN}OK${NC} $1"; }
 warn() { echo -e "  ${YELLOW}WARN${NC} $1"; }
 fail() { echo -e "  ${RED}FAIL${NC} $1"; }
+
+prompt_value() {
+    local prompt="$1"
+    local default_value="${2:-}"
+    local value=""
+
+    if [ -n "${DEVSYNAPSE_ASSUME_DEFAULTS:-}" ]; then
+        echo "$default_value"
+        return
+    fi
+
+    if [ -t 0 ]; then
+        read -r -p "$prompt" value || value="$default_value"
+    elif [ -t 1 ] && [ -r /dev/tty ]; then
+        read -r -p "$prompt" value < /dev/tty || value="$default_value"
+    else
+        read -r -p "$prompt" value || value="$default_value"
+    fi
+
+    echo "${value:-$default_value}"
+}
 
 set_env_value() {
     local key="$1"
@@ -166,7 +214,7 @@ configure_runtime() {
     echo -e "  ${BOLD}Provider API key${NC}"
     echo -e "  Set one key now, or press Enter and use /connect inside the TUI later."
     echo ""
-    read -r -p "  DeepSeek API key [optional]: " api_key
+    api_key="$(prompt_value "  DeepSeek API key [optional]: " "")"
     echo ""
 
     if [ -n "$api_key" ]; then
@@ -200,8 +248,7 @@ configure_runtime() {
         auto_repos="$HOME/Projects"
     fi
 
-    read -r -p "  Path [$auto_repos]: " repos_root
-    repos_root="${repos_root:-$auto_repos}"
+    repos_root="$(prompt_value "  Path [$auto_repos]: " "$auto_repos")"
     echo ""
 
     if [ ! -d "$repos_root" ]; then
@@ -215,47 +262,86 @@ configure_runtime() {
     ok "Logs: $LOGS_DIR"
 }
 
-configure_aliases() {
-    local alias_marker="# >>> devsynapse alias (managed by scripts/install.sh) >>>"
-    local alias_end="# <<< devsynapse alias <<<"
-    local alias_line="alias devsynapse='cd \"$ROOT_DIR\" && DEVSYNAPSE_CONFIG_FILE=\"$CONFIG_FILE\" bash devsynapse.sh'"
-    local update_line="alias update-devsynapse='cd \"$ROOT_DIR\" && DEVSYNAPSE_CONFIG_FILE=\"$CONFIG_FILE\" bash scripts/update.sh'"
-    local uninstall_line="alias uninstall-devsynapse='cd \"$ROOT_DIR\" && DEVSYNAPSE_CONFIG_FILE=\"$CONFIG_FILE\" bash scripts/uninstall.sh'"
+remove_legacy_aliases() {
+    local rc_file="$1"
+    local tmp_file
 
-    setup_alias() {
-        local rc_file="$1"
-        local rc_name
-        rc_name=$(basename "$rc_file")
+    if [ ! -f "$rc_file" ]; then
+        return
+    fi
 
-        if [ ! -f "$rc_file" ]; then
-            touch "$rc_file"
-        fi
+    tmp_file="${rc_file}.devsynapse_tmp"
+    sed \
+        -e '/^# >>> devsynapse alias /,/^# <<< devsynapse alias <<</d' \
+        -e '/^# >>> devsynapse$/,/^# <<< devsynapse$/d' \
+        -e '/^alias devsynapse=/d' \
+        -e '/^alias update-devsynapse=/d' \
+        -e '/^alias uninstall-devsynapse=/d' \
+        "$rc_file" > "$tmp_file"
+    mv "$tmp_file" "$rc_file"
+}
 
-        if grep -qF "$alias_marker" "$rc_file" 2>/dev/null; then
-            local tmp_file
-            tmp_file="${rc_file}.devsynapse_tmp"
-            awk -v start="$alias_marker" -v end="$alias_end" '
-                $0 == start { skip = 1; next }
-                $0 == end { skip = 0; next }
-                skip != 1 { print }
-            ' "$rc_file" > "$tmp_file"
-            mv "$tmp_file" "$rc_file"
-        fi
+configure_shell_path() {
+    local rc_file="$1"
+    local marker="# >>> devsynapse path (managed by scripts/install.sh) >>>"
+    local marker_end="# <<< devsynapse path <<<"
+    local rc_name
+    local tmp_file
 
-        {
-            echo ""
-            echo "$alias_marker"
-            echo "$alias_line"
-            echo "$update_line"
-            echo "$uninstall_line"
-            echo "$alias_end"
-        } >> "$rc_file"
+    rc_name="$(basename "$rc_file")"
+    mkdir -p "$(dirname "$rc_file")"
+    touch "$rc_file"
+    remove_legacy_aliases "$rc_file"
 
-        ok "Aliases written to $rc_name"
-    }
+    if grep -qF "$marker" "$rc_file" 2>/dev/null; then
+        tmp_file="${rc_file}.devsynapse_tmp"
+        awk -v start="$marker" -v end="$marker_end" '
+            $0 == start { skip = 1; next }
+            $0 == end { skip = 0; next }
+            skip != 1 { print }
+        ' "$rc_file" > "$tmp_file"
+        mv "$tmp_file" "$rc_file"
+    fi
 
+    {
+        echo ""
+        echo "$marker"
+        echo "export PATH=\"$BIN_DIR:\$PATH\""
+        echo "$marker_end"
+    } >> "$rc_file"
+
+    ok "PATH configured in $rc_name"
+}
+
+write_command_wrappers() {
+    mkdir -p "$BIN_DIR"
+
+    cat > "$BIN_DIR/devsynapse" <<EOF
+#!/usr/bin/env bash
+export DEVSYNAPSE_CONFIG_FILE="$CONFIG_FILE"
+exec "$ROOT_DIR/devsynapse.sh" "\$@"
+EOF
+
+    cat > "$BIN_DIR/update-devsynapse" <<EOF
+#!/usr/bin/env bash
+export DEVSYNAPSE_CONFIG_FILE="$CONFIG_FILE"
+exec bash "$ROOT_DIR/scripts/update.sh" "\$@"
+EOF
+
+    cat > "$BIN_DIR/uninstall-devsynapse" <<EOF
+#!/usr/bin/env bash
+export DEVSYNAPSE_CONFIG_FILE="$CONFIG_FILE"
+exec bash "$ROOT_DIR/scripts/uninstall.sh" "\$@"
+EOF
+
+    chmod +x "$BIN_DIR/devsynapse" "$BIN_DIR/update-devsynapse" "$BIN_DIR/uninstall-devsynapse"
+    ok "Commands installed in $BIN_DIR"
+}
+
+configure_commands() {
+    write_command_wrappers
     for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-        setup_alias "$rc"
+        configure_shell_path "$rc"
     done
 }
 
@@ -294,14 +380,14 @@ install() {
     }
     ok "Migrations applied"
 
-    step "6/6" "Configuring shell aliases"
-    configure_aliases
+    step "6/6" "Installing commands"
+    configure_commands
 
     echo ""
     echo -e "${BOLD}${GREEN}DevSynapse AI installed.${NC}"
     echo ""
     echo -e "${BOLD}Start:${NC}"
-    echo -e "  ${CYAN}source ~/.bashrc${NC}"
+    echo -e "  ${CYAN}source ~/.bashrc${NC}  # if ~/.local/bin was not already in PATH"
     echo -e "  ${CYAN}devsynapse${NC}"
     echo ""
     echo -e "${BOLD}Inside the TUI:${NC}"

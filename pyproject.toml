@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "devsynapse-ai"
-version = "0.9.3"
+version = "1.0.0"
 description = "A local-first DeepSeek coding agent - terminal UI edition"
 requires-python = ">=3.10"
 dependencies = [

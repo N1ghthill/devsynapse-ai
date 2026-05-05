@@ -6,6 +6,7 @@ product.
 ## Start Here
 
 - repository overview: [../README.md](../README.md)
+- product contract: [product-contract.md](product-contract.md)
 - operator guide: [operator.md](operator.md)
 - agent/contributor operating guide: [../AGENTS.md](../AGENTS.md)
 - architecture overview: [architecture/overview.md](architecture/overview.md)

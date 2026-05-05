@@ -46,6 +46,7 @@ else
 fi
 
 CONFIG_FILE="${DEVSYNAPSE_CONFIG_FILE:-$CONFIG_DIR/.env}"
+BIN_DIR="${DEVSYNAPSE_BIN_DIR:-$HOME/.local/bin}"
 export DEVSYNAPSE_CONFIG_FILE="$CONFIG_FILE"
 
 GREEN='\033[0;32m'
@@ -305,6 +306,31 @@ ensure_runtime_config() {
     set_env_value "LOG_FILE" "$(get_config_value "LOG_FILE" "$LOGS_DIR/devsynapse.log")"
 }
 
+write_command_wrappers() {
+    mkdir -p "$BIN_DIR"
+
+    cat > "$BIN_DIR/devsynapse" <<EOF
+#!/usr/bin/env bash
+export DEVSYNAPSE_CONFIG_FILE="$CONFIG_FILE"
+exec "$ROOT_DIR/devsynapse.sh" "\$@"
+EOF
+
+    cat > "$BIN_DIR/update-devsynapse" <<EOF
+#!/usr/bin/env bash
+export DEVSYNAPSE_CONFIG_FILE="$CONFIG_FILE"
+exec bash "$ROOT_DIR/scripts/update.sh" "\$@"
+EOF
+
+    cat > "$BIN_DIR/uninstall-devsynapse" <<EOF
+#!/usr/bin/env bash
+export DEVSYNAPSE_CONFIG_FILE="$CONFIG_FILE"
+exec bash "$ROOT_DIR/scripts/uninstall.sh" "\$@"
+EOF
+
+    chmod +x "$BIN_DIR/devsynapse" "$BIN_DIR/update-devsynapse" "$BIN_DIR/uninstall-devsynapse"
+    ok "Command wrappers refreshed in $BIN_DIR"
+}
+
 refresh_runtime() {
     if [ ! -d "$ROOT_DIR/venv" ]; then
         python3 -m venv "$ROOT_DIR/venv"
@@ -317,6 +343,7 @@ refresh_runtime() {
     install_python_requirements
     ensure_runtime_config
     python3 "$ROOT_DIR/scripts/migrate.py" apply
+    write_command_wrappers
 
     ok "Python runtime and migrations refreshed"
 }

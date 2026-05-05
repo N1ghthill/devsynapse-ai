@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import logging
 import sys
 from pathlib import Path
@@ -27,7 +28,26 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="?",
         help=argparse.SUPPRESS,
     )
+    parser.add_argument(
+        "--version",
+        action="store_true",
+        help="show DevSynapse version and exit",
+    )
     return parser
+
+
+def _version() -> str:
+    try:
+        return importlib.metadata.version("devsynapse-ai")
+    except importlib.metadata.PackageNotFoundError:
+        settings_file = ROOT_DIR / "config" / "settings.py"
+        try:
+            for line in settings_file.read_text(encoding="utf-8").splitlines():
+                if "app_version: str =" in line:
+                    return line.split('"', 2)[1]
+        except OSError:
+            pass
+    return "unknown"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -39,6 +59,10 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.WARNING,
         format="%(levelname)s: %(message)s",
     )
+
+    if args.version:
+        print(f"devsynapse {_version()}")
+        return 0
 
     if args.unsupported_command:
         parser.error(

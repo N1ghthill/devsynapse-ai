@@ -22,6 +22,15 @@ class TestCliMain:
         captured = capsys.readouterr()
         assert "terminal UI" in captured.out
 
+    def test_version_does_not_run_tui(self, capsys):
+        with patch("devsynapse.tui.run_tui") as mock_run_tui:
+            from devsynapse import cli
+            result = cli.main(["--version"])
+            assert result == 0
+            mock_run_tui.assert_not_called()
+        captured = capsys.readouterr()
+        assert captured.out.startswith("devsynapse ")
+
     def test_rejects_unknown_command(self, capsys):
         from devsynapse import cli
         with pytest.raises(SystemExit) as exc_info:

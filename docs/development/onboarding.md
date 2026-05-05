@@ -41,8 +41,11 @@ and set at least one of:
 Start the terminal UI:
 
 ```bash
-./devsynapse.sh
+devsynapse
 ```
+
+If you have not run `bash scripts/install.sh`, use
+`./venv/bin/python -m devsynapse.cli` from the checkout.
 
 Use slash commands inside the TUI:
 

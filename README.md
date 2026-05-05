@@ -3,10 +3,18 @@
 DevSynapse AI is a local-first terminal UI coding agent for DeepSeek-compatible
 LLM providers. It runs as a Textual TUI, keeps project memory in SQLite, uses
 the manually selected model, and executes constrained local commands through a
-project-aware bridge. The product has one operator entry point: `devsynapse`.
+project-aware bridge.
+
+The product is intentionally narrow: one installed app command, one TUI, one
+runtime store, one install/update/uninstall path. See
+[docs/product-contract.md](docs/product-contract.md) for the source of truth.
 
 ## Product Surface
 
+- opens from `devsynapse`;
+- reports the installed build with `devsynapse --version`;
+- updates from `update-devsynapse`;
+- removes local artifacts from `uninstall-devsynapse`;
 - opens a single terminal UI for chat, setup, status and command execution;
 - calls DeepSeek, OpenRouter, OpenCode Zen or OpenCode Go when a matching API key
   is configured;
@@ -17,6 +25,14 @@ project-aware bridge. The product has one operator entry point: `devsynapse`.
 - tracks token usage and estimated LLM cost from provider responses;
 - keeps setup and operations in slash commands inside the TUI.
 
+Not product surface:
+
+- `devsynapse providers`, `devsynapse connect`, `devsynapse tui` or other
+  external operator subcommands;
+- shell aliases as the command installation mechanism;
+- web or desktop entry points;
+- disconnected prototype screens or generated runtime files.
+
 ## Requirements
 
 - Python 3.10 or newer; CI/development currently uses Python 3.13.
@@ -26,6 +42,41 @@ project-aware bridge. The product has one operator entry point: `devsynapse`.
   `OPENCODE_GO_API_KEY`.
 
 ## Quick Start
+
+Install or refresh the local app:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/N1ghthill/devsynapse-ai/main/scripts/install.sh | bash
+source ~/.bashrc
+devsynapse
+```
+
+The installer bootstraps the source checkout when needed, creates `venv/`,
+installs dependencies, applies migrations and writes real commands to
+`~/.local/bin`: `devsynapse`, `update-devsynapse` and `uninstall-devsynapse`.
+It also removes previous DevSynapse aliases from shell rc files.
+
+From an existing checkout, the same contract is:
+
+```bash
+bash scripts/install.sh
+devsynapse
+```
+
+Verify the installed build:
+
+```bash
+devsynapse --version
+```
+
+Update or remove:
+
+```bash
+update-devsynapse
+uninstall-devsynapse
+```
+
+For development:
 
 ```bash
 python3 -m venv venv
@@ -51,12 +102,6 @@ $EDITOR ~/.config/devsynapse-ai/.env
 ```
 
 Start DevSynapse:
-
-```bash
-./devsynapse.sh
-```
-
-The installer creates the same alias:
 
 ```bash
 devsynapse
@@ -89,10 +134,29 @@ Inside the TUI, DevSynapse exposes operational slash commands:
 ```
 
 The TUI keeps the conversation log, input line, session state, provider status,
-budget state and common commands visible in one terminal screen. It supports the
-slash commands above plus shortcuts such as `Ctrl+H` for help, `Ctrl+N` for a
-new conversation, `Ctrl+R` to refresh status, `F2` to choose a model and `F3`
-to copy the last assistant answer.
+budget state and common commands visible in one terminal screen. The right panel
+summarizes the active session, selected model, 24h request/token/cost telemetry,
+cache rate, error rate, latency, budget usage and the top recent model. The sidebar
+panels (Model, Telemetry) are collapsible for a cleaner view.
+
+Typing `/` opens a contextual command menu; `Up` and `Down` move through suggestions,
+and `Tab` or `Enter` completes the highlighted command or argument.
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+H` | Show help overlay |
+| `F2` | Open model picker |
+| `F3` | Copy last assistant answer |
+| `Ctrl+N` | New conversation |
+| `Ctrl+L` | Clear chat |
+| `Ctrl+P` | Open provider setup |
+| `Ctrl+R` | Refresh status |
+| `Ctrl+Space` | Command menu |
+| `Shift+Enter` | New line in input |
+| `Up/Down` | Navigate command history |
+| `Tab` | Autocomplete |
 
 ## Runtime State
 
@@ -101,6 +165,8 @@ By default DevSynapse stores user runtime files outside the source checkout:
 - config: `~/.config/devsynapse-ai/.env`
 - SQLite data: `~/.local/share/devsynapse-ai/data/devsynapse_memory.db`
 - logs: `~/.local/state/devsynapse-ai/logs/devsynapse.log`
+- default source checkout for curl installs:
+  `~/.local/share/devsynapse-ai/source`
 
 Set `DEVSYNAPSE_HOME=/path/to/runtime` to keep config, data and logs together
 under one directory. The more specific `DEVSYNAPSE_CONFIG_FILE`,
@@ -157,11 +223,11 @@ docs/              contributor and architecture documentation
 
 ## Verification
 
-Current local baseline after the TUI product cleanup:
+Product-critical checks:
 
-```text
-make lint        passed
-make test        167 passed
-make script-check passed
-make tui-smoke   passed
+```bash
+make script-check
+make tui-smoke
+./venv/bin/pytest -q tests/integration/test_install_uninstall_scripts.py
+./venv/bin/pytest -q tests/unit/test_cli.py tests/unit/test_cli_entry.py tests/unit/test_tui_smoke.py
 ```

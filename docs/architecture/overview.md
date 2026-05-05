@@ -33,13 +33,20 @@ SQLite memory stores + runtime config
 
 ## Entry Points
 
-Main files:
+Operator entry points:
+
+- `~/.local/bin/devsynapse`
+- `~/.local/bin/update-devsynapse`
+- `~/.local/bin/uninstall-devsynapse`
+
+Main source files:
 
 - [devsynapse/cli.py](../../devsynapse/cli.py)
 - [devsynapse/tui.py](../../devsynapse/tui.py)
 - [devsynapse.sh](../../devsynapse.sh)
 
 `devsynapse.cli:main` is the package script entry point and launches the TUI.
+`devsynapse.sh` is an internal checkout launcher used by the installed wrapper.
 Operator actions are exposed as slash commands inside the TUI, not as external
 subcommands.
 

@@ -33,8 +33,10 @@ For first-time setup from a new clone, use [onboarding.md](onboarding.md).
 Start the TUI:
 
 ```bash
-./devsynapse.sh
+devsynapse
 ```
+
+For an uninstalled checkout, run `./venv/bin/python -m devsynapse.cli`.
 
 Useful TUI commands:
 

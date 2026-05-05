@@ -103,6 +103,7 @@ class ProviderConnectionScreen(ModalScreen[dict[str, str] | None]):
             with Horizontal(id="connect-actions"):
                 yield Button("Cancel", id="connect-cancel")
                 yield Button("Save", variant="primary", id="connect-save")
+            yield Static("[dim]Esc cancel  Enter confirm[/]", id="connect-hints")
 
     async def on_mount(self) -> None:
         self.query_one("#provider-api-key", Input).focus()
@@ -207,6 +208,7 @@ class ModelSelectionScreen(ModalScreen[dict[str, str] | None]):
             with Horizontal(id="model-actions"):
                 yield Button("Cancel", id="model-cancel")
                 yield Button("Use Model", variant="primary", id="model-save")
+            yield Static("[dim]Esc cancel  Enter select  Tab search[/]", id="model-hints")
 
     async def on_mount(self) -> None:
         self._refresh_options("")
