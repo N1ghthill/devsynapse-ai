@@ -6,6 +6,7 @@ Enhanced with a command menu, help overlay, notifications and dynamic sidebar.
 import asyncio
 import importlib
 import logging
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -275,7 +276,8 @@ class DevSynapseTUI(App):
 
     def _refresh_sidebar(self) -> None:
         try:
-            project_count = len(self.memory.get_project_lookup()) if self.memory else 0
+            project_lookup = self.memory.get_project_lookup() if self.memory else {}
+            project_count = len(project_lookup)
             budget = self.memory.get_llm_budget_status() if self.memory else {}
             usage_stats = self.memory.get_llm_usage_stats(hours=24) if self.memory else {}
             telemetry_stats = (
@@ -284,6 +286,7 @@ class DevSynapseTUI(App):
             catalog_count = (
                 len(self.memory.list_llm_models(limit=500)) if self.memory else 0
             )
+            file_changes = self._project_file_changes(project_lookup)
 
             self._sidebar().refresh_all(
                 session_id=self.conversation_id,
@@ -297,9 +300,44 @@ class DevSynapseTUI(App):
                 usage_stats=usage_stats,
                 telemetry_stats=telemetry_stats,
                 catalog_count=catalog_count,
+                file_changes=file_changes,
             )
         except Exception as e:
             logger.exception("Could not refresh TUI sidebar: %s", e)
+
+    def _project_file_changes(self, project_lookup: dict[str, Any]) -> dict[str, Any]:
+        """Return a compact git worktree summary for the active project."""
+        if not self.project_name:
+            return {"state": "idle", "message": "select project"}
+        project = project_lookup.get(self.project_name) or {}
+        project_path = Path(str(project.get("path") or "")).expanduser()
+        if not project_path.is_dir():
+            return {"state": "idle", "message": "project path missing"}
+        if not (project_path / ".git").exists():
+            return {"state": "not_git"}
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(project_path), "status", "--porcelain"],
+                text=True,
+                capture_output=True,
+                timeout=1.0,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return {"state": "idle", "message": "git status unavailable"}
+        if result.returncode != 0:
+            return {"state": "idle", "message": "git status failed"}
+        lines = [line for line in result.stdout.splitlines() if line]
+        if not lines:
+            return {"state": "clean"}
+        return {
+            "state": "dirty",
+            "total": len(lines),
+            "modified": sum(_status_has(line, "M") for line in lines),
+            "added": sum(_status_has(line, "A") for line in lines),
+            "deleted": sum(_status_has(line, "D") for line in lines),
+            "untracked": sum(line.startswith("??") for line in lines),
+        }
 
     async def action_clear_chat(self):
         self._chat().clear()
@@ -833,3 +871,7 @@ class DevSynapseTUI(App):
 def run_tui():
     app = DevSynapseTUI()
     app.run()
+
+
+def _status_has(line: str, code: str) -> bool:
+    return code in line[:2]

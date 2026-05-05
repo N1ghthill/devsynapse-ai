@@ -147,6 +147,9 @@ Shell output that looks like a unified diff, git patch, JSON or YAML is rendered
 with syntax highlighting. Diffs also include a compact file, hunk, addition and
 deletion summary.
 
+When an active project is selected, the sidebar Files panel summarizes git
+worktree changes and links the next inspection path to `!git diff`.
+
 ## Keyboard Shortcuts
 
 | Shortcut | Action |

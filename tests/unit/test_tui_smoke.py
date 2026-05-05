@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -226,6 +227,14 @@ async def test_tui_sidebar_renders_telemetry_snapshot(tmp_path, monkeypatch):
             model="test/model",
             tokens=1200,
             cost=0.004,
+            file_changes={
+                "state": "dirty",
+                "total": 3,
+                "modified": 1,
+                "added": 1,
+                "deleted": 0,
+                "untracked": 1,
+            },
             usage_stats={
                 "totals": {
                     "request_count": 3,
@@ -251,9 +260,30 @@ async def test_tui_sidebar_renders_telemetry_snapshot(tmp_path, monkeypatch):
         await pilot.pause()
 
         text = str(sidebar.query_one("#sidebar-telemetry", Static).content)
+        files_text = str(sidebar.query_one("#sidebar-files", Static).content)
         assert "Telemetry" in text
         assert "3" in text
         assert "1.2k" in text or "1200" in text
+        assert "Files" in files_text
+        assert "3 changed" in files_text
+
+
+def test_tui_project_file_changes_reads_git_status(tmp_path, monkeypatch):
+    _configure_runtime(monkeypatch, tmp_path / "runtime")
+
+    from devsynapse.tui import DevSynapseTUI
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    (repo / "app.py").write_text("print('ready')\n", encoding="utf-8")
+
+    app = DevSynapseTUI()
+    app.project_name = "sample"
+    changes = app._project_file_changes({"sample": {"path": str(repo)}})
+
+    assert changes["state"] == "dirty"
+    assert changes["untracked"] == 1
 
 
 @pytest.mark.asyncio

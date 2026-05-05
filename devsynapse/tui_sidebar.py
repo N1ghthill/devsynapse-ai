@@ -36,6 +36,7 @@ class DynamicSidebar(Vertical):
         self.usage_stats: dict[str, Any] = {}
         self.telemetry_stats: dict[str, Any] = {}
         self.budget_status: dict[str, Any] = {}
+        self.file_changes: dict[str, Any] = {}
         self.project_count: int = 0
         self.catalog_count: int = 0
         self._collapsed_panels: dict[str, bool] = {
@@ -46,6 +47,7 @@ class DynamicSidebar(Vertical):
     def compose(self):
         yield Static(id="sidebar-session", classes="sidebar-panel")
         yield Static(id="sidebar-model", classes="sidebar-panel")
+        yield Static(id="sidebar-files", classes="sidebar-panel")
         yield Static(id="sidebar-telemetry", classes="sidebar-panel")
         yield Static(id="sidebar-commands", classes="sidebar-panel")
 
@@ -178,6 +180,62 @@ class DynamicSidebar(Vertical):
         except Exception as e:
             logger.exception("Could not update model panel: %s", e)
 
+    def update_files(self, file_changes: dict[str, Any] | None = None) -> None:
+        """Update file changes panel."""
+        if file_changes is not None:
+            self.file_changes = file_changes
+        try:
+            panel = self.query_one("#sidebar-files", Static)
+            state = str(self.file_changes.get("state") or "unknown")
+            if state == "clean":
+                panel.update(
+                    "\n".join(
+                        [
+                            f"{self._title('Files')} [{self._color('success')}]clean[/]",
+                            self._row("worktree", "no local changes"),
+                            self._row("project", _shorten_middle(self.project_name or "none", 22)),
+                        ]
+                    )
+                )
+                return
+            if state == "dirty":
+                modified = int(self.file_changes.get("modified") or 0)
+                added = int(self.file_changes.get("added") or 0)
+                deleted = int(self.file_changes.get("deleted") or 0)
+                untracked = int(self.file_changes.get("untracked") or 0)
+                total = int(self.file_changes.get("total") or 0)
+                panel.update(
+                    "\n".join(
+                        [
+                            f"{self._title('Files')} [{self._color('warning')}]{total} changed[/]",
+                            self._row("changed", f"M {modified}  A {added}  D {deleted}"),
+                            self._row("untracked", str(untracked)),
+                            self._row("hint", "!git diff"),
+                        ]
+                    )
+                )
+                return
+            if state == "not_git":
+                panel.update(
+                    "\n".join(
+                        [
+                            f"{self._title('Files')} {self._muted('not a git repo')}",
+                            self._row("project", _shorten_middle(self.project_name or "none", 22)),
+                        ]
+                    )
+                )
+                return
+            panel.update(
+                "\n".join(
+                    [
+                        f"{self._title('Files')} {self._muted('idle')}",
+                        self._row("project", self.file_changes.get("message") or "select project"),
+                    ]
+                )
+            )
+        except Exception as e:
+            logger.exception("Could not update file changes panel: %s", e)
+
     def update_telemetry(
         self,
         usage_stats: dict[str, Any] | None = None,
@@ -291,10 +349,12 @@ class DynamicSidebar(Vertical):
         usage_stats: dict[str, Any] | None = None,
         telemetry_stats: dict[str, Any] | None = None,
         catalog_count: int | None = None,
+        file_changes: dict[str, Any] | None = None,
     ) -> None:
         """Refresh all panels."""
         self.update_session(session_id, project_name, project_count, budget_status)
         self.update_model(provider, model, tokens=tokens, cost=cost, catalog_count=catalog_count)
+        self.update_files(file_changes)
         self.update_telemetry(
             usage_stats=usage_stats,
             telemetry_stats=telemetry_stats,
