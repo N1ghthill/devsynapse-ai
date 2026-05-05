@@ -154,6 +154,8 @@ deletion summary.
 | `Ctrl+H` | Show help overlay |
 | `F2` | Open model picker |
 | `F3` | Copy last assistant answer |
+| `F4` | Toggle model sidebar panel |
+| `F5` | Toggle telemetry sidebar panel |
 | `Ctrl+N` | New conversation |
 | `Ctrl+L` | Clear chat |
 | `Ctrl+P` | Open command palette |

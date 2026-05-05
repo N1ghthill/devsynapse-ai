@@ -257,6 +257,35 @@ async def test_tui_sidebar_renders_telemetry_snapshot(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_tui_sidebar_panels_toggle_with_shortcuts(tmp_path, monkeypatch):
+    _configure_runtime(monkeypatch, tmp_path / "runtime")
+
+    import config.settings as app_settings
+    from devsynapse.tui import DevSynapseTUI
+
+    app_settings.get_settings.cache_clear()
+
+    app = DevSynapseTUI()
+    async with app.run_test(size=(110, 34)) as pilot:
+        await pilot.pause()
+
+        sidebar = app.query_one("#sidebar", DynamicSidebar)
+        model_panel = sidebar.query_one("#sidebar-model", Static)
+        telemetry_panel = sidebar.query_one("#sidebar-telemetry", Static)
+
+        assert not model_panel.has_class("collapsed")
+        assert not telemetry_panel.has_class("collapsed")
+
+        await pilot.press("f4")
+        await pilot.press("f5")
+        await pilot.pause()
+
+        assert model_panel.has_class("collapsed")
+        assert telemetry_panel.has_class("collapsed")
+        assert "F4" in str(app.query_one("#app-footer", Static).content)
+
+
+@pytest.mark.asyncio
 async def test_tui_help_shortcut_works_before_slash_command(tmp_path, monkeypatch):
     _configure_runtime(monkeypatch, tmp_path / "runtime")
 

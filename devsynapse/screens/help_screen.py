@@ -55,6 +55,8 @@ CATEGORIES = {
 SHORTCUTS = [
     ("F2", "open model picker"),
     ("F3", "copy last response"),
+    ("F4", "toggle model sidebar panel"),
+    ("F5", "toggle telemetry sidebar panel"),
     ("Ctrl+N", "new conversation"),
     ("Ctrl+L", "clear chat"),
     ("Ctrl+P", "open command palette"),

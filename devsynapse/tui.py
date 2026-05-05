@@ -68,6 +68,8 @@ class DevSynapseTUI(App):
         Binding("ctrl+h", "show_help", "Help"),
         Binding("f2", "open_model_picker", "Model"),
         Binding("f3", "copy_last_response", "Copy"),
+        Binding("f4", "toggle_model_panel", "Model Panel"),
+        Binding("f5", "toggle_telemetry_panel", "Telemetry Panel"),
         Binding("ctrl+n", "new_session", "New"),
         Binding("ctrl+p", "open_command_palette", "Palette"),
         Binding("ctrl+r", "refresh_status", "Refresh"),
@@ -92,6 +94,8 @@ class DevSynapseTUI(App):
         self._total_tokens = 0
         self._total_cost = 0.0
         self._command_suggestions: list[CommandSuggestion] = []
+        self._header_widget: Static | None = None
+        self._footer_widget: Static | None = None
 
     def compose(self) -> ComposeResult:
         yield Static(id="app-header")
@@ -111,6 +115,8 @@ class DevSynapseTUI(App):
         yield Static(id="app-footer")
 
     async def on_mount(self):
+        self._header_widget = self.query_one("#app-header", Static)
+        self._footer_widget = self.query_one("#app-footer", Static)
         self._update_chrome()
         self.set_interval(1.0, self._update_header)
         input_w = self._input()
@@ -131,12 +137,16 @@ class DevSynapseTUI(App):
         return self.query_one("#sidebar", DynamicSidebar)
 
     def _header(self) -> Static:
+        if self._header_widget is not None:
+            return self._header_widget
         return self.query_one("#app-header", Static)
 
     def _footer(self) -> Static:
+        if self._footer_widget is not None:
+            return self._footer_widget
         return self.query_one("#app-footer", Static)
 
-    def _notifications(self) -> NotificationManager:
+    def _notification_manager(self) -> NotificationManager:
         return self.query_one("#notifications", NotificationManager)
 
     def _typing_indicator(self) -> Static:
@@ -223,7 +233,7 @@ class DevSynapseTUI(App):
         except Exception as e:
             chat.write(f"[red]Init error: {e}[/]")
             logger.exception("Init failed")
-            self._notifications().show(f"Init failed: {e}", "error")
+            self._notification_manager().show(f"Init failed: {e}", "error")
 
     def _write_welcome(self) -> None:
         chat = self.query_one("#chat", RichLog)
@@ -286,7 +296,7 @@ class DevSynapseTUI(App):
 
     async def action_clear_chat(self):
         self._chat().clear()
-        self._notifications().show("Chat cleared", "info")
+        self._notification_manager().show("Chat cleared", "info")
 
     async def action_show_help(self):
         await self._command_dispatcher().cmd_help([])
@@ -299,12 +309,12 @@ class DevSynapseTUI(App):
             self._chat().clear()
             self._write_welcome()
             self._refresh_sidebar()
-            self._notifications().show("New session started", "success")
+            self._notification_manager().show("New session started", "success")
 
     async def action_refresh_status(self):
         await self._command_dispatcher().cmd_status([])
         self._refresh_sidebar()
-        self._notifications().show("Status refreshed", "info")
+        self._notification_manager().show("Status refreshed", "info")
 
     async def action_open_connect(self):
         await self._open_connect_screen()
@@ -327,6 +337,16 @@ class DevSynapseTUI(App):
 
     async def action_copy_last_response(self):
         await self._command_dispatcher().cmd_copy([])
+
+    def action_toggle_model_panel(self) -> None:
+        self._sidebar().toggle_panel("model")
+        self._sidebar().update_model()
+        self._notification_manager().show("Model panel toggled", "info")
+
+    def action_toggle_telemetry_panel(self) -> None:
+        self._sidebar().toggle_panel("telemetry")
+        self._sidebar().update_telemetry()
+        self._notification_manager().show("Telemetry panel toggled", "info")
 
     async def on_input_submitted(self, event):
         task = event.value.strip()
@@ -398,6 +418,7 @@ class DevSynapseTUI(App):
         self._footer().update(
             f"[{accent}]^l[/] Clear   [{accent}]^h[/] Help   "
             f"[{accent}]F2[/] Model   [{accent}]F3[/] Copy   "
+            f"[{accent}]F4[/] Model panel   [{accent}]F5[/] Telemetry   "
             f"[{accent}]^n[/] New   [{accent}]^p[/] Palette   "
             f"[{accent}]^r[/] Refresh   [{accent}]/[/] Commands   "
             f"[{accent}]/theme[/] Theme   [{muted}]Esc quits dialogs[/]"
@@ -486,7 +507,7 @@ class DevSynapseTUI(App):
         except Exception as e:
             chat.write(f"[red]Error: {e}[/]\n")
             logger.exception("process failed")
-            self._notifications().show(f"Error: {e}", "error")
+            self._notification_manager().show(f"Error: {e}", "error")
         finally:
             self._set_busy(False)
             input_w.disabled = False
@@ -634,7 +655,7 @@ class DevSynapseTUI(App):
         chat = self.query_one("#chat", RichLog)
         if not result:
             chat.write("[yellow]Provider setup cancelled.[/]")
-            self._notifications().show("Provider setup cancelled", "warning")
+            self._notification_manager().show("Provider setup cancelled", "warning")
             return
         try:
             await self._save_provider_credentials(
@@ -645,11 +666,11 @@ class DevSynapseTUI(App):
         except Exception as exc:
             chat.write(f"[red]Could not save provider key:[/] {exc}")
             logger.exception("Could not save provider key")
-            self._notifications().show(f"Save failed: {exc}", "error")
+            self._notification_manager().show(f"Save failed: {exc}", "error")
             return
         chat.write(f"[green]Provider ready:[/] {result['provider']}")
         chat.write("Use [bold]/discover[/] to refresh available model data.")
-        self._notifications().show(f"Provider {result['provider']} ready", "success")
+        self._notification_manager().show(f"Provider {result['provider']} ready", "success")
 
     async def _save_provider_credentials(
         self,
@@ -701,7 +722,7 @@ class DevSynapseTUI(App):
         chat = self.query_one("#chat", RichLog)
         if not result:
             chat.write("[yellow]Model selection cancelled.[/]")
-            self._notifications().show("Model selection cancelled", "warning")
+            self._notification_manager().show("Model selection cancelled", "warning")
             return
         provider = result["provider"]
         model = result["model"]
@@ -717,7 +738,7 @@ class DevSynapseTUI(App):
         )
         await self._rebuild_engine()
         chat.write(f"[green]Model selected:[/] {provider}:{model}")
-        self._notifications().show(f"Model set to {model}", "success")
+        self._notification_manager().show(f"Model set to {model}", "success")
 
     def _model_picker_catalog(self, selected_provider: str) -> list[dict[str, Any]]:
         models: list[dict[str, Any]] = []

@@ -259,6 +259,7 @@ class DynamicSidebar(Vertical):
                     [
                         self._title("Actions"),
                         f"{self._muted('^p')} palette  {self._muted('F2')} model",
+                        f"{self._muted('F4')} model panel  {self._muted('F5')} telemetry",
                         f"{self._muted('F3')} copy     {self._muted('^r')} refresh",
                         f"{self._muted('^n')} new      {self._muted('^l')} clear",
                         "",
