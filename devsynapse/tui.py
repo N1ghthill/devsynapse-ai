@@ -10,6 +10,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from rich import box
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.text import Text
+
 ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
@@ -585,6 +590,7 @@ class DevSynapseTUI(App):
         Binding("ctrl+l", "clear_chat", "Clear"),
         Binding("ctrl+h", "show_help", "Help"),
         Binding("f2", "open_model_picker", "Model"),
+        Binding("f3", "copy_last_response", "Copy"),
         Binding("ctrl+n", "new_session", "New"),
         Binding("ctrl+p", "open_connect", "Providers"),
         Binding("ctrl+r", "refresh_status", "Refresh"),
@@ -600,6 +606,7 @@ class DevSynapseTUI(App):
         self.details_enabled = False
         self.last_provider = None
         self.last_model = None
+        self.last_response_text = ""
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -628,6 +635,46 @@ class DevSynapseTUI(App):
 
     def _input(self) -> Input:
         return self.query_one("#input", Input)
+
+    def _write_panel(
+        self,
+        title: str,
+        content: object,
+        border_style: str = "blue",
+        subtitle: str | None = None,
+    ) -> None:
+        self._chat().write(
+            Panel(
+                content,
+                title=title,
+                subtitle=subtitle,
+                border_style=border_style,
+                box=box.ROUNDED,
+                padding=(0, 1),
+            )
+        )
+
+    def _write_user_message(self, text: str) -> None:
+        self._write_panel("you", Text(text), border_style="cyan")
+
+    def _write_assistant_message(self, text: str) -> None:
+        self.last_response_text = text
+        self._write_panel(
+            "DevSynapse",
+            Markdown(text),
+            border_style="green",
+            subtitle="F3 copy",
+        )
+
+    def _write_command_message(self, command: str) -> None:
+        self._write_panel("command", Text(command), border_style="yellow")
+
+    def _write_model_message(self, provider: str, model: str) -> None:
+        self._write_panel(
+            "model",
+            Text(f"{provider}:{model}", style="dim"),
+            border_style="bright_black",
+        )
 
     async def _init_engine(self):
         chat = self._chat()
@@ -658,7 +705,7 @@ class DevSynapseTUI(App):
                 self._write_welcome()
                 chat.write(
                     "[green]Ready.[/] Type a task, [bold]/help[/], [bold]/model[/], "
-                    "[bold]/budget[/], [bold]/router[/] or [bold]/usage[/]."
+                    "[bold]/copy[/], [bold]/budget[/], [bold]/router[/] or [bold]/usage[/]."
                 )
                 self._update_status_bar()
             chat.write("")
@@ -675,7 +722,7 @@ class DevSynapseTUI(App):
         chat.write("Chat is ready. Model choice is manual.")
         chat.write(
             "Use [bold]F2[/] or [bold]/model[/] to choose a model; "
-            "[bold]/connect[/] configures providers."
+            "[bold]F3[/] or [bold]/copy[/] copies the last answer."
         )
         chat.write("")
 
@@ -743,6 +790,7 @@ class DevSynapseTUI(App):
                         "[bold accent]Commands[/]",
                         "F2  model picker",
                         "^p  providers",
+                        "F3  copy answer",
                         "^r  refresh",
                         "^n  new chat",
                         "",
@@ -775,6 +823,9 @@ class DevSynapseTUI(App):
     async def action_open_model_picker(self):
         await self._open_model_screen()
 
+    async def action_copy_last_response(self):
+        await self._cmd_copy([])
+
     async def on_input_submitted(self, event):
         task = event.value.strip()
         if not task:
@@ -787,7 +838,7 @@ class DevSynapseTUI(App):
         input_w.disabled = True
         self._update_status_bar(message="busy")
 
-        chat.write(f"\n[bold]# you:[/] {task}")
+        self._write_user_message(task)
 
         if task.startswith("/"):
             await self._handle_slash_command(task)
@@ -821,10 +872,6 @@ class DevSynapseTUI(App):
 
         def on_token(chunk: str) -> None:
             streamed_chunks.append(chunk)
-            try:
-                self.call_from_thread(chat.write, chunk)
-            except RuntimeError:
-                chat.write(chunk)
 
         try:
             response_text, command, usage = await self.brain.process_message(
@@ -837,20 +884,19 @@ class DevSynapseTUI(App):
                 on_token=on_token,
             )
 
-            if response_text:
-                streamed_text = "".join(streamed_chunks).strip()
-                if not streamed_text or streamed_text != response_text.strip():
-                    chat.write(response_text)
+            rendered_response = response_text or "".join(streamed_chunks)
+            if rendered_response:
+                self._write_assistant_message(rendered_response)
                 chat.write("")
 
             if command:
-                chat.write(f"[yellow]command: {command}[/]")
+                self._write_command_message(command)
 
             if usage:
                 self.last_provider = usage.get("provider") or self.last_provider
                 self.last_model = usage.get("model") or self.last_model
                 if self.last_provider and self.last_model:
-                    chat.write(f"[dim]model: {self.last_provider}:{self.last_model}[/]")
+                    self._write_model_message(self.last_provider, self.last_model)
                 self._update_status_bar(usage)
 
             chat.write("")
@@ -889,6 +935,7 @@ class DevSynapseTUI(App):
             "discover": self._cmd_discover,
             "usage": self._cmd_usage,
             "budget": self._cmd_budget,
+            "copy": self._cmd_copy,
             "router": self._cmd_router,
             "details": self._cmd_details,
             "new": self._cmd_new,
@@ -920,11 +967,16 @@ class DevSynapseTUI(App):
             conversation_id=self.conversation_id,
         )
         color = "green" if result.success else "red"
-        chat.write(f"[{color}]! {result.status}[/] {result.message}")
+        body = result.message
         if result.reason_code:
-            chat.write(f"[yellow]reason:[/] {result.reason_code}")
+            body += f"\nreason: {result.reason_code}"
         if result.output:
-            chat.write(result.output)
+            body += f"\n\n{result.output}"
+        self._write_panel(
+            f"shell {result.status}",
+            Text(body),
+            border_style=color,
+        )
         self._refresh_sidebar()
 
     async def _cmd_help(self, _args: list[str]) -> None:
@@ -944,6 +996,7 @@ class DevSynapseTUI(App):
         chat.write("  /discover                        refresh model catalog")
         chat.write("  /model                           search and select active model")
         chat.write("  /models [provider]               list model catalog")
+        chat.write("  /copy                            copy last assistant answer")
         chat.write("  /budget                          show usage plan and limits")
         chat.write("  /budget daily|monthly <usd>      set budget limit")
         chat.write("  /budget warning|critical <pct>   set thresholds")
@@ -952,6 +1005,19 @@ class DevSynapseTUI(App):
         chat.write("  /details                         toggle route/tool detail display")
         chat.write("  /new                             start a new conversation")
         chat.write("  !<command>                       run shell command as a tool result")
+
+    async def _cmd_copy(self, _args: list[str]) -> None:
+        chat = self._chat()
+        if not self.last_response_text.strip():
+            chat.write("[yellow]No assistant answer to copy yet.[/]")
+            return
+        try:
+            self.copy_to_clipboard(self.last_response_text)
+        except Exception as exc:
+            chat.write(f"[red]Could not copy answer:[/] {exc}")
+            logger.exception("Could not copy assistant answer")
+            return
+        chat.write("[green]Copied last assistant answer.[/]")
 
     async def _cmd_status(self, _args: list[str]) -> None:
         chat = self._chat()

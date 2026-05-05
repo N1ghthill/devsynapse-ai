@@ -71,6 +71,7 @@ Supported provider names:
 /budget                          show daily/monthly budget state
 /budget daily|monthly <usd>      update budget limits
 /model                           search and select active model
+/copy                            copy last assistant answer
 /router                          show manual model status
 /discover                        refresh model catalog
 /models [provider]               list known models

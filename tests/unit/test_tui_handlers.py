@@ -398,3 +398,56 @@ class TestSlashCommandHandlers:
             assert app.screen.query_one("#model-search") is not None
             app.screen.dismiss(None)
             await pilot.pause()
+
+    @pytest.mark.asyncio
+    async def test_process_renders_streamed_response_once(self, tmp_path, monkeypatch):
+        _configure_runtime(monkeypatch, tmp_path / "runtime")
+
+        import config.settings as app_settings
+        app_settings.get_settings.cache_clear()
+
+        app = DevSynapseTUI()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            mock_chat = _mock_chat(app)
+            input_widget = MagicMock()
+
+            async def fake_process_message(**kwargs):
+                on_token = kwargs["on_token"]
+                for chunk in ["O", "lá", "\\n", "mundo"]:
+                    on_token(chunk)
+                return "Olá\nmundo", None, {"provider": "openrouter", "model": "test/model"}
+
+            app.brain = MagicMock()
+            app.brain.process_message = fake_process_message
+
+            await app._process("oi", mock_chat, input_widget)
+            await pilot.pause()
+
+            writes = [call.args[0] for call in mock_chat.write.call_args_list]
+            assert "O" not in writes
+            assert "lá" not in writes
+            assert app.last_response_text == "Olá\nmundo"
+            assert any(getattr(write, "title", None) == "DevSynapse" for write in writes)
+
+    @pytest.mark.asyncio
+    async def test_copy_copies_last_response(self, tmp_path, monkeypatch):
+        _configure_runtime(monkeypatch, tmp_path / "runtime")
+
+        import config.settings as app_settings
+        app_settings.get_settings.cache_clear()
+
+        app = DevSynapseTUI()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            mock_chat = _mock_chat(app)
+            copied = []
+            app.copy_to_clipboard = copied.append
+            app.last_response_text = "resposta final"
+
+            await app._handle_slash_command("/copy")
+            await pilot.pause()
+
+            assert copied == ["resposta final"]
+            calls = [c[0][0] for c in mock_chat.write.call_args_list]
+            assert any("Copied" in str(call) for call in calls)

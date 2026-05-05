@@ -80,6 +80,7 @@ Inside the TUI, DevSynapse exposes operational slash commands:
 /discover                        refresh the model catalog
 /model                           search and select active model
 /models [provider]               list known models and pricing
+/copy                            copy last assistant answer
 /budget                          show daily/monthly plan usage
 /budget daily|monthly <usd>      set budget limits
 /router                          show manual model status
@@ -90,7 +91,8 @@ Inside the TUI, DevSynapse exposes operational slash commands:
 The TUI keeps the conversation log, input line, session state, provider status,
 budget state and common commands visible in one terminal screen. It supports the
 slash commands above plus shortcuts such as `Ctrl+H` for help, `Ctrl+N` for a
-new conversation, `Ctrl+R` to refresh status and `F2` to choose a model.
+new conversation, `Ctrl+R` to refresh status, `F2` to choose a model and `F3`
+to copy the last assistant answer.
 
 ## Runtime State
 
