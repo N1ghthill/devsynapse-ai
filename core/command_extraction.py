@@ -19,7 +19,7 @@ def tool_calls_to_opencode_command(tool_calls: Optional[List[Dict]]) -> Optional
 
     try:
         args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
-    except Exception:
+    except (json.JSONDecodeError, TypeError, ValueError):
         return None
 
     if name == "bash":

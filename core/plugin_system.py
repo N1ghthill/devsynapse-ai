@@ -126,7 +126,7 @@ class PluginManager:
                         manifest = PluginManifest(**data)
                         manifests.append(manifest)
                         logger.info(f"Plugin descoberto: {manifest.name} v{manifest.version}")
-                    except Exception as e:
+                    except (json.JSONDecodeError, OSError, TypeError) as e:
                         logger.warning(f"Erro lendo manifest de {entry.name}: {e}")
 
         return manifests
@@ -135,7 +135,7 @@ class PluginManager:
         try:
             plugin_dir = PLUGINS_DIR / manifest.name
             if not plugin_dir.exists():
-                logger.error(f"Diretório do plugin não encontrado: {plugin_dir}")
+                logger.error(f"Plugin directory not found: {plugin_dir}")
                 return False
 
             sys_path = str(plugin_dir)
@@ -152,7 +152,7 @@ class PluginManager:
                     break
 
             if not plugin_class:
-                logger.error(f"Plugin {manifest.name}: classe BasePlugin não encontrada em {manifest.entry_point}")
+                logger.error(f"Plugin {manifest.name}: BasePlugin class not found in {manifest.entry_point}")
                 return False
 
             context = PluginContext(manifest.name, plugin_dir)

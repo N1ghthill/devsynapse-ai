@@ -5,6 +5,7 @@ SQLite schema versioning utilities.
 import logging
 import sqlite3
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -43,6 +44,16 @@ def connect_db(
             logger.debug("Could not enable SQLite WAL mode for %s: %s", path, exc)
 
     return conn
+
+
+@contextmanager
+def db_session(db_path: Path | str):
+    """Context manager that yields a SQLite connection and ensures it is closed."""
+    conn = connect_db(db_path)
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def _should_configure_wal(path: Path) -> bool:

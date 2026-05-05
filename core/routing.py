@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 from typing import Any, Dict, Optional
 
 import config.settings as app_settings
 from core.llm_optimization import ModelRoute, ModelRouter, build_task_profile
+from core.utils import coerce_bool
 
 logger = logging.getLogger(__name__)
 
@@ -46,18 +48,18 @@ class RouteSelector:
             ),
             pro_model=str(persisted.get("deepseek_pro_model", settings.deepseek_pro_model)),
             default_model=str(persisted.get("deepseek_model", self._deepseek_model)),
-            routing_enabled=self._as_bool(
-                persisted.get("llm_model_routing_enabled", settings.llm_model_routing_enabled)
-            ),
-            auto_economy_enabled=self._as_bool(
-                persisted.get("llm_auto_economy_enabled", settings.llm_auto_economy_enabled)
-            ),
+        routing_enabled=coerce_bool(
+            persisted.get("llm_model_routing_enabled", settings.llm_model_routing_enabled)
+        ),
+        auto_economy_enabled=coerce_bool(
+            persisted.get("llm_auto_economy_enabled", settings.llm_auto_economy_enabled)
+        ),
         )
         budget_status = None
         if router.auto_economy_enabled and hasattr(self._memory, "get_llm_budget_status"):
             try:
                 budget_status = self._memory.get_llm_budget_status()
-            except Exception:
+            except (sqlite3.OperationalError, ValueError):
                 logger.debug("Could not read LLM budget status for routing", exc_info=True)
 
         route = router.select_model(
@@ -79,12 +81,12 @@ class RouteSelector:
 
     def get_agent_learning_context(self) -> str:
         if not hasattr(self._memory, "get_agent_learning_context"):
-            return "Nenhum padrão de agente aprendido ainda."
+            return "No agent learning patterns found yet."
         try:
             return self._memory.get_agent_learning_context()
-        except Exception:
+        except (sqlite3.OperationalError, ValueError):
             logger.debug("Could not load agent learning context", exc_info=True)
-            return "Nenhum padrão de agente aprendido ainda."
+            return "No agent learning patterns found yet."
 
     # ------------------------------------------------------------------
     # Adaptive override
@@ -95,7 +97,7 @@ class RouteSelector:
         route: ModelRoute,
         budget_status: Optional[Dict[str, Any]],
     ) -> ModelRoute:
-        if not self._as_bool(
+        if not coerce_bool(
             self._get_persisted_app_settings().get("llm_adaptive_routing_enabled", True)
         ):
             return route
@@ -154,7 +156,7 @@ class RouteSelector:
             return None
         try:
             return self._memory.get_agent_learning(task_signature)
-        except Exception:
+        except (sqlite3.OperationalError, ValueError):
             logger.debug("Could not load agent learning for routing", exc_info=True)
             return None
 
@@ -164,12 +166,8 @@ class RouteSelector:
         try:
             persisted = self._memory.get_app_settings()
             return persisted if isinstance(persisted, dict) else {}
-        except Exception:
+        except (sqlite3.OperationalError, ValueError):
             logger.debug("Could not load persisted app settings", exc_info=True)
             return {}
 
-    @staticmethod
-    def _as_bool(value: object) -> bool:
-        if isinstance(value, bool):
-            return value
-        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+

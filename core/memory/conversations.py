@@ -22,11 +22,17 @@ class ConversationStore:
     def __init__(self, db_path: str):
         self.db_path = db_path
 
-    def get_db_connection(self) -> sqlite3.Connection:
-        """Return a SQLite connection for internal/service use."""
-        conn = connect_db(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def get_db_connection(self, conn: Optional[sqlite3.Connection] = None) -> sqlite3.Connection:
+        """Return a SQLite connection for internal/service use.
+
+        If *conn* is provided, return it as-is (caller owns lifecycle).
+        Otherwise, open a new connection (caller must close).
+        """
+        if conn is not None:
+            return conn
+        new_conn = connect_db(self.db_path)
+        new_conn.row_factory = sqlite3.Row
+        return new_conn
 
     def get_conversation_project_name(self, conversation_id: Optional[str]) -> Optional[str]:
         """Return the persisted project scope for a conversation, when one exists."""
@@ -56,7 +62,7 @@ class ConversationStore:
         return await run_blocking(self._get_conversation_context, conversation_id)
 
     def _get_conversation_context(self, conversation_id: Optional[str] = None) -> Dict:
-        """Obtém contexto para uma conversa"""
+        """Get context for a conversation."""
 
         conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
@@ -559,6 +565,7 @@ class ConversationStore:
         conversation_title: Optional[str] = None,
         llm_usage: Optional[Dict[str, Any]] = None,
         project_name: Optional[str] = None,
+        conn: Optional[sqlite3.Connection] = None,
     ):
         return await run_blocking(
             self._save_interaction,
@@ -569,6 +576,7 @@ class ConversationStore:
             conversation_title,
             llm_usage,
             project_name,
+            conn,
         )
 
     def _save_interaction(
@@ -580,10 +588,12 @@ class ConversationStore:
         conversation_title: Optional[str] = None,
         llm_usage: Optional[Dict[str, Any]] = None,
         project_name: Optional[str] = None,
+        conn: Optional[sqlite3.Connection] = None,
     ):
-        """Salva uma interação na memória"""
+        """Save an interaction to memory."""
 
-        conn = connect_db(self.db_path)
+        owns_conn = conn is None
+        conn = self.get_db_connection(conn)
         cursor = conn.cursor()
 
         timestamp = datetime.now().isoformat()
@@ -626,9 +636,10 @@ class ConversationStore:
         ))
 
         conn.commit()
-        conn.close()
+        if owns_conn:
+            conn.close()
 
-        logger.debug(f"Interação salva: {user_message[:50]}...")
+        logger.debug("Interaction saved: %s...", user_message[:50])
         return inferred_project_name
 
     def _infer_project_name_from_text(self, project_lookup: Dict, *texts: Optional[str]) -> Optional[str]:
@@ -676,10 +687,12 @@ class ConversationStore:
         status: Optional[str] = None,
         reason_code: Optional[str] = None,
         project_name: Optional[str] = None,
+        conn: Optional[sqlite3.Connection] = None,
     ):
-        """Salva resultado da execução de um comando"""
+        """Save command execution result."""
 
-        conn = connect_db(self.db_path)
+        owns_conn = conn is None
+        conn = self.get_db_connection(conn)
         cursor = conn.cursor()
 
         cursor.execute('''
@@ -697,7 +710,8 @@ class ConversationStore:
         ''', (result, output, status, reason_code, project_name, conversation_id, command))
 
         conn.commit()
-        conn.close()
+        if owns_conn:
+            conn.close()
 
     async def save_feedback(
         self,
@@ -713,7 +727,7 @@ class ConversationStore:
         feedback: str,
         score: Optional[int] = None
     ):
-        """Salva feedback do usuário"""
+        """Save user feedback."""
 
         conn = connect_db(self.db_path)
         cursor = conn.cursor()
@@ -735,7 +749,7 @@ class ConversationStore:
             self._learn_from_feedback(feedback, score)
 
     def _learn_from_feedback(self, feedback: str, score: Optional[int]):
-        """Aprende com feedback explícito do usuário"""
+        """Learn from explicit user feedback."""
 
         # Análise simples de feedback
         positive_keywords = ["bom", "ótimo", "excelente", "útil", "correto", "perfeito"]

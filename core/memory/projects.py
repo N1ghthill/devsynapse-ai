@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from config.settings import KNOWN_PROJECTS
+from config.settings import get_settings
 from core.db import connect_db
 
 logger = logging.getLogger(__name__)
@@ -193,7 +193,7 @@ class ProjectRegistry:
 
         projects = {
             name: dict(info)
-            for name, info in KNOWN_PROJECTS.items()
+            for name, info in get_settings().build_known_projects().items()
             if self._project_path_exists(info.get("path"))
         }
         conn = None
@@ -216,7 +216,7 @@ class ProjectRegistry:
                     "priority": row["priority"],
                 }
         except sqlite3.Error as exc:
-            logger.debug("Não foi possível carregar projetos persistidos: %s", exc)
+            logger.debug("Could not load persisted projects: %s", exc)
         finally:
             if conn is not None:
                 conn.close()

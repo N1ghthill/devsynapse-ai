@@ -16,7 +16,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 def _create_memory(db_path):
     """Create MemorySystem with a specific DB path"""
     from unittest.mock import patch as mock_patch
-    with mock_patch('core.memory.MEMORY_DB_PATH', str(db_path)):
+
+    from config.settings import AppSettings, get_settings
+
+    get_settings.cache_clear()
+    settings = AppSettings()
+    settings.memory_db_path = db_path
+
+    with mock_patch("core.memory.system.get_settings", return_value=settings):
         memory = MemorySystem()
         memory.add_project(PROJECT_NAME, str(PROJECT_ROOT), "ai-assistant", "high")
         return memory

@@ -25,6 +25,7 @@ from core.memory import MemorySystem
 from core.opencode_bridge import OpenCodeBridge
 from core.plugin_system import plugin_manager
 from core.runtime_config import ensure_runtime_config_file, set_runtime_config_values
+from core.utils import coerce_bool
 
 logger = logging.getLogger(__name__)
 
@@ -466,13 +467,12 @@ class DevSynapseTUI(App):
             project_name=self.project_name,
             conversation_id=self.conversation_id,
         )
-        success, message, output, status, reason_code, _project_name = result
-        color = "green" if success else "red"
-        chat.write(f"[{color}]! {status}[/] {message}")
-        if reason_code:
-            chat.write(f"[yellow]reason:[/] {reason_code}")
-        if output:
-            chat.write(output)
+        color = "green" if result.success else "red"
+        chat.write(f"[{color}]! {result.status}[/] {result.message}")
+        if result.reason_code:
+            chat.write(f"[yellow]reason:[/] {result.reason_code}")
+        if result.output:
+            chat.write(result.output)
         self._refresh_sidebar()
 
     async def _cmd_help(self, _args: list[str]) -> None:
@@ -748,17 +748,19 @@ class DevSynapseTUI(App):
 
         settings = app_settings.get_settings()
         persisted = self.memory.get_app_settings()
-        routing_enabled = self._setting_bool(
-            persisted,
-            "llm_model_routing_enabled",
-            settings.llm_model_routing_enabled,
+        routing_enabled=coerce_bool(
+            persisted.get(
+                "llm_model_routing_enabled",
+                settings.llm_model_routing_enabled,
+            )
         )
-        economy_enabled = self._setting_bool(
-            persisted,
-            "llm_auto_economy_enabled",
-            settings.llm_auto_economy_enabled,
+        economy_enabled = coerce_bool(
+            persisted.get(
+                "llm_auto_economy_enabled",
+                settings.llm_auto_economy_enabled,
+            )
         )
-        adaptive_enabled = self._setting_bool(persisted, "llm_adaptive_routing_enabled", True)
+        adaptive_enabled = coerce_bool(persisted.get("llm_adaptive_routing_enabled", True))
         budget = self.memory.get_llm_budget_status()
         learning = self.memory.get_agent_learning_stats()
         models = self.memory.list_llm_models(limit=200)
@@ -803,13 +805,6 @@ class DevSynapseTUI(App):
             )
             return {key: args[1].lower() == "on"}
         return None
-
-    @staticmethod
-    def _setting_bool(persisted: dict, key: str, default: bool) -> bool:
-        value = persisted.get(key, default)
-        if isinstance(value, bool):
-            return value
-        return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
     async def _cmd_details(self, _args: list[str]) -> None:
         self.details_enabled = not self.details_enabled

@@ -237,6 +237,26 @@ class AppSettings(BaseSettings):
         roots.add("/var/tmp")
         return sorted(roots)
 
+    @staticmethod
+    def build_default_preferences() -> Dict[str, str]:
+        return {
+            "coding_style": "clean_simple",
+            "cost_preference": "low_cost_first",
+            "communication_style": "direct_conversational",
+            "risk_tolerance": "medium",
+            "detail_level": "balanced",
+        }
+
+    @staticmethod
+    def build_allowed_file_extensions() -> List[str]:
+        return [
+            ".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".css", ".scss",
+            ".json", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf",
+            ".md", ".txt", ".csv", ".xml", ".sql", ".sh", ".bash",
+            ".java", ".cpp", ".c", ".h", ".hpp", ".go", ".rs", ".rb",
+            ".php", ".swift", ".kt", ".dart",
+        ]
+
     def build_known_projects(self) -> Dict[str, Dict[str, str]]:
         projects: Dict[str, Dict[str, str]] = {}
 
@@ -269,55 +289,7 @@ def get_settings() -> AppSettings:
     return AppSettings()
 
 
-_settings = get_settings()
-
-# Legacy module-level aliases kept for compatibility with the existing code/tests.
-DEEPSEEK_API_KEY: Optional[str] = _settings.deepseek_api_key
-OPENROUTER_API_KEY: Optional[str] = _settings.openrouter_api_key
-OPENCODE_ZEN_API_KEY: Optional[str] = _settings.opencode_zen_api_key
-OPENCODE_GO_API_KEY: Optional[str] = _settings.opencode_go_api_key
-DEEPSEEK_MODEL = _settings.deepseek_model
-DEEPSEEK_BASE_URL = _settings.deepseek_base_url
-OPENROUTER_BASE_URL = _settings.openrouter_base_url
-OPENCODE_ZEN_BASE_URL = _settings.opencode_zen_base_url
-OPENCODE_GO_BASE_URL = _settings.opencode_go_base_url
-DEEPSEEK_FLASH_MODEL = _settings.deepseek_flash_model
-DEEPSEEK_PRO_MODEL = _settings.deepseek_pro_model
-DEEPSEEK_REASONER_MODEL = _settings.deepseek_reasoner_model
-DEEPSEEK_REASONING_EFFORT = _settings.deepseek_reasoning_effort
-DEEPSEEK_THINKING_ENABLED = _settings.deepseek_thinking_enabled
-LLM_MODEL_ROUTING_ENABLED = _settings.llm_model_routing_enabled
-LLM_AUTO_ECONOMY_ENABLED = _settings.llm_auto_economy_enabled
-LLM_CACHE_HIT_WARNING_THRESHOLD_PCT = _settings.llm_cache_hit_warning_threshold_pct
-LLM_REQUEST_TIMEOUT = _settings.llm_request_timeout
-DEEPSEEK_FLASH_INPUT_CACHE_HIT_PRICE_USD_PER_MILLION = (
-    _settings.deepseek_flash_input_cache_hit_price_usd_per_million
-)
-DEEPSEEK_FLASH_INPUT_CACHE_MISS_PRICE_USD_PER_MILLION = (
-    _settings.deepseek_flash_input_cache_miss_price_usd_per_million
-)
-DEEPSEEK_FLASH_OUTPUT_PRICE_USD_PER_MILLION = (
-    _settings.deepseek_flash_output_price_usd_per_million
-)
-DEEPSEEK_PRO_INPUT_CACHE_HIT_PRICE_USD_PER_MILLION = (
-    _settings.deepseek_pro_input_cache_hit_price_usd_per_million
-)
-DEEPSEEK_PRO_INPUT_CACHE_MISS_PRICE_USD_PER_MILLION = (
-    _settings.deepseek_pro_input_cache_miss_price_usd_per_million
-)
-DEEPSEEK_PRO_OUTPUT_PRICE_USD_PER_MILLION = (
-    _settings.deepseek_pro_output_price_usd_per_million
-)
-MEMORY_DB_PATH = _settings.memory_db_path
-CONVERSATION_HISTORY_LIMIT = _settings.conversation_history_limit
-OPENCODE_TIMEOUT = _settings.opencode_timeout
-OPENCODE_MAX_OUTPUT = _settings.opencode_max_output
-OPENCODE_MAX_FILE_SIZE = _settings.opencode_max_file_size
-OPENCODE_BACKUP_ENABLED = _settings.opencode_backup_enabled
-OPENCODE_BACKUP_SUFFIX = _settings.opencode_backup_suffix
-MAX_EDIT_SIZE = _settings.max_edit_size
-MAX_WRITE_SIZE = _settings.max_write_size
-
+# Static command allowlists and security rules (do not change at runtime).
 ALLOWED_COMMANDS = [
     "bash",
     "read",
@@ -377,8 +349,6 @@ BLACKLISTED_PATTERNS = [
     ":(){:|:&};:",
     "fork bomb patterns",
 ]
-
-ALLOWED_DIRECTORIES = _settings.build_allowed_directories()
 
 ALLOWED_FILE_EXTENSIONS = [
     ".py",
@@ -465,27 +435,18 @@ ADMIN_ONLY_BASH_COMMANDS = [
     "kill",
 ]
 
-KNOWN_PROJECTS: Dict[str, Dict[str, str]] = _settings.build_known_projects()
-
-DEFAULT_PREFERENCES = {
-    "coding_style": "clean_simple",
-    "cost_preference": "low_cost_first",
-    "communication_style": "direct_conversational",
-    "risk_tolerance": "medium",
-    "detail_level": "balanced",
-}
-
 
 def validate_config():
     """Validate baseline runtime configuration."""
 
+    settings = get_settings()
     errors = []
 
-    if not MEMORY_DB_PATH.parent.exists():
-        errors.append(f"Diretório de dados não existe: {MEMORY_DB_PATH.parent}")
+    if not settings.memory_db_path.parent.exists():
+        errors.append(f"Data directory does not exist: {settings.memory_db_path.parent}")
 
     if not LOGS_DIR.exists():
-        errors.append(f"Diretório de logs não existe: {LOGS_DIR}")
+        errors.append(f"Logs directory does not exist: {LOGS_DIR}")
 
     return errors
 

@@ -16,8 +16,15 @@ SAMPLE_APP_ROOT = PROJECT_ROOT.parent / "sample-app"
 
 def _create_memory(db_path):
     """Create MemorySystem with a specific DB path"""
-    with patch('core.memory.MEMORY_DB_PATH', str(db_path)):
-        from core.memory import MemorySystem
+    from config.settings import AppSettings, get_settings
+    from core.memory import MemorySystem
+
+    get_settings.cache_clear()
+
+    settings = AppSettings()
+    settings.memory_db_path = db_path
+
+    with patch("core.memory.system.get_settings", return_value=settings):
         memory = MemorySystem()
         memory.add_project(PROJECT_NAME, str(PROJECT_ROOT),
                            "ai-assistant", "high")

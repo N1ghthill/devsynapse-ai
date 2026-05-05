@@ -18,7 +18,7 @@ class SettingsStore:
         self.db_path = db_path
 
     def get_user_preferences(self) -> str:
-        """Retorna preferências do usuário como texto formatado"""
+        """Return user preferences as formatted text."""
 
         conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
@@ -47,7 +47,7 @@ class SettingsStore:
         return text
 
     def update_preference(self, key: str, value: str, source: str = "learned"):
-        """Atualiza ou cria uma preferência do usuário"""
+        """Update or create a user preference."""
 
         conn = connect_db(self.db_path)
         cursor = conn.cursor()
@@ -113,7 +113,7 @@ class SettingsStore:
         conn.commit()
         conn.close()
 
-        logger.info(f"Preferência atualizada: {key} = {value} ({source})")
+        logger.info("Preference updated: %s = %s (%s)", key, value, source)
 
     def get_user(self, username: str) -> Optional[Dict[str, Any]]:
         """Return a stored user by username."""

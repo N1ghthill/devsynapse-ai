@@ -2,38 +2,36 @@
 Persistent storage for DevSynapse — facade composing domain stores.
 """
 
-import json
 import logging
-import re
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from config.settings import DEFAULT_PREFERENCES, KNOWN_PROJECTS, get_settings
+from config.settings import get_settings
 from core.async_utils import run_blocking
-from core.db import connect_db
-from core.llm_optimization import ModelRoute, build_task_profile
+from core.db import connect_db, db_session
+from core.llm_optimization import ModelRoute
 from core.memory.agent_runs import AgentRunStore
 from core.memory.conversations import ConversationStore
 from core.memory.learning import AgentLearningStore
+from core.memory.llm_telemetry import LLMTelemetryStore
+from core.memory.nudges import NudgeStore
 from core.memory.procedural import ProjectMemoryStore
 from core.memory.projects import ProjectRegistry
 from core.memory.settings import SettingsStore
 from core.migrations import build_memory_migration_manager
-from core.skills import SkillError, SkillStore
+from core.skills import SkillStore
 
 logger = logging.getLogger(__name__)
 _settings = get_settings()
 
 
 class MemorySystem:
-    """Gerencia memória persistente do DevSynapse."""
+    """Manages DevSynapse persistent memory."""
 
     def __init__(self):
-        from core.memory import MEMORY_DB_PATH
-
-        self.db_path = MEMORY_DB_PATH
+        self.db_path = str(get_settings().memory_db_path)
         self._init_database()
 
         self.projects = ProjectRegistry(self.db_path)
@@ -53,41 +51,50 @@ class MemorySystem:
         self.conversations._get_projects_context_fn = self.projects.get_projects_context
         self.conversations._get_project_lookup_fn = self.projects._get_project_lookup
 
+        self.llm_telemetry = LLMTelemetryStore(self.db_path)
+        self.nudges = NudgeStore(
+            db_path=self.db_path,
+            memory_upserter=self.upsert_project_memory,
+            skill_creator=self.create_skill,
+            skill_updater=self.update_skill,
+        )
+
     def _init_database(self):
-        """Inicializa banco de dados SQLite"""
+        """Initialize SQLite database with migrations and seed data."""
 
         build_memory_migration_manager(self.db_path).apply_migrations()
 
-        conn = connect_db(self.db_path)
-        cursor = conn.cursor()
+        settings = get_settings()
+        default_prefs = settings.build_default_preferences()
+        known_projects = settings.build_known_projects()
 
-        # Inserir preferências padrão
-        for key, value in DEFAULT_PREFERENCES.items():
-            cursor.execute(
-                """
-                INSERT OR IGNORE INTO user_preferences
-                (key, value, source, confidence, last_updated, evidence_count)
-                VALUES (?, ?, 'default', 1.0, ?, 1)
-                """,
-                (key, value, datetime.now().isoformat()),
-            )
+        with db_session(self.db_path) as conn:
+            cursor = conn.cursor()
 
-        # Inserir projetos conhecidos
-        for name, info in KNOWN_PROJECTS.items():
-            cursor.execute(
-                """
-                INSERT OR IGNORE INTO projects
-                (name, path, type, priority, last_accessed, access_count)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (name, info["path"], info["type"], info["priority"],
-                 datetime.now().isoformat(), 0),
-            )
+            for key, value in default_prefs.items():
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO user_preferences
+                    (key, value, source, confidence, last_updated, evidence_count)
+                    VALUES (?, ?, 'default', 1.0, ?, 1)
+                    """,
+                    (key, value, datetime.now().isoformat()),
+                )
 
-        conn.commit()
-        conn.close()
+            for name, info in known_projects.items():
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO projects
+                    (name, path, type, priority, last_accessed, access_count)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (name, info["path"], info["type"], info["priority"],
+                     datetime.now().isoformat(), 0),
+                )
 
-        logger.info(f"Banco de dados inicializado: {self.db_path}")
+            conn.commit()
+
+        logger.info("Database initialized: %s", self.db_path)
 
     def get_db_connection(self) -> sqlite3.Connection:
         """Return a SQLite connection for internal/service use."""
@@ -345,51 +352,7 @@ class MemorySystem:
     # ── LLM model catalog and telemetry ─────────────────────────────
 
     def upsert_llm_models(self, models: list[Dict[str, Any]]) -> int:
-        if not models:
-            return 0
-
-        now = datetime.now().isoformat()
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        for model in models:
-            cursor.execute(
-                """
-                INSERT INTO llm_model_catalog (
-                    provider, model_id, name, context_length, input_cost_per_token,
-                    output_cost_per_token, cache_read_cost_per_token, raw_pricing,
-                    capabilities, source_url, discovered_at, last_seen_at, enabled
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                ON CONFLICT(provider, model_id) DO UPDATE SET
-                    name = excluded.name,
-                    context_length = excluded.context_length,
-                    input_cost_per_token = excluded.input_cost_per_token,
-                    output_cost_per_token = excluded.output_cost_per_token,
-                    cache_read_cost_per_token = excluded.cache_read_cost_per_token,
-                    raw_pricing = excluded.raw_pricing,
-                    capabilities = excluded.capabilities,
-                    source_url = excluded.source_url,
-                    last_seen_at = excluded.last_seen_at,
-                    enabled = 1
-                """,
-                (
-                    model["provider"],
-                    model["model_id"],
-                    model.get("name"),
-                    model.get("context_length"),
-                    model.get("input_cost_per_token"),
-                    model.get("output_cost_per_token"),
-                    model.get("cache_read_cost_per_token"),
-                    json.dumps(model.get("raw_pricing") or {}),
-                    json.dumps(model.get("capabilities") or {}),
-                    model.get("source_url"),
-                    now,
-                    now,
-                ),
-            )
-        conn.commit()
-        conn.close()
-        return len(models)
+        return self.llm_telemetry.upsert_models(models)
 
     def list_llm_models(
         self,
@@ -397,66 +360,10 @@ class MemorySystem:
         enabled_only: bool = True,
         limit: int = 200,
     ) -> list[Dict[str, Any]]:
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        filters = []
-        params: list[Any] = []
-        if provider:
-            filters.append("provider = ?")
-            params.append(provider)
-        if enabled_only:
-            filters.append("enabled = 1")
-        where = f"WHERE {' AND '.join(filters)}" if filters else ""
-        cursor.execute(
-            f"""
-            SELECT provider, model_id, name, context_length, input_cost_per_token,
-                   output_cost_per_token, cache_read_cost_per_token, raw_pricing,
-                   capabilities, source_url, discovered_at, last_seen_at, enabled
-            FROM llm_model_catalog
-            {where}
-            ORDER BY provider, COALESCE(input_cost_per_token, 999), model_id
-            LIMIT ?
-            """,
-            (*params, limit),
-        )
-        rows = cursor.fetchall()
-        conn.close()
-        return [self._llm_model_row_to_dict(row) for row in rows]
+        return self.llm_telemetry.list_models(provider, enabled_only, limit)
 
     def get_llm_model(self, provider: str, model_id: str) -> Optional[Dict[str, Any]]:
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT provider, model_id, name, context_length, input_cost_per_token,
-                   output_cost_per_token, cache_read_cost_per_token, raw_pricing,
-                   capabilities, source_url, discovered_at, last_seen_at, enabled
-            FROM llm_model_catalog
-            WHERE provider = ? AND model_id = ?
-            """,
-            (provider, model_id),
-        )
-        row = cursor.fetchone()
-        conn.close()
-        return self._llm_model_row_to_dict(row) if row else None
-
-    @staticmethod
-    def _llm_model_row_to_dict(row) -> Dict[str, Any]:
-        return {
-            "provider": row["provider"],
-            "model_id": row["model_id"],
-            "name": row["name"],
-            "context_length": row["context_length"],
-            "input_cost_per_token": row["input_cost_per_token"],
-            "output_cost_per_token": row["output_cost_per_token"],
-            "cache_read_cost_per_token": row["cache_read_cost_per_token"],
-            "raw_pricing": json.loads(row["raw_pricing"] or "{}"),
-            "capabilities": json.loads(row["capabilities"] or "{}"),
-            "source_url": row["source_url"],
-            "discovered_at": row["discovered_at"],
-            "last_seen_at": row["last_seen_at"],
-            "enabled": bool(row["enabled"]),
-        }
+        return self.llm_telemetry.get_model(provider, model_id)
 
     def record_llm_request_telemetry(
         self,
@@ -471,84 +378,13 @@ class MemorySystem:
         total_latency_ms: Optional[float] = None,
         error_message: Optional[str] = None,
     ) -> None:
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO llm_request_telemetry (
-                timestamp, user_id, conversation_id, provider, model, routing_reason,
-                task_type, complexity, success, error_message, prompt_tokens,
-                completion_tokens, total_tokens, prompt_cache_hit_tokens,
-                prompt_cache_miss_tokens, reasoning_tokens, estimated_cost_usd,
-                first_token_latency_ms, total_latency_ms
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                datetime.now().isoformat(),
-                user_id,
-                conversation_id,
-                provider,
-                model,
-                route.reason if route else None,
-                route.task_type if route else None,
-                route.complexity if route else None,
-                int(success),
-                error_message[:1000] if error_message else None,
-                (usage or {}).get("prompt_tokens"),
-                (usage or {}).get("completion_tokens"),
-                (usage or {}).get("total_tokens"),
-                (usage or {}).get("prompt_cache_hit_tokens"),
-                (usage or {}).get("prompt_cache_miss_tokens"),
-                (usage or {}).get("reasoning_tokens"),
-                (usage or {}).get("estimated_cost_usd"),
-                first_token_latency_ms,
-                total_latency_ms,
-            ),
+        self.llm_telemetry.record_telemetry(
+            user_id, conversation_id, provider, model, route,
+            success, usage, first_token_latency_ms, total_latency_ms, error_message,
         )
-        conn.commit()
-        conn.close()
 
     def get_llm_telemetry_stats(self, hours: int = 24) -> Dict[str, Any]:
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        since_time = (datetime.now() - timedelta(hours=hours)).isoformat()
-        cursor.execute(
-            """
-            SELECT provider, model, user_id,
-                   COUNT(*) AS request_count,
-                   SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS error_count,
-                   AVG(first_token_latency_ms) AS avg_first_token_latency_ms,
-                   AVG(total_latency_ms) AS avg_total_latency_ms,
-                   SUM(COALESCE(estimated_cost_usd, 0)) AS estimated_cost_usd
-            FROM llm_request_telemetry
-            WHERE timestamp >= ?
-            GROUP BY provider, model, user_id
-            ORDER BY request_count DESC
-            LIMIT 50
-            """,
-            (since_time,),
-        )
-        rows = cursor.fetchall()
-        conn.close()
-        return {
-            "by_user_model": [
-                {
-                    "provider": row["provider"],
-                    "model": row["model"],
-                    "user_id": row["user_id"],
-                    "request_count": int(row["request_count"] or 0),
-                    "error_count": int(row["error_count"] or 0),
-                    "error_rate": (
-                        float(row["error_count"] or 0) / float(row["request_count"] or 1)
-                    ),
-                    "avg_first_token_latency_ms": row["avg_first_token_latency_ms"],
-                    "avg_total_latency_ms": row["avg_total_latency_ms"],
-                    "estimated_cost_usd": float(row["estimated_cost_usd"] or 0.0),
-                }
-                for row in rows
-            ]
-        }
+        return self.llm_telemetry.get_telemetry_stats(hours)
 
     # ── procedural memory and skills ────────────────────────────────
 
@@ -688,29 +524,7 @@ class MemorySystem:
         }
 
     def get_learning_nudge_stats(self) -> Dict[str, Any]:
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT COUNT(*) AS total_events
-            FROM learning_nudge_events
-            """
-        )
-        totals = dict(cursor.fetchone())
-        cursor.execute(
-            """
-            SELECT nudge_type, status, COUNT(*) AS count
-            FROM learning_nudge_events
-            GROUP BY nudge_type, status
-            ORDER BY count DESC
-            """
-        )
-        by_status = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return {
-            "total_events": int(totals.get("total_events") or 0),
-            "by_status": by_status,
-        }
+        return self.nudges.get_stats()
 
     def review_completed_task(
         self,
@@ -726,139 +540,11 @@ class MemorySystem:
         tool_iterations: int = 0,
         trigger_reason: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Review a finished task and persist reusable learning when warranted."""
-
-        reason = trigger_reason or self._learning_trigger_reason(
-            route=route,
-            opencode_command=opencode_command,
-            command_success=command_success,
-            tool_iterations=tool_iterations,
+        return self.nudges.review_completed_task(
+            conversation_id, user_message, ai_response, project_name,
+            opencode_command, command_success, command_result, command_output,
+            route, tool_iterations, trigger_reason,
         )
-        if reason == "not_complex":
-            self._record_nudge_event(
-                conversation_id,
-                project_name,
-                "review",
-                reason,
-                "skipped",
-                {"message_preview": user_message[:160]},
-            )
-            return {"status": "skipped", "reason": reason}
-
-        created_memories: list[Dict[str, Any]] = []
-        created_skills: list[Dict[str, Any]] = []
-        task_profile = build_task_profile(user_message)
-
-        if command_success is True and opencode_command:
-            memory = self.upsert_project_memory(
-                content=self._command_procedure_memory(
-                    user_message,
-                    opencode_command,
-                    command_result,
-                    command_output,
-                ),
-                project_name=project_name,
-                memory_type="procedure",
-                source="nudge:command_success",
-                confidence_score=0.72,
-                memory_decay_score=0.01,
-                tags=[task_profile.task_type, "command"],
-                metadata={
-                    "conversation_id": conversation_id,
-                    "command": opencode_command,
-                    "trigger": reason,
-                },
-            )
-            created_memories.append(memory)
-            skill = self._create_or_update_skill_from_command(
-                task_profile.task_type,
-                user_message,
-                opencode_command,
-                command_result,
-                command_output,
-                None,
-            )
-            if skill:
-                created_skills.append(skill)
-        elif (route and route.complexity == "complex") or tool_iterations >= 2:
-            memory = self.upsert_project_memory(
-                content=self._response_insight_memory(user_message, ai_response),
-                project_name=project_name,
-                memory_type="insight",
-                source="nudge:complex_task",
-                confidence_score=0.5,
-                memory_decay_score=0.04,
-                tags=[task_profile.task_type],
-                metadata={"conversation_id": conversation_id, "trigger": reason},
-            )
-            created_memories.append(memory)
-
-        status = "recorded" if created_memories or created_skills else "reviewed"
-        details = {
-            "reason": reason,
-            "memories": [item.get("id") for item in created_memories],
-            "skills": [item.get("slug") for item in created_skills],
-        }
-        self._record_nudge_event(
-            conversation_id,
-            project_name,
-            "learning",
-            reason,
-            status,
-            details,
-        )
-        return {"status": status, **details}
-
-    def _learning_trigger_reason(
-        self,
-        route: Optional[ModelRoute],
-        opencode_command: Optional[str],
-        command_success: Optional[bool],
-        tool_iterations: int,
-    ) -> str:
-        if command_success is True:
-            return "command_success"
-        if command_success is False:
-            return "command_failure"
-        if route and route.complexity == "complex":
-            return "complex_task"
-        if tool_iterations >= 2:
-            return "multi_tool_task"
-        if opencode_command:
-            return "command_proposed"
-        return "not_complex"
-
-    def _record_nudge_event(
-        self,
-        conversation_id: Optional[str],
-        project_name: Optional[str],
-        nudge_type: str,
-        trigger_reason: str,
-        status: str,
-        details: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO learning_nudge_events (
-                conversation_id, project_name, nudge_type, trigger_reason,
-                status, details, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                conversation_id,
-                project_name,
-                nudge_type,
-                trigger_reason,
-                status,
-                json.dumps(details or {}, ensure_ascii=False),
-                datetime.now().isoformat(),
-            ),
-        )
-        conn.commit()
-        conn.close()
 
     def _latest_conversation_for_review(
         self,
@@ -866,137 +552,20 @@ class MemorySystem:
     ) -> Optional[Dict[str, Any]]:
         if not conversation_id:
             return None
-
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT conversation_id, user_message, ai_response, conversation_project_name
-            FROM conversations
-            WHERE conversation_id = ?
-            ORDER BY timestamp DESC
-            LIMIT 1
-            """,
-            (conversation_id,),
-        )
-        row = cursor.fetchone()
-        conn.close()
-        return dict(row) if row else None
-
-    def _command_procedure_memory(
-        self,
-        user_message: str,
-        command: str,
-        result: Optional[str],
-        output: Optional[str],
-    ) -> str:
-        task = self._shorten(user_message, 220)
-        outcome = self._shorten(output or result or "command succeeded", 320)
-        return (
-            f"For a task like '{task}', command `{command}` succeeded. "
-            f"Useful outcome: {outcome}"
-        )
-
-    def _response_insight_memory(self, user_message: str, ai_response: str) -> str:
-        task = self._shorten(user_message, 220)
-        approach = self._shorten(ai_response, 420)
-        return f"For a complex task like '{task}', previous useful approach: {approach}"
-
-    def _create_or_update_skill_from_command(
-        self,
-        task_type: str,
-        user_message: str,
-        command: str,
-        result: Optional[str],
-        output: Optional[str],
-        project_name: Optional[str],
-    ) -> Optional[Dict[str, Any]]:
-        if task_type in {"concept", "general"} and not self._command_is_repeatable(command):
-            return None
-
-        first_command = self._first_command_word(command)
-        skill_name = f"{task_type} {first_command} workflow"
-        description = (
-            f"Repeatable workflow for {task_type} tasks using `{first_command}` "
-            "from a successful DevSynapse run."
-        )
-        body = self._skill_body_from_command(user_message, command, result, output)
-        tags = [task_type, first_command, "nudge"]
-
-        try:
-            return self.create_skill(
-                name=skill_name,
-                description=description,
-                body=body,
-                category=task_type,
-                project_name=project_name,
-                tags=tags,
-                replace=False,
-                source="nudge",
+        with db_session(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT conversation_id, user_message, ai_response, conversation_project_name
+                FROM conversations
+                WHERE conversation_id = ?
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """,
+                (conversation_id,),
             )
-        except SkillError:
-            return self.update_skill(
-                skill_name,
-                body=body,
-                description=description,
-                project_name=project_name,
-            )
-
-    def _skill_body_from_command(
-        self,
-        user_message: str,
-        command: str,
-        result: Optional[str],
-        output: Optional[str],
-    ) -> str:
-        return "\n".join(
-            [
-                "## When to Use",
-                self._shorten(user_message, 500),
-                "",
-                "## Steps",
-                "1. Confirm the selected project context is correct.",
-                f"2. Run or adapt this command through the command tool: `{command}`.",
-                "3. Inspect output before proposing edits or follow-up commands.",
-                "",
-                "## Last Known Outcome",
-                self._shorten(output or result or "The command completed successfully.", 900),
-                "",
-                "## Verification",
-                "- Prefer read-only inspection first when the task can be diagnosed safely.",
-                "- Keep project-scoped mutation rules in place for any follow-up edits.",
-            ]
-        )
-
-    @staticmethod
-    def _command_is_repeatable(command: str) -> bool:
-        lowered = command.lower()
-        repeatable_markers = (
-            "pytest",
-            "test",
-            "lint",
-            "migrate",
-            "build",
-            "grep",
-            "git ",
-            "read ",
-        )
-        return any(marker in lowered for marker in repeatable_markers)
-
-    @staticmethod
-    def _first_command_word(command: str) -> str:
-        match = re.search(r'"([^"]+)"', command)
-        command_text = match.group(1) if match else command
-        parts = command_text.strip().split()
-        raw = parts[0] if parts else "command"
-        return re.sub(r"[^a-z0-9-]+", "-", raw.lower()).strip("-") or "command"
-
-    @staticmethod
-    def _shorten(value: Optional[str], limit: int) -> str:
-        normalized = " ".join((value or "").split()).strip()
-        if len(normalized) <= limit:
-            return normalized
-        return normalized[: limit - 3].rstrip() + "..."
+            row = cursor.fetchone()
+            return dict(row) if row else None
 
     def record_agent_route_decision(
         self,

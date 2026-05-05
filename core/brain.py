@@ -1,15 +1,12 @@
 """
-Núcleo do DevSynapse - Integração com DeepSeek API
+Core of DevSynapse - DeepSeek API Integration
 """
 
 import logging
-import re
-import time
 from decimal import Decimal
 from typing import Callable, Dict, List, Optional, Tuple
 
 import config.settings as app_settings
-from core.async_utils import run_blocking
 from core.autoexec_policy import (
     can_autoexecute_command,
     max_autoexec_rounds,
@@ -19,160 +16,27 @@ from core.autoexec_policy import (
     user_request_expects_tool,
 )
 from core.command_extraction import extract_opencode_command, tool_calls_to_opencode_command
+from core.command_messages import (
+    build_command_result_replay_messages,
+    command_completion_fallback,
+    command_failure_message,
+)
 from core.correlation import generate_tool_run_id
-from core.deepseek import DeepSeekClient, LLMResult
+from core.deepseek import DeepSeekClient
+from core.llm_executor import LLMExecutor
 from core.llm_optimization import ModelRoute
 from core.memory.protocol import BrainMemoryAdapter, BrainMemoryProtocol
 from core.plugin_system import PluginManager, plugin_manager
 from core.prompts import build_system_prompt
 from core.routing import RouteSelector
+from core.tool_repair import coerce_llm_result, sanitize_unconfirmed_execution_claims
+from core.usage_tracker import UsageTracker
 
 logger = logging.getLogger(__name__)
 
 
-OPENCODE_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "bash",
-            "strict": True,
-            "description": (
-                "Execute a shell command on the system. "
-                "Use to list files, check git status, run tests, install project dependencies, etc. "
-                "Do not use sudo or privileged OS package installation from chat."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "The full shell command to execute (e.g. 'ls -la', 'git status')",
-                    }
-                },
-                "required": ["command"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "read",
-            "strict": True,
-            "description": "Read the contents of a file from the filesystem.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Absolute path to the file to read",
-                    }
-                },
-                "required": ["path"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "glob",
-            "strict": True,
-            "description": "Find files matching a glob pattern (e.g. '**/*.py', 'src/**/*.ts').",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "pattern": {
-                        "type": "string",
-                        "description": "Glob pattern to search for files",
-                    }
-                },
-                "required": ["pattern"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "grep",
-            "strict": True,
-            "description": "Search for a regex pattern in file contents.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "pattern": {
-                        "type": "string",
-                        "description": "Regular expression to search for",
-                    },
-                    "include": {
-                        "type": "string",
-                        "description": "File extension filter (e.g. '*.js', '*.py'). Use empty string to search all files.",
-                    },
-                },
-                "required": ["pattern", "include"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "edit",
-            "strict": True,
-            "description": "Edit a file by replacing one piece of text with another.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Absolute path to the file to edit",
-                    },
-                    "old": {
-                        "type": "string",
-                        "description": "Exact text to replace (must match precisely)",
-                    },
-                    "new": {
-                        "type": "string",
-                        "description": "New text that will replace the old text",
-                    },
-                },
-                "required": ["path", "old", "new"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "write",
-            "strict": True,
-            "description": (
-                "Write content to a file (overwrites if it exists). "
-                "Parent directories are created automatically; use this as the first action "
-                "when creating a small new project instead of running mkdir separately."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Absolute path to the file to write",
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "Content to write to the file",
-                    },
-                },
-                "required": ["path", "content"],
-                "additionalProperties": False,
-            },
-        },
-    },
-]
-
 class DevSynapseBrain:
-    """Gerencia a inteligência do DevSynapse via API DeepSeek."""
+    """Manages DevSynapse intelligence via DeepSeek API."""
 
     def __init__(
         self,
@@ -204,7 +68,7 @@ class DevSynapseBrain:
             "output": Decimal(str(settings.deepseek_pro_output_price_usd_per_million)),
         }
         self.deepseek = DeepSeekClient(
-            api_key=app_settings.DEEPSEEK_API_KEY,
+            api_key=settings.deepseek_api_key,
             model=settings.deepseek_model,
             base_url=settings.deepseek_base_url,
             reasoning_effort=settings.deepseek_reasoning_effort,
@@ -216,15 +80,15 @@ class DevSynapseBrain:
             pro_pricing=pro_pricing,
             provider_configs={
                 "openrouter": {
-                    "api_key": app_settings.OPENROUTER_API_KEY,
+                    "api_key": settings.openrouter_api_key,
                     "base_url": settings.openrouter_base_url,
                 },
                 "opencode-zen": {
-                    "api_key": app_settings.OPENCODE_ZEN_API_KEY,
+                    "api_key": settings.opencode_zen_api_key,
                     "base_url": settings.opencode_zen_base_url,
                 },
                 "opencode-go": {
-                    "api_key": app_settings.OPENCODE_GO_API_KEY,
+                    "api_key": settings.opencode_go_api_key,
                     "base_url": settings.opencode_go_base_url,
                 },
             },
@@ -237,8 +101,19 @@ class DevSynapseBrain:
             deepseek_api_key=self.deepseek.api_key,
         )
 
+        self.usage = UsageTracker(
+            memory=self.memory_optional,
+            model_pricing_lookup=self.memory_optional.get_llm_model,
+        )
+
+        self.executor = LLMExecutor(
+            deepseek_client=self.deepseek,
+            usage_tracker=self.usage,
+            get_settings=app_settings.get_settings,
+        )
+
         if not self.deepseek.configured:
-            logger.warning("DeepSeek API key não configurada")
+            logger.warning("DeepSeek API key not configured")
 
     @property
     def api_key(self) -> Optional[str]:
@@ -355,8 +230,8 @@ class DevSynapseBrain:
 
         while round_count < max_rounds:
             round_count += 1
-            llm_result = self._coerce_llm_result(
-                await self._call_llm_api(
+            llm_result = coerce_llm_result(
+                await self.executor.call_api(
                     messages,
                     route=route,
                     user_id=user_id,
@@ -368,7 +243,7 @@ class DevSynapseBrain:
             opencode_command = tool_calls_to_opencode_command(llm_result.tool_calls)
             if opencode_command is None:
                 opencode_command = extract_opencode_command(response_text)
-            aggregated_usage = self._merge_usage(aggregated_usage, llm_result.usage)
+            aggregated_usage = self.usage.merge_usage(aggregated_usage, llm_result.usage)
 
             if should_retry_missing_tool(
                 auto_execute=auto_execute,
@@ -388,7 +263,7 @@ class DevSynapseBrain:
                 break
 
             tool_run_id = generate_tool_run_id()
-            success, msg, output, status, reason, proj = await self.opencode.execute_command(
+            cmd_result = await self.opencode.execute_command(
                 opencode_command,
                 user_id=user_id,
                 project_name=effective_project_name,
@@ -396,6 +271,14 @@ class DevSynapseBrain:
                 project_mutation_allowlist=project_mutation_allowlist or [],
                 conversation_id=conversation_id,
                 tool_run_id=tool_run_id,
+            )
+            success, msg, output, status, reason, proj = (
+                cmd_result.success,
+                cmd_result.message,
+                cmd_result.output,
+                cmd_result.status,
+                cmd_result.reason_code,
+                cmd_result.project_name,
             )
             self._record_agent_command_result(
                 conversation_id=conversation_id,
@@ -429,7 +312,7 @@ class DevSynapseBrain:
                     output,
                 ):
                     messages.extend(
-                        self._build_command_result_replay_messages(
+                        build_command_result_replay_messages(
                             response_text,
                             opencode_command,
                             success,
@@ -441,13 +324,13 @@ class DevSynapseBrain:
                     continue
                 response_text = (
                     f"{response_text}\n\n"
-                    f"{self._command_failure_message(opencode_command, msg, reason, proj)}"
+                    f"{command_failure_message(opencode_command, msg, reason, proj)}"
                 )
                 opencode_command = None
                 break
 
             messages.extend(
-                self._build_command_result_replay_messages(
+                build_command_result_replay_messages(
                     response_text,
                     opencode_command,
                     success,
@@ -458,14 +341,14 @@ class DevSynapseBrain:
 
         await self.plugin_manager.emit_event("brain:after_llm_call", {"response": response_text})
 
-        response_text = self._sanitize_unconfirmed_execution_claims(
+        response_text = sanitize_unconfirmed_execution_claims(
             response_text,
             opencode_command,
         )
         if autoexecuted_command is not None and (
             not response_text.strip() or response_promises_pending_action(response_text)
         ):
-            response_text = self._command_completion_fallback(autoexecuted_command)
+            response_text = command_completion_fallback(autoexecuted_command)
 
         persisted_command = opencode_command
         if persisted_command is None and autoexecuted_command is not None:
@@ -498,7 +381,7 @@ class DevSynapseBrain:
             if autoexecuted_command["success"]:
                 self._persist_repos_project_if_needed(autoexecuted_command["project_name"])
 
-        self._record_agent_route_decision(
+        self.usage.record_route_decision(
             conversation_id=conversation_id,
             route=route,
             usage=aggregated_usage,
@@ -699,22 +582,6 @@ class DevSynapseBrain:
             tool_iterations=tool_iterations,
         )
 
-    def _record_agent_route_decision(
-        self,
-        conversation_id: Optional[str],
-        route: ModelRoute,
-        usage: Optional[Dict],
-        project_name: Optional[str],
-        opencode_command: Optional[str],
-    ) -> None:
-        self.memory_optional.record_agent_route_decision(
-            conversation_id=conversation_id,
-            route=route,
-            usage=usage,
-            project_name=project_name,
-            opencode_command=opencode_command,
-        )
-
     def _persist_repos_project_if_needed(self, project_name: Optional[str]) -> None:
         if not project_name:
             return
@@ -739,273 +606,8 @@ class DevSynapseBrain:
                 priority="medium",
                 replace=False,
             )
-        except Exception:
+        except (OSError, ValueError):
             logger.debug("Could not persist generated project %s", project_name, exc_info=True)
-
-    async def _call_llm_api(
-        self,
-        messages: List[Dict],
-        route: Optional[ModelRoute] = None,
-        tool_choice: object = "auto",
-        user_id: Optional[str] = None,
-        conversation_id: Optional[str] = None,
-        on_token: Optional[Callable[[str], None]] = None,
-    ) -> LLMResult:
-        """Chama API do DeepSeek e retorna resposta degradada se a API falhar."""
-
-        if not self.deepseek.configured:
-            return LLMResult(content=self._get_fallback_response(messages))
-
-        model = route.model if route else self.deepseek.model
-        start_time = time.perf_counter()
-        try:
-            return await self._complete_and_record(
-                messages, model, tool_choice, route, user_id, conversation_id, start_time,
-                on_token,
-            )
-        except Exception as e:
-            fallback_model = route.fallback_model if route else None
-            if fallback_model and fallback_model != model:
-                try:
-                    logger.warning(
-                        "DeepSeek %s call failed (%s); retrying with %s",
-                        model, e, fallback_model,
-                    )
-                    return await self._complete_and_record(
-                        messages, fallback_model, tool_choice, route, user_id,
-                        conversation_id, start_time, on_token,
-                    )
-                except Exception as fallback_error:
-                    logger.warning(
-                        "DeepSeek fallback model %s failed: %s",
-                        fallback_model, fallback_error,
-                    )
-
-            self._record_llm_request_telemetry(
-                user_id=user_id, conversation_id=conversation_id,
-                provider=None, model=model, route=route, success=False,
-                usage=None,
-                total_latency_ms=(time.perf_counter() - start_time) * 1000,
-                error_message=str(e),
-            )
-            logger.warning(f"DeepSeek API falhou: {e}. Usando resposta degradada.")
-            return LLMResult(content=self._get_fallback_response(messages))
-
-    async def _complete_and_record(
-        self,
-        messages: List[Dict],
-        model: str,
-        tool_choice: object,
-        route: Optional[ModelRoute],
-        user_id: Optional[str],
-        conversation_id: Optional[str],
-        start_time: float,
-        on_token: Optional[Callable[[str], None]] = None,
-    ) -> LLMResult:
-        settings = app_settings.get_settings()
-        if settings.llm_streaming_enabled:
-            result = await run_blocking(
-                self.deepseek.stream_chat_completion,
-                messages,
-                OPENCODE_TOOLS,
-                model=model,
-                tool_choice=tool_choice,
-                on_token=on_token,
-            )
-        else:
-            result = await run_blocking(
-                self.deepseek.chat_completion,
-                messages,
-                OPENCODE_TOOLS,
-                model=model,
-                tool_choice=tool_choice,
-            )
-        usage = self._enrich_usage_cost(result.provider, result.model, result.usage)
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        self._record_llm_request_telemetry(
-            user_id=user_id, conversation_id=conversation_id,
-            provider=result.provider, model=result.model,
-            route=route, success=True, usage=usage,
-            first_token_latency_ms=elapsed_ms, total_latency_ms=elapsed_ms,
-        )
-        return LLMResult(
-            content=result.content,
-            provider=result.provider,
-            model=result.model,
-            usage=usage,
-            tool_calls=result.tool_calls,
-            reasoning_content=result.reasoning_content,
-        )
-
-    def _enrich_usage_cost(
-        self,
-        provider: Optional[str],
-        model: Optional[str],
-        usage: Optional[Dict],
-    ) -> Optional[Dict]:
-        if not usage:
-            return usage
-        if usage.get("estimated_cost_usd") is not None:
-            return usage
-        if not provider or not model:
-            return usage
-        catalog = self.memory_optional.get_llm_model(provider, model)
-        if not isinstance(catalog, dict):
-            return usage
-        input_cost = catalog.get("input_cost_per_token")
-        output_cost = catalog.get("output_cost_per_token")
-        cache_cost = catalog.get("cache_read_cost_per_token")
-        if input_cost is None or output_cost is None:
-            return usage
-        cache_hit_tokens = int(usage.get("prompt_cache_hit_tokens") or 0)
-        cache_miss_tokens = int(usage.get("prompt_cache_miss_tokens") or 0)
-        prompt_tokens = int(usage.get("prompt_tokens") or 0)
-        completion_tokens = int(usage.get("completion_tokens") or 0)
-        if prompt_tokens and not cache_hit_tokens and not cache_miss_tokens:
-            cache_miss_tokens = prompt_tokens
-        cost = (
-            cache_hit_tokens * float(cache_cost if cache_cost is not None else input_cost)
-            + cache_miss_tokens * float(input_cost)
-            + completion_tokens * float(output_cost)
-        )
-        enriched = dict(usage)
-        enriched["estimated_cost_usd"] = round(cost, 8)
-        return enriched
-
-    def _record_llm_request_telemetry(self, **kwargs) -> None:
-        self.memory_optional.record_llm_request_telemetry(**kwargs)
-
-
-
-    @staticmethod
-    def _command_completion_fallback(executed_command: Dict) -> str:
-        status = executed_command.get("status")
-        reason_code = executed_command.get("reason_code")
-        project_name = executed_command.get("project_name")
-        project_suffix = f" Projeto: {project_name}." if project_name else ""
-
-        if status == "success":
-            return f"Execução concluída. O resultado do comando está disponível abaixo.{project_suffix}"
-        if status == "blocked":
-            if reason_code == "project_scope_mismatch":
-                return (
-                    "A execução foi bloqueada porque o comando tentou sair do escopo "
-                    f"do projeto.{project_suffix}"
-                )
-            return (
-                "A execução foi bloqueada por uma regra de segurança ou permissão."
-                f"{project_suffix}"
-            )
-        if reason_code == "interactive_sudo_required":
-            return (
-                "O comando exige senha ou terminal interativo para `sudo`. Execute essa "
-                "etapa manualmente no terminal, ou configure as dependências fora do "
-                f"DevSynapse antes de continuar.{project_suffix}"
-            )
-        if reason_code == "privileged_setup_required":
-            return (
-                "Esta etapa exige setup privilegiado fora do chat. Execute os comandos "
-                "necessários no terminal e use Revalidar pré-requisitos antes de "
-                f"continuar.{project_suffix}"
-            )
-        return f"A execução terminou com falha e precisa de revisão.{project_suffix}"
-
-    @staticmethod
-    def _command_failure_message(
-        command: str,
-        message: str,
-        reason_code: Optional[str],
-        project_name: Optional[str],
-    ) -> str:
-        project_suffix = f" Projeto: {project_name}." if project_name else ""
-        if reason_code == "interactive_sudo_required":
-            return (
-                f"O comando `{command}` exige senha ou terminal interativo para `sudo` "
-                "e não pode ser concluído pelo chat. Execute essa etapa manualmente no "
-                f"terminal, ou configure as dependências fora do DevSynapse.{project_suffix}"
-            )
-        if reason_code == "privileged_setup_required":
-            return (
-                f"O comando `{command}` exige setup privilegiado e foi bloqueado antes de "
-                "rodar. Execute essa etapa manualmente no terminal e use Revalidar "
-                f"pré-requisitos para continuar.{project_suffix}"
-            )
-        return f"O comando `{command}` não pôde ser executado: {message}{project_suffix}"
-
-    def _coerce_llm_result(self, result: str | LLMResult) -> LLMResult:
-        if isinstance(result, LLMResult):
-            return result
-        return LLMResult(content=result)
-
-    def _merge_usage(self, base: Optional[Dict], extra: Optional[Dict]) -> Optional[Dict]:
-        if not base and not extra:
-            return None
-        if not base:
-            return dict(extra)
-        if not extra:
-            return dict(base)
-
-        merged = {
-            "provider": extra.get("provider") or base.get("provider"),
-            "model": extra.get("model") or base.get("model"),
-            "prompt_tokens": int(base.get("prompt_tokens") or 0)
-            + int(extra.get("prompt_tokens") or 0),
-            "completion_tokens": int(base.get("completion_tokens") or 0)
-            + int(extra.get("completion_tokens") or 0),
-            "total_tokens": int(base.get("total_tokens") or 0)
-            + int(extra.get("total_tokens") or 0),
-            "prompt_cache_hit_tokens": int(base.get("prompt_cache_hit_tokens") or 0)
-            + int(extra.get("prompt_cache_hit_tokens") or 0),
-            "prompt_cache_miss_tokens": int(base.get("prompt_cache_miss_tokens") or 0)
-            + int(extra.get("prompt_cache_miss_tokens") or 0),
-            "reasoning_tokens": int(base.get("reasoning_tokens") or 0)
-            + int(extra.get("reasoning_tokens") or 0),
-            "estimated_cost_usd": None,
-        }
-
-        base_cost = base.get("estimated_cost_usd")
-        extra_cost = extra.get("estimated_cost_usd")
-        if base_cost is not None or extra_cost is not None:
-            merged["estimated_cost_usd"] = round(
-                float(base_cost or 0.0) + float(extra_cost or 0.0),
-                8,
-            )
-
-        return merged
-
-    @staticmethod
-    def _build_command_result_replay_messages(
-        assistant_text: str,
-        command: str,
-        success: bool,
-        message: str,
-        output: Optional[str],
-    ) -> List[Dict[str, str]]:
-        """Replay tool output in a provider-compatible text form."""
-
-        result_text = output or message or "(no output)"
-        status = "success" if success else "failed"
-        return [
-            {"role": "assistant", "content": assistant_text or f"Executed `{command}`."},
-            {
-                "role": "user",
-                "content": (
-                    f"Command `{command}` finished with status `{status}`.\n"
-                    f"Result: {message}\n\n"
-                    f"Output:\n```\n{result_text[:3000]}\n```\n\n"
-                    "Never report success for a command whose status is `failed` or "
-                    "`blocked`, even if part of a shell pipeline produced output. "
-                    "Continue the original task. If more filesystem or command work is "
-                    "needed, emit exactly one next tool call. If the task is complete, "
-                    "give the final concise result. Do not stop only because a dependency "
-                    "or command is unavailable; continue with any useful project-scoped "
-                    "work that is still possible and mention the missing prerequisite in "
-                    "the final answer. If the command was blocked by permission or project "
-                    "scope, choose an allowed action inside the active project or explain "
-                    "the exact permission/project selection required."
-                ),
-            },
-        ]
 
     def _build_tool_repair_messages(
         self,
@@ -1036,51 +638,3 @@ class DevSynapseBrain:
                 ),
             },
         ]
-    
-    def _sanitize_unconfirmed_execution_claims(
-        self,
-        response_text: str,
-        opencode_command: Optional[str],
-    ) -> str:
-        """Prevent the assistant from claiming side effects that never executed."""
-
-        if opencode_command:
-            return response_text
-
-        shell_like = re.search(
-            r'(^|\n)\s*(echo|cat|touch|mkdir|rm|mv|cp|find|grep|sed)\b.*(>|>>|\|\||&&)',
-            response_text,
-            re.IGNORECASE,
-        )
-        success_claim = re.search(
-            r'\b(done|completed|file created|created the file|finished|ready[!,]?\s+created)\b',
-            response_text,
-            re.IGNORECASE,
-        )
-
-        if not shell_like and not success_claim:
-            return response_text
-
-        return (
-            "I haven't executed any changes yet.\n\n"
-            "I can only propose actions using my available tools, which then need "
-            "to be confirmed in the interface. Ask me to try again and I'll respond "
-            "with a single executable command."
-        )
-
-    def _get_fallback_response(self, messages: List[Dict]) -> str:
-        """Resposta degradada quando a API DeepSeek falha."""
-        
-        fallback_responses = [
-            "The DeepSeek API timed out and I switched to degraded mode. "
-            "I can still help with basic tasks if you specify what you need.",
-
-            "DeepSeek is temporarily unavailable. "
-            "You can ask me to run specific commands like 'bash ls' or 'read file'.",
-
-            "Sorry, I'm having technical difficulties. "
-            "In the meantime, I can help with tasks that don't require complex AI analysis."
-        ]
-        
-        import random
-        return random.choice(fallback_responses)

@@ -8,6 +8,7 @@ import pytest
 
 from core.brain import DevSynapseBrain
 from core.deepseek import LLMResult
+from core.opencode_bridge import CommandResult
 
 
 @pytest.fixture
@@ -47,11 +48,12 @@ def mock_memory():
 @pytest.fixture
 def mock_bridge():
     bridge = Mock()
-    bridge.execute_command.return_value = {
-        "success": True,
-        "output": "Command executed",
-        "error": None
-    }
+    bridge.execute_command.return_value = CommandResult(
+        success=True,
+        message="Command executed",
+        output="Command executed",
+        status="success",
+    )
     return bridge
 
 
@@ -64,14 +66,18 @@ class TestDevSynapseBrain:
         assert brain.opencode == mock_bridge
 
     def test_init_without_api_key(self, mock_memory, mock_bridge):
-        import config.settings as settings
-        orig = settings.DEEPSEEK_API_KEY
-        settings.DEEPSEEK_API_KEY = None
+        from config.settings import get_settings
+
+        get_settings.cache_clear()
         try:
-            brain = DevSynapseBrain(mock_memory, mock_bridge)
-            assert brain.api_key is None
+            with patch("core.memory.system.get_settings") as mock_gs:
+                settings = get_settings()
+                settings.deepseek_api_key = None
+                mock_gs.return_value = settings
+                brain = DevSynapseBrain(mock_memory, mock_bridge)
+                assert brain.api_key is None
         finally:
-            settings.DEEPSEEK_API_KEY = orig
+            get_settings.cache_clear()
 
     def test_generate_system_prompt(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
@@ -98,7 +104,7 @@ class TestDevSynapseBrain:
     async def test_process_message_calls_api(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
-        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+        with patch.object(brain.executor, 'call_api', new_callable=AsyncMock) as mock_call:
             mock_call.return_value = "Here is a response for you!"
 
             response, cmd, usage = await brain.process_message("Hello!", "test_session")
@@ -116,7 +122,7 @@ class TestDevSynapseBrain:
     async def test_process_message_persists_explicit_project_name(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
-        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+        with patch.object(brain.executor, 'call_api', new_callable=AsyncMock) as mock_call:
             mock_call.return_value = "Resposta sobre o projeto"
 
             await brain.process_message(
@@ -139,7 +145,7 @@ class TestDevSynapseBrain:
         }
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
-        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+        with patch.object(brain.executor, 'call_api', new_callable=AsyncMock) as mock_call:
             mock_call.return_value = "Resposta de continuidade"
 
             await brain.process_message("Continue", "test_session")
@@ -151,7 +157,7 @@ class TestDevSynapseBrain:
     async def test_process_message_with_opencode_command(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
-        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+        with patch.object(brain.executor, 'call_api', new_callable=AsyncMock) as mock_call:
             mock_call.return_value = 'Here is the file list: bash "ls -la"'
 
             response, cmd, usage = await brain.process_message("List files", "test_session")
@@ -182,7 +188,7 @@ class TestDevSynapseBrain:
     ):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
-        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+        with patch.object(brain.executor, 'call_api', new_callable=AsyncMock) as mock_call:
             mock_call.return_value = (
                 'echo "ok" > /tmp/test.txt\n\n'
                 "Done! I created the file for you."
@@ -198,7 +204,7 @@ class TestDevSynapseBrain:
     async def test_process_message_uses_tool_calls_over_regex(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
-        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+        with patch.object(brain.executor, 'call_api', new_callable=AsyncMock) as mock_call:
             mock_call.return_value = LLMResult(
                 content='Let me check: bash "unused command"',
                 tool_calls=[
@@ -224,10 +230,15 @@ class TestDevSynapseBrain:
         brain = DevSynapseBrain(mock_memory, mock_bridge)
         brain.api_key = "test-key"
         mock_bridge.execute_command = AsyncMock(
-            return_value=(True, "ok", "tool output", "success", None, None)
+            return_value=CommandResult(
+                success=True,
+                message="ok",
+                output="tool output",
+                status="success",
+            )
         )
 
-        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+        with patch.object(brain.executor, 'call_api', new_callable=AsyncMock) as mock_call:
 
             mock_call.side_effect = [
                 LLMResult(
@@ -288,17 +299,17 @@ class TestDevSynapseBrain:
         brain = DevSynapseBrain(mock_memory, mock_bridge)
         brain.api_key = "test-key"
         mock_bridge.execute_command = AsyncMock(
-            return_value=(
-                False,
-                "Ação bloqueada por escopo do projeto",
-                None,
-                "blocked",
-                "project_scope_mismatch",
-                "devsynapse-ai",
+            return_value=CommandResult(
+                success=False,
+                message="Action blocked by project scope",
+                output=None,
+                status="blocked",
+                reason_code="project_scope_mismatch",
+                project_name="devsynapse-ai",
             )
         )
 
-        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+        with patch.object(brain.executor, 'call_api', new_callable=AsyncMock) as mock_call:
 
             mock_call.side_effect = [
                 LLMResult(
@@ -350,10 +361,15 @@ class TestDevSynapseBrain:
         mock_memory.save_interaction.side_effect = record_interaction
         mock_memory.save_command_execution.side_effect = record_command_execution
         mock_bridge.execute_command = AsyncMock(
-            return_value=(True, "created", "write output", "success", None, None)
+            return_value=CommandResult(
+                success=True,
+                message="created",
+                output="write output",
+                status="success",
+            )
         )
 
-        with patch.object(brain, '_call_llm_api', new_callable=AsyncMock) as mock_call:
+        with patch.object(brain.executor, 'call_api', new_callable=AsyncMock) as mock_call:
 
             mock_call.side_effect = [
                 LLMResult(
@@ -416,7 +432,7 @@ class TestDevSynapseBrain:
     def test_get_fallback_response(self, mock_memory, mock_bridge):
         brain = DevSynapseBrain(mock_memory, mock_bridge)
 
-        response = brain._get_fallback_response([{"role": "user", "content": "Hello"}])
+        response = brain.executor._get_fallback_response()
 
         assert len(response) > 0
         assert isinstance(response, str)

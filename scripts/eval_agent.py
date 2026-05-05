@@ -266,12 +266,20 @@ async def _run_bridge_checks(project_name: str, project_root: Path) -> list[dict
         ("blocked_path_escape", 'write "../escape.md" --content="blocked"'),
         ("blocked_dangerous_pattern", 'bash "rm -rf /tmp/devsynapse-eval-should-not-run"'),
     ]:
-        success, message, output, status, reason_code, resolved_project = await bridge.execute_command(
+        cmd_result = await bridge.execute_command(
             command,
             user_id="eval-user",
             project_name=project_name,
             user_role="admin",
             project_mutation_allowlist=[project_name],
+        )
+        success, message, output, status, reason_code, resolved_project = (
+            cmd_result.success,
+            cmd_result.message,
+            cmd_result.output,
+            cmd_result.status,
+            cmd_result.reason_code,
+            cmd_result.project_name,
         )
         checks.append(
             {
@@ -307,12 +315,20 @@ async def _run_bridge_command_set(
 
     results = []
     for name, command in commands:
-        success, message, output, status, reason_code, resolved_project = await bridge.execute_command(
+        cmd_result = await bridge.execute_command(
             command,
             user_id="eval-user",
             project_name=project_name,
-            user_role="admin",
-            project_mutation_allowlist=[project_name],
+            user_role="user",
+            project_mutation_allowlist=[],
+        )
+        success, message, output, status, reason_code, resolved_project = (
+            cmd_result.success,
+            cmd_result.message,
+            cmd_result.output,
+            cmd_result.status,
+            cmd_result.reason_code,
+            cmd_result.project_name,
         )
         results.append(
             {

@@ -11,12 +11,13 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from config.settings import MEMORY_DB_PATH
+from config.settings import get_settings
 from core.migrations import build_memory_migration_manager
 
 
 def command_status() -> int:
-    manager = build_memory_migration_manager(MEMORY_DB_PATH)
+    db_path = get_settings().memory_db_path
+    manager = build_memory_migration_manager(db_path)
     status = manager.status()
     print(
         f"memory: current={status['current_version']} "
@@ -27,7 +28,8 @@ def command_status() -> int:
 
 
 def command_apply() -> int:
-    manager = build_memory_migration_manager(MEMORY_DB_PATH)
+    db_path = get_settings().memory_db_path
+    manager = build_memory_migration_manager(db_path)
     applied = manager.apply_migrations()
     print(f"memory: applied {applied} migration(s)")
     return 0

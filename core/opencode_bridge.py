@@ -1,12 +1,12 @@
 """
-Bridge para comunicação com OpenCode
+Bridge for OpenCode communication
 """
 
-import json
 import logging
 import re
 import shlex
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -15,35 +15,112 @@ from config.settings import (
     ADMIN_ONLY_COMMANDS,
     ALLOWED_BASH_COMMANDS,
     ALLOWED_COMMANDS,
-    ALLOWED_DIRECTORIES,
-    ALLOWED_FILE_EXTENSIONS,
     BLACKLISTED_PATTERNS,
-    KNOWN_PROJECTS,
-    MAX_EDIT_SIZE,
-    OPENCODE_BACKUP_ENABLED,
-    OPENCODE_BACKUP_SUFFIX,
-    OPENCODE_MAX_OUTPUT,
-    OPENCODE_TIMEOUT,
     READ_ONLY_COMMANDS,
     USER_BASH_COMMANDS,
     get_settings,
 )
+from core.autoexec_policy import looks_like_interactive_sudo_failure
+from core.command_executor import CommandExecutor
+from core.command_validator import CommandValidator
 from core.plugin_system import plugin_manager
+from core.project_resolver import ProjectResolver
 
 logger = logging.getLogger(__name__)
 
 
-CommandExecutionTuple = Tuple[bool, str, Optional[str], str, Optional[str], Optional[str]]
+@dataclass
+class CommandResult:
+    """Result of a command execution."""
+    success: bool
+    message: str
+    output: Optional[str] = None
+    status: str = "failed"
+    reason_code: Optional[str] = None
+    project_name: Optional[str] = None
+
+    def to_tuple(self) -> Tuple[bool, str, Optional[str], str, Optional[str], Optional[str]]:
+        """Convert to legacy tuple format for backward compatibility."""
+        return (self.success, self.message, self.output, self.status, self.reason_code, self.project_name)
+
+
+@dataclass
+class GateResult:
+    """Result of a command authorization gate check."""
+    allowed: bool
+    reason: str
+    reason_code: str
+    effective_project: Optional[str] = None
+
+
+class CommandGate:
+    """Facade for command authorization checks.
+
+    Delegates to the bridge's existing validation methods without merging
+    their internal logic. Provides a single entry point for authorization.
+    """
+
+    def __init__(self, bridge: "OpenCodeBridge") -> None:
+        self._bridge = bridge
+
+    def check(
+        self,
+        command_type: str,
+        args: List,
+        user_role: str,
+        project_name: Optional[str],
+        project_mutation_allowlist: List[str],
+        effective_project: Optional[str] = None,
+    ) -> GateResult:
+        """Run all authorization phases in sequence.
+
+        Phase 1 — Project scope: mutating commands must stay inside the project.
+        Phase 2 — File path: non-admin read/edit/write must target allowed paths.
+        Phase 3 — Role: role-based authorization with project mutation checks.
+        """
+        resolved_project = effective_project or project_name
+
+        if project_name:
+            scoped, scope_message = self._bridge._validate_command_paths_inside_project(
+                command_type,
+                args,
+                project_name,
+            )
+            if not scoped:
+                return GateResult(False, scope_message, "project_scope_mismatch", project_name)
+
+        trusted_admin = user_role == "admin"
+        if command_type in {"read", "edit", "write"} and not trusted_admin and args:
+            if not self._bridge._validate_file_path(args[0]):
+                return GateResult(
+                    False,
+                    f"File path not allowed: {args[0]}",
+                    "validation_failed",
+                    resolved_project,
+                )
+
+        authorized, auth_message = self._bridge._authorize_command(
+            command_type,
+            args,
+            user_role,
+            resolved_project,
+            project_mutation_allowlist,
+        )
+        if not authorized:
+            return GateResult(False, auth_message, "authorization_failed", resolved_project)
+
+        return GateResult(True, "Authorized", "ok", resolved_project)
 
 
 class OpenCodeBridge:
-    """Gerencia comunicação segura com OpenCode"""
+    """Manages secure communication with OpenCode."""
     
     def __init__(
         self,
         known_projects: Optional[Dict[str, Dict[str, str]]] = None,
         allowed_directories: Optional[List[str]] = None,
     ):
+        settings = get_settings()
         self.allowed_commands = ALLOWED_COMMANDS
         self.allowed_bash_commands = ALLOWED_BASH_COMMANDS
         self.read_only_commands = READ_ONLY_COMMANDS
@@ -51,12 +128,35 @@ class OpenCodeBridge:
         self.admin_only_commands = ADMIN_ONLY_COMMANDS
         self.admin_only_bash_commands = ADMIN_ONLY_BASH_COMMANDS
         self.blacklisted_patterns = BLACKLISTED_PATTERNS
-        self.known_projects = known_projects if known_projects is not None else KNOWN_PROJECTS
-        directory_source = allowed_directories if allowed_directories is not None else ALLOWED_DIRECTORIES
+        self.known_projects = known_projects if known_projects is not None else settings.build_known_projects()
+        directory_source = allowed_directories if allowed_directories is not None else settings.build_allowed_directories()
         self.allowed_directories = [Path(d) for d in directory_source]
-        self.allowed_file_extensions = ALLOWED_FILE_EXTENSIONS
-        self.backup_enabled = OPENCODE_BACKUP_ENABLED
-        self.backup_suffix = OPENCODE_BACKUP_SUFFIX
+        self.allowed_file_extensions = settings.build_allowed_file_extensions()
+        self.backup_enabled = settings.opencode_backup_enabled
+        self.backup_suffix = settings.opencode_backup_suffix
+
+        self._validator = CommandValidator(
+            known_projects=self.known_projects,
+            allowed_bash_commands=set(self.allowed_bash_commands),
+            read_only_commands=set(self.read_only_commands),
+            admin_only_commands=set(self.admin_only_commands),
+            user_bash_commands=set(self.user_bash_commands),
+            admin_only_bash_commands=set(self.admin_only_bash_commands),
+            allowed_directories=self.allowed_directories,
+            allowed_file_extensions=set(self.allowed_file_extensions),
+        )
+        self._resolver = ProjectResolver(
+            known_projects=self.known_projects,
+            get_settings=lambda: get_settings(),
+        )
+
+        self._executor = CommandExecutor(
+            validate_file_path=self._validator.validate_file_path,
+            validate_file_size=self._validator.validate_file_size,
+            decode_quoted_arg=self._validator.decode_quoted_arg,
+            backup_enabled=self.backup_enabled,
+            backup_suffix=self.backup_suffix,
+        )
 
     def register_project(
         self,
@@ -82,14 +182,12 @@ class OpenCodeBridge:
         project_mutation_allowlist: Optional[List[str]] = None,
         conversation_id: Optional[str] = None,
         tool_run_id: Optional[str] = None,
-    ) -> CommandExecutionTuple:
+    ) -> CommandResult:
+        """Execute an OpenCode command securely.
+
+        Returns a CommandResult dataclass with execution details.
         """
-        Executa um comando OpenCode de forma segura
-        
-        Returns:
-            Tuple[success, result_message, output]
-        """
-        
+
         before_event = await plugin_manager.emit_event(
             "command:before_execute",
             {
@@ -99,30 +197,28 @@ class OpenCodeBridge:
             },
         )
         if before_event.cancelled:
-            return False, "Execução cancelada por plugin.", None, "blocked", "plugin_cancelled", project_name
+            return CommandResult(False, "Execution cancelled by plugin.", status="blocked", reason_code="plugin_cancelled", project_name=project_name)
 
         command = before_event.data.get("command", command)
 
-        # Validar e parsear comando
         trusted_admin = user_role == "admin"
         validation_result = self._validate_command(command, user_role=user_role)
         if not validation_result[0]:
-            error_msg = validation_result[1]
-            
-            return False, error_msg, None, "blocked", "validation_failed", project_name
+            return CommandResult(False, validation_result[1], status="blocked", reason_code="validation_failed", project_name=project_name)
         
         command_type, args = validation_result[2], validation_result[3]
         if project_name and project_name not in self.known_projects:
-            error_msg = f"Projeto selecionado não está registrado: {project_name}"
-            return False, error_msg, None, "blocked", "authorization_failed", project_name
+            return CommandResult(False, f"Selected project not registered: {project_name}", status="blocked", reason_code="authorization_failed", project_name=project_name)
 
         args = self._normalize_placeholder_command_args(command_type, args)
         if command_type == "bash" and self._requires_privileged_setup(args[0] if args else ""):
-            error_msg = (
-                "Comandos com sudo não são executados pelo chat. Execute a etapa privilegiada "
-                "manualmente no terminal e use Revalidar pré-requisitos para continuar."
+            return CommandResult(
+                False,
+                "Sudo commands are not executed via chat. Run privileged steps manually in the terminal and revalidate prerequisites.",
+                status="blocked",
+                reason_code="privileged_setup_required",
+                project_name=project_name,
             )
-            return False, error_msg, None, "blocked", "privileged_setup_required", project_name
 
         resolved_project_name = self._infer_project_name(command_type, args, project_name)
         self._register_repos_project_if_needed(resolved_project_name)
@@ -132,73 +228,64 @@ class OpenCodeBridge:
             and resolved_project_name != project_name
             and self._project_scope_path_operands(command_type, args)
         ):
-            error_msg = (
-                f"Comando aponta para o projeto '{resolved_project_name}', mas esta conversa "
-                f"está travada no projeto '{project_name}'"
+            return CommandResult(
+                False,
+                f"Command targets project '{resolved_project_name}', but this conversation is locked to project '{project_name}'",
+                status="blocked",
+                reason_code="project_scope_mismatch",
+                project_name=project_name,
             )
-            return False, error_msg, None, "blocked", "project_scope_mismatch", project_name
 
         effective_project_name = project_name or resolved_project_name
         args = self._normalize_file_command_args(command_type, args, effective_project_name)
-        if project_name:
-            scoped, scope_message = self._validate_command_paths_inside_project(
-                command_type,
-                args,
-                project_name,
-            )
-            if not scoped:
-                return False, scope_message, None, "blocked", "project_scope_mismatch", project_name
 
-        if (
-            command_type in {"read", "edit", "write"}
-            and not trusted_admin
-            and not self._validate_file_path(args[0])
-        ):
-            error_msg = f"Caminho de arquivo não permitido: {args[0]}"
-            return False, error_msg, None, "blocked", "validation_failed", effective_project_name
-
-        authorized, auth_message = self._authorize_command(
+        gate_result = CommandGate(self).check(
             command_type,
             args,
             user_role,
-            effective_project_name,
+            project_name,
             project_mutation_allowlist or [],
+            effective_project=effective_project_name,
         )
-        if not authorized:
-            return False, auth_message, None, "blocked", "authorization_failed", effective_project_name
+        if not gate_result.allowed:
+            return CommandResult(
+                False,
+                gate_result.reason,
+                status="blocked",
+                reason_code=gate_result.reason_code,
+                project_name=gate_result.effective_project,
+            )
         
         try:
-            # Executar comando baseado no tipo
             if command_type == "bash":
                 resolved_cwd = self._resolve_project_cwd(effective_project_name)
-                result = await self._execute_bash(
+                result = await self._executor.execute_bash(
                     args,
                     resolved_cwd,
                     trusted_shell=trusted_admin,
                 )
             elif command_type == "read":
-                result = await self._execute_read(args)
+                result = await self._executor.execute_read(args)
             elif command_type == "glob":
-                result = await self._execute_glob(args, trusted_paths=trusted_admin)
+                result = await self._executor.execute_glob(args, trusted_paths=trusted_admin)
             elif command_type == "grep":
                 resolved_cwd = self._resolve_project_cwd(effective_project_name)
-                result = await self._execute_grep(args, resolved_cwd)
+                result = await self._executor.execute_grep(args, resolved_cwd)
             elif command_type == "edit":
-                result = await self._execute_edit(args)
+                result = await self._executor.execute_edit(args)
             elif command_type == "write":
-                result = await self._execute_write(args)
+                result = await self._executor.execute_write(args)
             else:
-                result = (False, f"Comando não implementado: {command_type}", None)
+                result = (False, f"Command not implemented: {command_type}", None)
                 
-        except Exception as e:
-            logger.error(f"Erro executando comando {command}: {e}")
-            result = (False, f"Erro executando comando: {str(e)}", None)
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.error("Error executing command %s: %s", command, e)
+            result = (False, f"Error executing command: {str(e)}", None)
         
-        # Calcular tempo de execução
         success, message, output = result
         status = "success" if success else "failed"
         reason_code = None if success else "execution_failed"
-        if not success and self._looks_like_interactive_sudo_failure(message, output):
+        if not success and looks_like_interactive_sudo_failure(message, output):
             reason_code = "interactive_sudo_required"
         
         await plugin_manager.emit_event(
@@ -213,26 +300,7 @@ class OpenCodeBridge:
             },
         )
 
-        return success, message, output, status, reason_code, effective_project_name
-
-    @staticmethod
-    def _looks_like_interactive_sudo_failure(
-        message: Optional[str],
-        output: Optional[str],
-    ) -> bool:
-        """Detect sudo failures that require a terminal/password outside the app."""
-
-        text = f"{message or ''}\n{output or ''}".lower()
-        sudo_markers = [
-            "sudo:",
-            "a terminal is required",
-            "um terminal é necessário",
-            "a password is required",
-            "uma senha é necessária",
-            "no tty present",
-            "askpass",
-        ]
-        return "sudo" in text and any(marker in text for marker in sudo_markers)
+        return CommandResult(success, message, output, status, reason_code, effective_project_name)
 
     @staticmethod
     def _requires_privileged_setup(command: str) -> bool:
@@ -247,7 +315,7 @@ class OpenCodeBridge:
         command_type: Optional[str],
         args: Optional[List],
     ) -> Optional[List]:
-        """Map common LLM placeholder paths to this machine's configured roots."""
+        """Map common LLM placeholder paths to this machine configured roots."""
 
         if not args:
             return args
@@ -288,14 +356,14 @@ class OpenCodeBridge:
         command: str,
         user_role: str = "user",
     ) -> Tuple[bool, str, Optional[str], Optional[List]]:
-        """Valida e parseia um comando OpenCode"""
-        
-        # Padrão: comando "argumento"
+        """Validate and parse an OpenCode command."""
+
+        # Pattern: command "argument"
         pattern = r'^(\w+)\s+"((?:[^"\\]|\\.)*)"(?:\s+(.+))?$'
         match = re.match(pattern, command, re.DOTALL)
         
         if not match:
-            return False, f"Formato de comando inválido: {command}", None, None
+            return False, f"Invalid command format: {command}", None, None
         
         command_type = match.group(1).lower()
         main_arg = self._decode_quoted_arg(match.group(2))
@@ -303,23 +371,24 @@ class OpenCodeBridge:
         
         # Verificar se comando é permitido
         if command_type not in self.allowed_commands:
-            return False, f"Comando não permitido: {command_type}", None, None
+            return False, f"Command not allowed: {command_type}", None, None
         
         # Verificar padrões blacklistados
         full_command = f"{command_type} {main_arg} {extra_args}".lower()
         for pattern in self.blacklisted_patterns:
             if pattern in full_command:
-                return False, f"Comando contém padrão não permitido: {pattern}", None, None
+                return False, f"Command contains disallowed pattern: {pattern}", None, None
         
         # Validar argumentos específicos por tipo de comando
         if command_type == "bash":
             if user_role == "admin":
                 if not main_arg.strip():
-                    return False, "Comando bash vazio", None, None
-            elif not self._validate_bash_command(main_arg):
-                return False, f"Comando bash não permitido: {main_arg}", None, None
-        
-        return True, "Comando válido", command_type, [main_arg, extra_args]
+                    return False, "Empty bash command", None, None
+            else:
+                if not self._validate_bash_command(main_arg):
+                    return False, f"Bash command not allowed: {main_arg}", None, None
+
+        return True, "Command valid", command_type, [main_arg, extra_args]
 
     def _authorize_command(
         self,
@@ -329,50 +398,9 @@ class OpenCodeBridge:
         project_name: Optional[str],
         project_mutation_allowlist: List[str],
     ) -> Tuple[bool, str]:
-        """Authorize execution based on role and command sensitivity."""
-
-        if command_type is None:
-            return False, "Tipo de comando inválido para autorização"
-
-        if user_role == "admin":
-            return True, "Autorizado como administrador confiável"
-
-        if command_type in self.read_only_commands:
-            return True, "Autorizado"
-
-        if command_type in self.admin_only_commands:
-            return self._authorize_project_mutation(
-                command_type,
-                args,
-                user_role,
-                project_name,
-                project_mutation_allowlist,
-            )
-
-        if command_type == "bash":
-            bash_command = args[0] if args else ""
-            parts = shlex.split(bash_command)
-            if not parts:
-                return False, "Comando bash vazio"
-
-            first_cmd = parts[0].lower()
-            if first_cmd in self.user_bash_commands:
-                return True, "Autorizado"
-            if first_cmd == "kill":
-                if user_role == "admin":
-                    return True, "Autorizado"
-                return False, "Comando bash 'kill' exige papel de administrador"
-            if first_cmd in self.admin_only_bash_commands:
-                return self._authorize_project_mutation(
-                    f"bash:{first_cmd}",
-                    args,
-                    user_role,
-                    project_name,
-                    project_mutation_allowlist,
-                )
-            return False, f"Comando bash '{first_cmd}' não autorizado para o papel atual"
-
-        return False, f"Comando '{command_type}' não autorizado para o papel atual"
+        return self._validator.authorize_command(
+            command_type, args, user_role, project_name, project_mutation_allowlist,
+        )
 
     def _authorize_project_mutation(
         self,
@@ -382,40 +410,8 @@ class OpenCodeBridge:
         project_name: Optional[str],
         project_mutation_allowlist: List[str],
     ) -> Tuple[bool, str]:
-        """Authorize mutation only for explicitly allowed projects."""
-
-        if not project_name:
-            return (
-                False,
-                (
-                    f"Ação '{action_name}' exige contexto explícito de projeto "
-                    "ou caminho resolvível para um projeto permitido"
-                ),
-            )
-
-        if project_name not in self.known_projects:
-            return False, f"Projeto '{project_name}' não está registrado"
-
-        if user_role != "admin" and project_name not in project_mutation_allowlist:
-            return (
-                False,
-                f"Ação '{action_name}' não autorizada para o projeto '{project_name}'",
-            )
-
-        paths_authorized, path_message = self._authorize_mutation_paths(
-            action_name,
-            args,
-            project_name,
-        )
-        if not paths_authorized:
-            return False, path_message
-
-        if user_role == "admin" or project_name in project_mutation_allowlist:
-            return True, f"Autorizado para o projeto '{project_name}'"
-
-        return (
-            False,
-            f"Ação '{action_name}' não autorizada para o projeto '{project_name}'",
+        return self._validator._authorize_project_mutation(
+            action_name, args, user_role, project_name, project_mutation_allowlist,
         )
 
     def _authorize_mutation_paths(
@@ -424,109 +420,16 @@ class OpenCodeBridge:
         args: Optional[List],
         project_name: str,
     ) -> Tuple[bool, str]:
-        """Ensure mutating commands only target paths inside the resolved project."""
-
-        project_root = Path(self.known_projects[project_name]["path"]).expanduser().resolve()
-        raw_paths = self._mutation_path_operands(action_name, args)
-        if not raw_paths:
-            return (
-                False,
-                (
-                    f"Ação '{action_name}' exige caminho de arquivo ou diretório "
-                    f"dentro do projeto '{project_name}'"
-                ),
-            )
-
-        for raw_path in raw_paths:
-            resolved_path = self._resolve_command_path(raw_path, project_root)
-            try:
-                if not resolved_path.is_relative_to(project_root):
-                    return (
-                        False,
-                        (
-                            f"Ação '{action_name}' não pode alterar caminho fora do "
-                            f"projeto '{project_name}': {resolved_path}"
-                        ),
-                    )
-            except ValueError:
-                return (
-                    False,
-                    (
-                        f"Ação '{action_name}' não pode alterar caminho fora do "
-                        f"projeto '{project_name}': {resolved_path}"
-                    ),
-                )
-
-        return True, "Autorizado"
+        return self._validator._authorize_mutation_paths(action_name, args, project_name)
 
     def _mutation_path_operands(self, action_name: str, args: Optional[List]) -> List[str]:
-        """Extract path operands from mutating commands."""
-
-        if not args:
-            return []
-
-        if action_name in {"edit", "write"}:
-            return [args[0]] if args[0] else []
-
-        if not action_name.startswith("bash:"):
-            return []
-
-        bash_command = args[0] if args else ""
-        try:
-            parts = shlex.split(bash_command)
-        except ValueError:
-            return []
-
-        if len(parts) < 2:
-            return []
-
-        command_name = action_name.split(":", 1)[1]
-        operands = self._non_option_operands(parts[1:])
-
-        if command_name == "chmod":
-            return operands[1:] if len(operands) > 1 else []
-
-        if command_name in {"touch", "mkdir", "cp", "mv", "rm"}:
-            return operands
-
-        return []
+        return self._validator._mutation_path_operands(action_name, args)
 
     def _non_option_operands(self, parts: List[str]) -> List[str]:
-        """Return simple non-option operands from a shell argument list."""
-
-        operands: List[str] = []
-        option_takes_value = {"-t", "--target-directory", "--reference"}
-        skip_next = False
-        after_option_marker = False
-        for index, part in enumerate(parts):
-            if skip_next:
-                skip_next = False
-                continue
-            if after_option_marker:
-                operands.append(part)
-                continue
-            if part == "--":
-                after_option_marker = True
-                continue
-            if part in option_takes_value:
-                next_index = index + 1
-                if next_index < len(parts):
-                    operands.append(parts[next_index])
-                skip_next = True
-                continue
-            if part.startswith("--target-directory=") or part.startswith("--reference="):
-                operands.append(part.split("=", 1)[1])
-                continue
-            if part.startswith("-"):
-                continue
-            operands.append(part)
-        return operands
+        return self._validator._non_option_operands(parts)
 
     def _resolve_command_path(self, raw_path: str, project_root: Path) -> Path:
-        path = Path(raw_path).expanduser()
-        if not path.is_absolute():
-            path = project_root / path
-        return path.resolve()
+        return self._validator._resolve_command_path(raw_path, project_root)
 
     def _validate_command_paths_inside_project(
         self,
@@ -534,57 +437,16 @@ class OpenCodeBridge:
         args: Optional[List],
         project_name: str,
     ) -> Tuple[bool, str]:
-        """Keep mutating actions inside the explicitly selected chat project."""
-
-        if project_name not in self.known_projects:
-            return False, f"Projeto selecionado não está registrado: {project_name}"
-
-        project_root = Path(self.known_projects[project_name]["path"]).expanduser().resolve()
-        for raw_path in self._project_scope_path_operands(command_type, args):
-            resolved_path = self._resolve_command_path(raw_path, project_root)
-            try:
-                if resolved_path.is_relative_to(project_root):
-                    continue
-            except ValueError:
-                pass
-
-            return (
-                False,
-                (
-                    f"Comando não pode acessar caminho fora do projeto '{project_name}': "
-                    f"{resolved_path}"
-                ),
-            )
-
-        return True, "Projeto respeitado"
+        return self._validator.validate_command_paths_inside_project(
+            command_type, args, project_name,
+        )
 
     def _project_scope_path_operands(
         self,
         command_type: Optional[str],
         args: Optional[List],
     ) -> List[str]:
-        if not args:
-            return []
-
-        if command_type in {"edit", "write"}:
-            return [str(args[0])] if args[0] else []
-
-        if command_type != "bash":
-            return []
-
-        try:
-            parts = shlex.split(str(args[0]))
-        except ValueError:
-            return []
-
-        if not parts:
-            return []
-
-        first_cmd = parts[0].lower()
-        if first_cmd not in self.admin_only_bash_commands:
-            return []
-
-        return self._mutation_path_operands(f"bash:{first_cmd}", args)
+        return self._validator._project_scope_path_operands(command_type, args)
 
     def _normalize_file_command_args(
         self,
@@ -592,17 +454,7 @@ class OpenCodeBridge:
         args: Optional[List],
         project_name: Optional[str],
     ) -> Optional[List]:
-        """Resolve relative file-command paths against the selected project."""
-
-        if command_type not in {"read", "edit", "write"} or not args:
-            return args
-        if not project_name or project_name not in self.known_projects:
-            return args
-
-        project_root = Path(self.known_projects[project_name]["path"]).expanduser().resolve()
-        normalized_args = list(args)
-        normalized_args[0] = str(self._resolve_command_path(str(args[0]), project_root))
-        return normalized_args
+        return self._validator.normalize_file_command_args(command_type, args, project_name)
 
     def _infer_project_name(
         self,
@@ -610,535 +462,44 @@ class OpenCodeBridge:
         args: Optional[List],
         explicit_project_name: Optional[str],
     ) -> Optional[str]:
-        """Infer project context from an explicit project name or command arguments."""
-
-        if command_type is None or not args:
-            return explicit_project_name if explicit_project_name in self.known_projects else None
-
-        candidates = []
-        main_arg = args[0]
-        extra_args = args[1] if len(args) > 1 else ""
-
-        if command_type in {"read", "edit", "write"}:
-            candidates.append(main_arg)
-        elif command_type == "bash":
-            try:
-                candidates.extend(shlex.split(main_arg))
-            except ValueError:
-                candidates.append(main_arg)
-        elif command_type in {"glob", "grep"}:
-            candidates.extend([main_arg, extra_args])
-
-        for candidate in candidates:
-            resolved_project = self._resolve_project_from_text(candidate)
-            if resolved_project:
-                return resolved_project
-            repos_project = self._resolve_project_from_repos_path(candidate)
-            if repos_project:
-                return repos_project
-
-        if explicit_project_name and explicit_project_name in self.known_projects:
-            return explicit_project_name
-
-        return None
+        return self._resolver.infer_project_name(command_type, args, explicit_project_name)
 
     def _resolve_project_from_repos_path(self, text: str) -> Optional[str]:
-        if not text or not self._looks_like_path_reference(text):
-            return None
-
-        try:
-            path = Path(text).expanduser().resolve()
-        except Exception:
-            return None
-
-        repos_root = get_settings().dev_repos_root.expanduser().resolve()
-        try:
-            relative_path = path.relative_to(repos_root)
-        except ValueError:
-            return None
-
-        if not relative_path.parts:
-            return None
-        project_name = relative_path.parts[0]
-        return project_name if project_name and not project_name.startswith(".") else None
+        return self._resolver.resolve_from_repos_path(text)
 
     @staticmethod
     def _looks_like_path_reference(text: str) -> bool:
-        stripped = str(text).strip()
-        if not stripped:
-            return False
-        return (
-            stripped.startswith(("/", "~", ".", "$HOME"))
-            or "/" in stripped
-            or "\\" in stripped
-        )
+        return ProjectResolver._looks_like_path_reference(text)
 
     def _register_repos_project_if_needed(self, project_name: Optional[str]) -> None:
-        if not project_name or project_name in self.known_projects:
-            return
-
-        repos_root = get_settings().dev_repos_root.expanduser().resolve()
-        project_root = repos_root / project_name
-        try:
-            project_root.relative_to(repos_root)
-        except ValueError:
-            return
-
-        self.register_project(project_name, str(project_root), "project", "medium")
+        self._resolver.register_repos_project_if_needed(project_name, self.register_project)
 
     def _resolve_project_from_text(self, text: str) -> Optional[str]:
-        """Resolve a project name from a path or textual command fragment."""
+        return self._resolver.resolve_from_text(text)
 
-        if not text:
-            return None
-
-        best_match: Optional[str] = None
-        best_score: int = -1
-
-        text_lower = text.lower()
-        looks_like_path = self._looks_like_path_reference(text)
-
-        if looks_like_path:
-            try:
-                path = Path(text).resolve()
-            except Exception:
-                path = None
-
-            if path is not None:
-                for project_name, project_info in self.known_projects.items():
-                    project_path = Path(project_info["path"]).resolve()
-                    try:
-                        if path.is_relative_to(project_path):
-                            score = len(str(project_path))
-                            if score > best_score:
-                                best_score = score
-                                best_match = project_name
-                    except ValueError:
-                        continue
-
-            if best_match:
-                return best_match
-
-        for project_name, project_info in self.known_projects.items():
-            project_path = str(Path(project_info["path"]).resolve())
-            if project_name.lower() in text_lower or project_path.lower() in text_lower:
-                score = len(project_name)
-                if score > best_score:
-                    best_score = score
-                    best_match = project_name
-
-        return best_match
-    
     def _resolve_project_cwd(self, project_name: Optional[str]) -> str:
-        """Resolve the working directory for a project, falling back to default."""
-        if project_name and project_name in self.known_projects:
-            project_path = Path(self.known_projects[project_name]["path"])
-            if project_path.is_dir():
-                return str(project_path)
-        return str(get_settings().default_execution_cwd)
+        return self._resolver.resolve_cwd(project_name)
 
     def _validate_bash_command(self, command: str) -> bool:
-        """Valida um comando bash"""
-        
-        # Extrair primeiro comando
-        parts = shlex.split(command)
-        if not parts:
-            return False
-        
-        first_cmd = parts[0].lower()
-        
-        # Verificar se está na lista permitida
-        if first_cmd not in self.allowed_bash_commands:
-            return False
-        
-        # Verificações adicionais de segurança
-        dangerous_patterns = [
-            "|", ">", ">>", "<", "&", ";", "`", "$(", ".."
-        ]
+        return self._validator.validate_bash_command(command)
 
-        for pattern in dangerous_patterns:
-            if pattern in command:
-                return False
-
-        return True
-    
     def _validate_file_path(self, path: str, check_extension: bool = False) -> bool:
-        """Valida um caminho de arquivo"""
-        
-        try:
-            path_obj = Path(path).resolve()
-            
-            # Verificar se está dentro de diretórios permitidos
-            for allowed_dir in self.allowed_directories:
-                try:
-                    if path_obj.is_relative_to(allowed_dir.resolve()):
-                        # Verificar extensão se necessário
-                        if check_extension and path_obj.suffix:
-                            if path_obj.suffix not in self.allowed_file_extensions:
-                                logger.warning(f"Extensão não permitida: {path_obj.suffix}")
-                                return False
-                        return True
-                except ValueError:
-                    continue
-            
-            return False
-            
-        except Exception as e:
-            logger.error(f"Erro validando caminho {path}: {e}")
-            return False
-    
+        return self._validator.validate_file_path(path, check_extension)
+
     def _validate_file_size(self, path: Path, max_size: int) -> bool:
-        """Valida tamanho de arquivo"""
-        try:
-            if path.exists() and path.is_file():
-                file_size = path.stat().st_size
-                return file_size <= max_size
-            return True  # Arquivo não existe ainda
-        except Exception:
-            return False
-    
-    async def _execute_bash(
-        self,
-        args: List,
-        cwd: Optional[str] = None,
-        trusted_shell: bool = False,
-    ) -> Tuple[bool, str, Optional[str]]:
-        """Executa comando bash"""
-        
-        command = args[0]
-
-        try:
-            if trusted_shell:
-                if not command.strip():
-                    return False, "Comando vazio", None
-                command_to_run = ["/bin/bash", "-o", "pipefail", "-c", command]
-            else:
-                parts = shlex.split(command)
-                if not parts:
-                    return False, "Comando vazio", None
-
-                if parts[0] == "cd":
-                    return False, "Comando bash não permitido para execução direta: cd", None
-                command_to_run = parts
-
-            if not trusted_shell and not command_to_run:
-                return False, "Comando vazio", None
-
-            exec_cwd = cwd or str(get_settings().default_execution_cwd)
-            # Executar com timeout
-            result = subprocess.run(
-                command_to_run,
-                capture_output=True,
-                text=True,
-                timeout=OPENCODE_TIMEOUT,
-                cwd=exec_cwd,
-                shell=False,
-            )
-            
-            output = result.stdout
-            if result.stderr:
-                output += f"\nSTDERR:\n{result.stderr}"
-            
-            # Limitar tamanho da saída
-            if len(output) > OPENCODE_MAX_OUTPUT:
-                output = output[:OPENCODE_MAX_OUTPUT] + f"\n... (truncado, total: {len(output)} chars)"
-            
-            if result.returncode == 0:
-                return True, f"Comando executado com sucesso (exit code: {result.returncode})", output
-            else:
-                return False, f"Comando falhou (exit code: {result.returncode})", output
-                
-        except subprocess.TimeoutExpired:
-            return False, f"Comando expirou após {OPENCODE_TIMEOUT} segundos", None
-        except Exception as e:
-            return False, f"Erro executando comando: {str(e)}", None
-    
-    async def _execute_read(self, args: List) -> Tuple[bool, str, Optional[str]]:
-        """Simula comando read do OpenCode"""
-        
-        filepath = args[0]
-        
-        try:
-            path = Path(filepath)
-            if not path.exists():
-                return False, f"Arquivo não encontrado: {filepath}", None
-            
-            if not path.is_file():
-                return False, f"Caminho não é um arquivo: {filepath}", None
-            
-            # Ler arquivo
-            content = path.read_text(encoding='utf-8', errors='ignore')
-            
-            # Limitar tamanho
-            if len(content) > OPENCODE_MAX_OUTPUT:
-                content = content[:OPENCODE_MAX_OUTPUT] + f"\n... (truncado, total: {len(content)} chars)"
-            
-            return True, f"Arquivo lido: {filepath} ({len(content)} chars)", content
-            
-        except Exception as e:
-            return False, f"Erro lendo arquivo: {str(e)}", None
-    
-    async def _execute_glob(
-        self,
-        args: List,
-        trusted_paths: bool = False,
-    ) -> Tuple[bool, str, Optional[str]]:
-        """Simula comando glob do OpenCode"""
-        
-        pattern = args[0]
-        
-        try:
-            # Encontrar arquivos que correspondem ao padrão
-            import glob
-            
-            files = glob.glob(pattern, recursive=True)
-            
-            # Limitar a diretórios permitidos
-            allowed_files = []
-            for file in files:
-                if trusted_paths or self._validate_file_path(file):
-                    allowed_files.append(file)
-            
-            if not allowed_files:
-                return True, f"Nenhum arquivo encontrado para padrão: {pattern}", "[]"
-            
-            output = json.dumps(allowed_files[:50], indent=2)  # Limitar a 50 arquivos
-            if len(allowed_files) > 50:
-                output += f"\n... e mais {len(allowed_files) - 50} arquivos"
-            
-            return True, f"Encontrados {len(allowed_files)} arquivos para padrão: {pattern}", output
-            
-        except Exception as e:
-            return False, f"Erro buscando arquivos: {str(e)}", None
-    
-    async def _execute_grep(self, args: List, cwd: Optional[str] = None) -> Tuple[bool, str, Optional[str]]:
-        """Simula comando grep do OpenCode"""
-        
-        pattern = args[0]
-        extra_args = args[1]
-        
-        try:
-            # Parsear argumentos extras
-            include_pattern = None
-            if extra_args and "--include=" in extra_args:
-                include_match = re.search(r'--include="([^"]+)"', extra_args)
-                if include_match:
-                    include_pattern = include_match.group(1)
-            
-            # Usar subprocess para grep real (mais seguro que implementação própria)
-            cmd = ["grep", "-r", "-n", "--color=never", pattern]
-            
-            if include_pattern:
-                cmd.extend(["--include", include_pattern])
-            
-            base_dir = cwd or str(get_settings().dev_repos_root.resolve())
-            cmd.append(base_dir)
-            
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=OPENCODE_TIMEOUT
-            )
-            
-            output = result.stdout
-            if result.stderr:
-                output += f"\nSTDERR:\n{result.stderr}"
-            
-            # Limitar tamanho
-            if len(output) > OPENCODE_MAX_OUTPUT:
-                output = output[:OPENCODE_MAX_OUTPUT] + f"\n... (truncado, total: {len(output)} chars)"
-            
-            if result.returncode in [0, 1]:  # 0 = encontrou, 1 = não encontrou
-                msg = "Busca completada" if result.returncode == 0 else "Padrão não encontrado"
-                return True, msg, output
-            else:
-                return False, f"grep falhou (exit code: {result.returncode})", output
-                
-        except subprocess.TimeoutExpired:
-            return False, f"Busca expirou após {OPENCODE_TIMEOUT} segundos", None
-        except Exception as e:
-            return False, f"Erro na busca: {str(e)}", None
-    
-    async def _execute_edit(self, args: List) -> Tuple[bool, str, Optional[str]]:
-        """Executa comando edit do OpenCode com segurança"""
-        
-        filepath = args[0]
-        extra_args = args[1]
-        
-        # Extrair old/new do extra_args (suporta múltiplas linhas)
-        # Padrão: --old="texto" --new="texto" onde texto pode ter qualquer caractere exceto aspas não escapadas
-        old_new_match = re.search(r'--old="((?:[^"\\]|\\.)*)"\s+--new="((?:[^"\\]|\\.)*)"', extra_args)
-        if not old_new_match:
-            return False, "Formato de edit inválido. Use: edit \"file\" --old=\"text\" --new=\"text\"", None
-        
-        old_text = self._decode_quoted_arg(old_new_match.group(1))
-        new_text = self._decode_quoted_arg(old_new_match.group(2))
-        
-        try:
-            path = Path(filepath)
-            
-            # Verificar se arquivo existe
-            if not path.exists():
-                return False, f"Arquivo não encontrado: {filepath}", None
-            
-            if not path.is_file():
-                return False, f"Caminho não é um arquivo: {filepath}", None
-            
-            # Validar tamanho do arquivo
-            if not self._validate_file_size(path, MAX_EDIT_SIZE):
-                return False, f"Arquivo muito grande para edição (limite: {MAX_EDIT_SIZE/1024/1024:.1f}MB)", None
-            
-            # Criar backup antes de editar (se habilitado)
-            backup_path = None
-            backup_label = "desabilitado"
-            if self.backup_enabled:
-                backup_path = path.with_suffix(path.suffix + self.backup_suffix)
-                import shutil
-                shutil.copy2(path, backup_path)
-                backup_label = backup_path.name
-                logger.info(f"Backup criado: {backup_path}")
-            
-            # Ler conteúdo atual
-            current_content = path.read_text(encoding='utf-8', errors='ignore')
-            
-            # Verificar se old_text existe no conteúdo
-            if old_text not in current_content:
-                # Tentar encontrar com diferentes encodings
-                try:
-                    current_content = path.read_text(encoding='utf-8')
-                except:
-                    try:
-                        current_content = path.read_text(encoding='latin-1')
-                    except:
-                        current_content = path.read_text(errors='ignore')
-                
-                if old_text not in current_content:
-                    if backup_path:
-                        backup_path.unlink(missing_ok=True)  # Remover backup
-                    return False, f"Texto não encontrado no arquivo: '{old_text[:50]}...'", None
-            
-            # Fazer substituição
-            new_content = current_content.replace(old_text, new_text)
-            
-            # Verificar se houve mudança
-            if new_content == current_content:
-                if backup_path:
-                    backup_path.unlink(missing_ok=True)
-                return False, "Nenhuma alteração realizada (texto idêntico)", None
-            
-            # Escrever novo conteúdo
-            path.write_text(new_content, encoding='utf-8')
-            
-            # Contar ocorrências substituídas
-            occurrences = current_content.count(old_text)
-            
-            # Remover backup após sucesso
-            if backup_path:
-                backup_path.unlink(missing_ok=True)
-            
-            return True, f"Editado: {occurrences} ocorrência(s) substituída(s) em {filepath}", f"Backup: {backup_label}\nSubstituído: '{old_text[:100]}...'\nPor: '{new_text[:100]}...'"
-            
-        except Exception as e:
-            # Manter backup em caso de erro
-            logger.error(f"Erro editando arquivo {filepath}: {e}")
-            return False, f"Erro editando arquivo: {str(e)}", None
-    
-    async def _execute_write(self, args: List) -> Tuple[bool, str, Optional[str]]:
-        """Executa comando write do OpenCode com segurança"""
-        
-        filepath = args[0]
-        extra_args = args[1]
-        
-        # Extrair conteúdo (suporta múltiplas linhas)
-        # Padrão: --content="conteúdo" onde conteúdo pode ter qualquer caractere exceto aspas não escapadas
-        content_match = re.search(r'--content="((?:[^"\\]|\\.)*)"', extra_args)
-        if not content_match:
-            return False, "Formato de write inválido. Use: write \"file\" --content=\"text\"", None
-        
-        content = self._decode_quoted_arg(content_match.group(1))
-        
-        try:
-            path = Path(filepath)
-            
-            # Verificar se diretório pai existe
-            parent_dir = path.parent
-            if not parent_dir.exists():
-                # Criar diretórios se necessário (com permissões seguras)
-                parent_dir.mkdir(parents=True, exist_ok=True)
-                # Definir permissões seguras
-                parent_dir.chmod(0o755)  # rwxr-xr-x
-            
-            # Verificar se arquivo já existe (para backup)
-            file_exists = path.exists()
-            backup_path = None
-            
-            if file_exists:
-                # Criar backup
-                backup_path = path.with_suffix(path.suffix + '.devsynapse_backup')
-                import shutil
-                shutil.copy2(path, backup_path)
-            
-            # Escrever conteúdo
-            path.write_text(content, encoding='utf-8')
-            
-            # Definir permissões seguras
-            path.chmod(0o644)  # rw-r--r--
-            
-            # Preparar mensagem de resultado
-            if file_exists:
-                # Ler conteúdo anterior para comparação
-                old_content = backup_path.read_text(encoding='utf-8', errors='ignore') if backup_path else ""
-                old_size = len(old_content)
-                new_size = len(content)
-                
-                # Remover backup após sucesso
-                if backup_path and backup_path.exists():
-                    backup_path.unlink()
-                
-                return True, f"Arquivo sobrescrito: {filepath} ({old_size} → {new_size} chars)", f"Backup: {backup_path.name if backup_path else 'N/A'}\nTamanho anterior: {old_size} chars\nNovo tamanho: {new_size} chars"
-            else:
-                return True, f"Arquivo criado: {filepath} ({len(content)} chars)", f"Novo arquivo criado\nTamanho: {len(content)} chars"
-            
-        except Exception as e:
-            logger.error(f"Erro escrevendo arquivo {filepath}: {e}")
-            return False, f"Erro escrevendo arquivo: {str(e)}", None
+        return self._validator.validate_file_size(path, max_size)
 
     @staticmethod
     def _decode_quoted_arg(value: str) -> str:
-        """Decode the small escape set used inside OpenCode quoted arguments."""
-        decoded = []
-        index = 0
-        while index < len(value):
-            char = value[index]
-            if char != "\\" or index + 1 >= len(value):
-                decoded.append(char)
-                index += 1
-                continue
+        return CommandValidator.decode_quoted_arg(value)
 
-            next_char = value[index + 1]
-            if next_char == "n":
-                decoded.append("\n")
-            elif next_char == "r":
-                decoded.append("\r")
-            elif next_char == "t":
-                decoded.append("\t")
-            elif next_char in {'"', "\\"}:
-                decoded.append(next_char)
-            else:
-                decoded.append(char)
-                decoded.append(next_char)
-            index += 2
-
-        return "".join(decoded)
-    
     def get_project_context(self, project_name: str) -> Optional[Dict]:
-        """Obtém contexto sobre um projeto específico"""
+        """Get context about a specific project."""
         
         if project_name in self.known_projects:
             return self.known_projects[project_name]
         
-        # Tentar encontrar por nome similar
+        # Try to find by similar name
         for name, info in self.known_projects.items():
             if project_name.lower() in name.lower():
                 return info
