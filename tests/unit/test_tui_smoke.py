@@ -286,6 +286,31 @@ async def test_tui_sidebar_panels_toggle_with_shortcuts(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_tui_busy_indicator_animates(tmp_path, monkeypatch):
+    _configure_runtime(monkeypatch, tmp_path / "runtime")
+
+    import config.settings as app_settings
+    from devsynapse.tui import DevSynapseTUI
+
+    app_settings.get_settings.cache_clear()
+
+    app = DevSynapseTUI()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+
+        indicator = app.query_one("#typing-indicator", Static)
+        app._set_busy(True, "Executing shell command")
+        first = str(indicator.content)
+        app._update_busy_indicator()
+        second = str(indicator.content)
+        app._set_busy(False)
+
+        assert "Executing shell command" in first
+        assert first != second
+        assert str(indicator.content) == ""
+
+
+@pytest.mark.asyncio
 async def test_tui_help_shortcut_works_before_slash_command(tmp_path, monkeypatch):
     _configure_runtime(monkeypatch, tmp_path / "runtime")
 

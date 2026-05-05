@@ -96,6 +96,9 @@ class DevSynapseTUI(App):
         self._command_suggestions: list[CommandSuggestion] = []
         self._header_widget: Static | None = None
         self._footer_widget: Static | None = None
+        self._typing_widget: Static | None = None
+        self._busy_message = ""
+        self._busy_frame = 0
 
     def compose(self) -> ComposeResult:
         yield Static(id="app-header")
@@ -117,8 +120,10 @@ class DevSynapseTUI(App):
     async def on_mount(self):
         self._header_widget = self.query_one("#app-header", Static)
         self._footer_widget = self.query_one("#app-footer", Static)
+        self._typing_widget = self.query_one("#typing-indicator", Static)
         self._update_chrome()
         self.set_interval(1.0, self._update_header)
+        self.set_interval(0.4, self._update_busy_indicator)
         input_w = self._input()
         input_w.focus()
         self._sidebar().refresh_all(
@@ -150,6 +155,8 @@ class DevSynapseTUI(App):
         return self.query_one("#notifications", NotificationManager)
 
     def _typing_indicator(self) -> Static:
+        if self._typing_widget is not None:
+            return self._typing_widget
         return self.query_one("#typing-indicator", Static)
 
     def _command_dispatcher(self) -> CommandDispatcher:
@@ -453,14 +460,26 @@ class DevSynapseTUI(App):
         self._is_busy = busy
         typing = self._typing_indicator()
         if busy:
-            text = message or "DevSynapse is thinking..."
-            typing.update(f"[bold {self._state_color('thinking')}]{text}[/]")
+            self._busy_message = message or "DevSynapse is thinking"
+            self._busy_frame = 0
+            self._update_busy_indicator()
             typing.add_class("pulse")
         else:
+            self._busy_message = ""
             typing.update("")
             typing.remove_class("pulse")
         self._sidebar().set_busy(busy)
         self._update_status_bar(message=message or "busy" if busy else None)
+
+    def _update_busy_indicator(self) -> None:
+        if not self._is_busy or not self._busy_message:
+            return
+        dots = "." * (self._busy_frame % 4)
+        padding = " " * (3 - len(dots))
+        self._typing_indicator().update(
+            f"[bold {self._state_color('thinking')}]{self._busy_message}{dots}{padding}[/]"
+        )
+        self._busy_frame += 1
 
     async def _process(self, task, chat, input_w):
         streamed_chunks: list[str] = []
