@@ -103,7 +103,10 @@ class LLMExecutor:
                 model=model,
                 tool_choice=tool_choice,
             )
-        usage = self._usage.enrich_usage_cost(result.provider, result.model, result.usage)
+        raw_usage = result.usage
+        if raw_usage is None and (result.provider or result.model):
+            raw_usage = {"provider": result.provider, "model": result.model}
+        usage = self._usage.enrich_usage_cost(result.provider, result.model, raw_usage)
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         self._usage.record_llm_telemetry(
             user_id=user_id, conversation_id=conversation_id,

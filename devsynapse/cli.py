@@ -18,7 +18,7 @@ def _build_parser() -> argparse.ArgumentParser:
         description="DevSynapse AI terminal UI",
         epilog=(
             "Run `devsynapse` to open the TUI. Inside it, use slash commands "
-            "such as /connect, /providers, /status, /usage, /budget and /router."
+            "such as /connect, /providers, /model, /status, /usage, /budget and /router."
         ),
     )
     parser.add_argument(

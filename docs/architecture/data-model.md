@@ -51,7 +51,7 @@ Stores:
 - DeepSeek/OpenRouter/OpenCode credential presence and model parameters
 - daily/monthly budget controls
 - budget threshold percentages
-- adaptive routing controls
+- manual provider/model selection controls
 
 These values supplement environment defaults and runtime config files.
 
@@ -91,7 +91,7 @@ Stores:
 - input, output and cache-read cost per token when available
 - raw provider pricing/capability metadata
 - source URL and discovery timestamps
-- enabled flag for routing eligibility
+- enabled flag for catalog visibility
 
 The catalog is populated by deterministic provider adapters rather than model
 memory in the assistant. OpenRouter entries come from its Models API, OpenCode Go
@@ -103,7 +103,7 @@ direct DeepSeek entries are seeded from runtime pricing configuration.
 Stores:
 - user id and conversation id
 - provider and model actually requested
-- routing reason, task type and complexity
+- selected model reason, task type and complexity
 - success/error status
 - token usage, cache hit/miss tokens, reasoning tokens and estimated cost
 - first-token latency and total latency
@@ -210,11 +210,9 @@ Contributors should add a new migration when:
 - historical rows are intentionally tolerated with partial fields
 - project attribution now prefers explicit persisted project names over text-only inference
 - explicit chat project context should be persisted as `conversation_project_name`
-- agent learning is advisory: it can influence model routing, but budget-critical
-  economy mode still wins over learned Pro preferences
-- adaptive LLM routing is advisory: it may choose a cheaper discovered model for
-  simple or budget-constrained work, but only when the provider is configured and
-  the catalog contains usable pricing
+- agent learning is advisory and does not override the manually selected model
+- model catalog pricing is used for display and cost telemetry; it does not
+  automatically change the selected model
 - skill activation is advisory prompt context; shell/file effects still go through
   the existing command execution and authorization flow
 - agent runs are advisory execution state; command authorization and project

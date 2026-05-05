@@ -41,9 +41,10 @@ Useful TUI commands:
 - `/connect <provider> <api-key>` saves provider keys in runtime config.
 - `/providers` shows key status without printing full secrets.
 - `/discover` refreshes the model catalog for configured providers.
+- `/model` opens searchable model selection for the active provider.
 - `/models [provider]` lists known models with context and pricing data.
 - `/budget` shows daily/monthly usage against configured limits.
-- `/router` shows routing, economy, adaptive override and learned pattern state.
+- `/router` shows manual model status.
 - `/usage` shows recent token, cache, cost and model telemetry.
 - `!<command>` runs a shell command through the constrained command bridge.
 

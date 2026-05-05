@@ -40,7 +40,8 @@ async def test_tui_mounts_and_handles_status_command(tmp_path, monkeypatch):
         assert app.opencode is not None
         assert input_widget.has_focus
         assert "Session" in str(session_panel.content)
-        assert "Providers" in str(providers_panel.content)
+        assert "Model" in str(providers_panel.content)
+        assert "F2" in str(providers_panel.content)
 
         await app._handle_slash_command("/status")
         await pilot.pause()

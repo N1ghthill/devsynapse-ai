@@ -6,19 +6,18 @@ import logging
 import sqlite3
 from typing import Any, Dict, Optional
 
-import config.settings as app_settings
-from core.llm_optimization import ModelRoute, ModelRouter, build_task_profile
-from core.utils import coerce_bool
+from core.llm_optimization import ModelRoute, build_task_profile
 
 logger = logging.getLogger(__name__)
 
 
 class RouteSelector:
-    """Selects which LLM model/route to use for a given user message.
+    """Select the user-chosen LLM provider/model.
 
-    Owns the routing policy, adaptive override, agent learning integration,
-    and budget-aware model selection.  Needs access to memory and the
-    DeepSeek client (or its relevant parts) at construction time.
+    DevSynapse intentionally uses manual model control. The selected provider
+    and model come from runtime config and are changed from the TUI `/model`
+    and `/connect` flows. This class only validates that the selected provider
+    is configured and falls back to another configured provider if needed.
     """
 
     def __init__(
@@ -27,48 +26,37 @@ class RouteSelector:
         deepseek_model: str,
         provider_configs: Dict[str, Dict[str, Optional[str]]],
         deepseek_api_key: Optional[str],
+        default_provider: str = "deepseek",
+        provider_model_defaults: Optional[Dict[str, Optional[str]]] = None,
     ):
         self._memory = memory
         self._deepseek_model = deepseek_model
         self._provider_configs = provider_configs
         self._deepseek_api_key = deepseek_api_key
+        self._default_provider = self._normalize_provider(default_provider)
+        self._provider_model_defaults = provider_model_defaults or {}
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def select_route(self, user_message: str, context: Dict) -> ModelRoute:
-        persisted = self._get_persisted_app_settings()
-        settings = app_settings.get_settings()
         profile = build_task_profile(user_message, context=context)
-        learned_policy = self._get_agent_learning(profile.signature)
-        router = ModelRouter(
-            flash_model=str(
-                persisted.get("deepseek_flash_model", settings.deepseek_flash_model)
-            ),
-            pro_model=str(persisted.get("deepseek_pro_model", settings.deepseek_pro_model)),
-            default_model=str(persisted.get("deepseek_model", self._deepseek_model)),
-        routing_enabled=coerce_bool(
-            persisted.get("llm_model_routing_enabled", settings.llm_model_routing_enabled)
-        ),
-        auto_economy_enabled=coerce_bool(
-            persisted.get("llm_auto_economy_enabled", settings.llm_auto_economy_enabled)
-        ),
+        provider = (
+            self._default_provider
+            if self._provider_configured(self._default_provider)
+            else self._first_configured_provider()
         )
-        budget_status = None
-        if router.auto_economy_enabled and hasattr(self._memory, "get_llm_budget_status"):
-            try:
-                budget_status = self._memory.get_llm_budget_status()
-            except (sqlite3.OperationalError, ValueError):
-                logger.debug("Could not read LLM budget status for routing", exc_info=True)
-
-        route = router.select_model(
-            user_message,
-            context=context,
-            budget_status=budget_status,
-            learned_policy=learned_policy,
+        model = self._selected_model(provider) if provider else self._deepseek_model
+        route = ModelRoute(
+            model=model,
+            complexity="manual",
+            reason="manual_model_selection",
+            task_type=profile.task_type,
+            task_signature=profile.signature,
+            fallback_model=None,
+            budget_mode="manual",
         )
-        route = self._apply_adaptive_model_override(route, budget_status)
         logger.info(
             "LLM route selected: model=%s complexity=%s reason=%s budget=%s fallback=%s",
             route.model,
@@ -89,60 +77,6 @@ class RouteSelector:
             return "No agent learning patterns found yet."
 
     # ------------------------------------------------------------------
-    # Adaptive override
-    # ------------------------------------------------------------------
-
-    def _apply_adaptive_model_override(
-        self,
-        route: ModelRoute,
-        budget_status: Optional[Dict[str, Any]],
-    ) -> ModelRoute:
-        if not coerce_bool(
-            self._get_persisted_app_settings().get("llm_adaptive_routing_enabled", True)
-        ):
-            return route
-        catalog = getattr(self._memory, "list_llm_models", lambda **kwargs: [])()
-        if not isinstance(catalog, list):
-            return route
-        candidates = [
-            model for model in catalog
-            if model.get("enabled")
-            and model.get("input_cost_per_token") is not None
-            and model.get("output_cost_per_token") is not None
-            and self._provider_configured(model.get("provider"))
-        ]
-        if not candidates:
-            return route
-
-        budget_level = str((budget_status or {}).get("overall_status") or route.budget_mode)
-        should_economize = route.complexity in {"simple", "economy"} or budget_level in {
-            "warning",
-            "critical",
-        }
-        if not should_economize:
-            return route
-
-        selected = min(
-            candidates,
-            key=lambda model: float(model["input_cost_per_token"])
-            + float(model["output_cost_per_token"]),
-        )
-        selected_model = f"{selected['provider']}:{selected['model_id']}"
-        if selected_model == route.model:
-            return route
-        return ModelRoute(
-            model=selected_model,
-            complexity=route.complexity,
-            reason=f"adaptive_cheapest:{route.reason}",
-            task_type=route.task_type,
-            task_signature=route.task_signature,
-            fallback_model=route.model,
-            budget_mode=route.budget_mode,
-            learned_preference=route.learned_preference,
-            learned_confidence=route.learned_confidence,
-        )
-
-    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
@@ -150,6 +84,52 @@ class RouteSelector:
         if provider == "deepseek":
             return bool(self._deepseek_api_key)
         return bool((self._provider_configs.get(str(provider)) or {}).get("api_key"))
+
+    def _selected_model(self, provider: str) -> str:
+        configured_model = (self._provider_model_defaults.get(provider) or "").strip()
+        if configured_model:
+            return self._qualify_model(provider, configured_model)
+        if provider == "deepseek":
+            return self._deepseek_model
+        catalog_model = self._first_catalog_model(provider)
+        if catalog_model:
+            return self._qualify_model(provider, catalog_model)
+        return self._qualify_model(provider, "")
+
+    def _first_configured_provider(self) -> Optional[str]:
+        for provider in ["deepseek", *sorted(self._provider_configs)]:
+            normalized = self._normalize_provider(provider)
+            if self._provider_configured(normalized):
+                return normalized
+        return None
+
+    def _first_catalog_model(self, provider: str) -> Optional[str]:
+        catalog = getattr(self._memory, "list_llm_models", lambda **kwargs: [])(
+            provider=provider,
+            limit=1,
+        )
+        if not isinstance(catalog, list):
+            return None
+        for model in catalog:
+            if model.get("enabled", True) and model.get("model_id"):
+                return str(model["model_id"])
+        return None
+
+    @staticmethod
+    def _qualify_model(provider: str, model: str) -> str:
+        if provider == "deepseek":
+            return model.split(":", 1)[1] if model.startswith("deepseek:") else model
+        return model if model.startswith(f"{provider}:") else f"{provider}:{model}"
+
+    @staticmethod
+    def _normalize_provider(provider: Optional[str]) -> str:
+        normalized = (provider or "deepseek").strip().lower()
+        aliases = {
+            "zen": "opencode-zen",
+            "opencode": "opencode-zen",
+            "go": "opencode-go",
+        }
+        return aliases.get(normalized, normalized)
 
     def _get_agent_learning(self, task_signature: str) -> Optional[Dict]:
         if not hasattr(self._memory, "get_agent_learning"):
@@ -169,5 +149,3 @@ class RouteSelector:
         except (sqlite3.OperationalError, ValueError):
             logger.debug("Could not load persisted app settings", exc_info=True)
             return {}
-
-

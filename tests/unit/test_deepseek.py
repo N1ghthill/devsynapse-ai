@@ -2,6 +2,8 @@ import json
 from decimal import Decimal
 from unittest.mock import patch
 
+import pytest
+
 from core.deepseek import DeepSeekClient
 
 
@@ -103,3 +105,18 @@ def test_stream_chat_completion_accumulates_tool_call_deltas():
             "function": {"name": "bash", "arguments": "{\"command\":\"ls -la\"}"},
         }
     ]
+
+
+def test_resolve_provider_model_only_uses_known_provider_prefixes():
+    provider, model, _, _ = _client()._resolve_provider_model("google/gemma:free")
+
+    assert provider == "deepseek"
+    assert model == "google/gemma:free"
+
+
+def test_chat_completion_requires_deepseek_api_key():
+    client = _client()
+    client.api_key = None
+
+    with pytest.raises(RuntimeError, match="LLM provider not configured: deepseek"):
+        client.chat_completion([{"role": "user", "content": "hi"}])

@@ -20,15 +20,16 @@ make install-dev
 make migrate
 ```
 
-Create or edit the runtime config:
+Configure at least one provider from the TUI:
 
 ```bash
-mkdir -p ~/.config/devsynapse-ai
-cp .env.example ~/.config/devsynapse-ai/.env
-$EDITOR ~/.config/devsynapse-ai/.env
+devsynapse
+/connect
 ```
 
-Set at least one of:
+The setup form lets you choose the provider, paste the API key, and save the
+default model. For scripted setup, create or edit `~/.config/devsynapse-ai/.env`
+and set at least one of:
 
 - `DEEPSEEK_API_KEY`
 - `OPENROUTER_API_KEY`
@@ -46,9 +47,11 @@ Start the terminal UI:
 Use slash commands inside the TUI:
 
 ```text
+/connect
 /connect deepseek <api-key>
 /providers
 /status
+/model
 /usage
 /budget
 /router

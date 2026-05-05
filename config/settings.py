@@ -75,6 +75,7 @@ _mkdir_best_effort(LOGS_DIR)
 
 
 DEFAULT_RUNTIME_CONFIG_TEMPLATE = """# DevSynapse AI runtime config
+LLM_DEFAULT_PROVIDER=deepseek
 DEEPSEEK_API_KEY=
 OPENROUTER_API_KEY=
 OPENCODE_ZEN_API_KEY=
@@ -174,18 +175,23 @@ class AppSettings(BaseSettings):
     )
 
     app_name: str = "DevSynapse AI"
-    app_version: str = "0.9.1"
+    app_version: str = "0.9.3"
     assistant_user_name: str = "the user"
 
     deepseek_api_key: Optional[str] = None
     openrouter_api_key: Optional[str] = None
     opencode_zen_api_key: Optional[str] = None
     opencode_go_api_key: Optional[str] = None
+    llm_default_provider: str = "deepseek"
     deepseek_model: str = "deepseek-v4-pro"
+    openrouter_model: str = "openrouter/free"
+    opencode_zen_model: str = "qwen3-coder"
+    opencode_go_model: str = "deepseek-v4-pro"
     deepseek_base_url: str = "https://api.deepseek.com/beta"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_models_url: str = "https://openrouter.ai/api/v1/models"
     opencode_zen_base_url: str = "https://opencode.ai/zen/v1"
+    opencode_zen_models_url: str = "https://opencode.ai/zen/v1/models"
     opencode_go_base_url: str = "https://opencode.ai/zen/go/v1"
     opencode_go_models_url: str = "https://opencode.ai/zen/go/v1/models"
     deepseek_flash_model: str = "deepseek-v4-flash"
@@ -193,8 +199,8 @@ class AppSettings(BaseSettings):
     deepseek_reasoner_model: str = "deepseek-reasoner"
     deepseek_reasoning_effort: str = "high"
     deepseek_thinking_enabled: bool = True
-    llm_model_routing_enabled: bool = True
-    llm_auto_economy_enabled: bool = True
+    llm_model_routing_enabled: bool = False
+    llm_auto_economy_enabled: bool = False
     llm_streaming_enabled: bool = True
     llm_cache_hit_warning_threshold_pct: float = 70.0
     llm_temperature: float = 0.7

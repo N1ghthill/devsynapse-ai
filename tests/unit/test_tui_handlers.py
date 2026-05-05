@@ -6,15 +6,21 @@ Handler logic is tested via Textual's run_test() with a mocked chat widget.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from devsynapse.tui import (
+    OPENROUTER_CURATED_FREE_MODELS,
     DevSynapseTUI,
+    ModelSelectionScreen,
+    ProviderConnectionScreen,
     _format_money,
+    _is_free_model,
     _mask_secret,
+    _model_option_label,
 )
 
 
@@ -46,51 +52,31 @@ class TestPureHelpers:
         assert _format_money("not a number") == "$0.000000"
         assert _format_money([]) == "$0.000000"
 
+    def test_f2_binding_opens_model_picker(self):
+        tui = DevSynapseTUI()
+        bindings = {binding.key: binding.action for binding in tui.BINDINGS}
+        assert bindings["f2"] == "open_model_picker"
+
+    def test_free_model_helpers(self):
+        model = OPENROUTER_CURATED_FREE_MODELS[0]
+        assert _is_free_model(model)
+        assert "free" in _model_option_label(model)
+        assert "tools" in _model_option_label(model)
+
 
 class TestRouterUpdatesFromArgs:
-    """Tests for the pure argument parser used by /router."""
+    """Tests for removed automatic routing controls."""
 
     def _make_tui(self):
         """Create a minimal TUI instance for calling the method."""
         return DevSynapseTUI()
 
-    def test_router_on(self):
-        tui = self._make_tui()
-        result = tui._router_updates_from_args(["on"])
-        assert result == {"llm_model_routing_enabled": True}
-
-    def test_router_off(self):
-        tui = self._make_tui()
-        result = tui._router_updates_from_args(["off"])
-        assert result == {"llm_model_routing_enabled": False}
-
-    def test_router_economy_on(self):
-        tui = self._make_tui()
-        result = tui._router_updates_from_args(["economy", "on"])
-        assert result == {"llm_auto_economy_enabled": True}
-
-    def test_router_economy_off(self):
-        tui = self._make_tui()
-        result = tui._router_updates_from_args(["economy", "off"])
-        assert result == {"llm_auto_economy_enabled": False}
-
-    def test_router_adaptive_on(self):
-        tui = self._make_tui()
-        result = tui._router_updates_from_args(["adaptive", "on"])
-        assert result == {"llm_adaptive_routing_enabled": True}
-
-    def test_router_adaptive_off(self):
-        tui = self._make_tui()
-        result = tui._router_updates_from_args(["adaptive", "off"])
-        assert result == {"llm_adaptive_routing_enabled": False}
-
-    def test_router_invalid_args_returns_none(self):
+    def test_router_args_are_ignored(self):
         tui = self._make_tui()
         assert tui._router_updates_from_args([]) is None
-        assert tui._router_updates_from_args(["invalid"]) is None
-        assert tui._router_updates_from_args(["economy"]) is None
-        assert tui._router_updates_from_args(["economy", "invalid"]) is None
-        assert tui._router_updates_from_args(["on", "extra"]) is None
+        assert tui._router_updates_from_args(["on"]) is None
+        assert tui._router_updates_from_args(["economy", "on"]) is None
+        assert tui._router_updates_from_args(["adaptive", "off"]) is None
 
 
 def _configure_runtime(monkeypatch: pytest.MonkeyPatch, runtime_root: Path) -> None:
@@ -317,10 +303,11 @@ class TestSlashCommandHandlers:
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
             text = " ".join(calls)
-            assert "Routing" in text or "routing" in text
+            assert "Model Control" in text
+            assert "manual" in text
 
     @pytest.mark.asyncio
-    async def test_router_on_updates_setting(self, tmp_path, monkeypatch):
+    async def test_router_args_explain_manual_control(self, tmp_path, monkeypatch):
         _configure_runtime(monkeypatch, tmp_path / "runtime")
 
         import config.settings as app_settings
@@ -335,7 +322,8 @@ class TestSlashCommandHandlers:
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
             text = " ".join(calls)
-            assert "Routing" in text or "routing" in text
+            assert "Automatic routing has been removed" in text
+            assert "/model" in text
 
     @pytest.mark.asyncio
     async def test_projects_shows_list(self, tmp_path, monkeypatch):
@@ -356,7 +344,24 @@ class TestSlashCommandHandlers:
             assert "Projects" in text or "projects" in text
 
     @pytest.mark.asyncio
-    async def test_connect_without_args_shows_usage(self, tmp_path, monkeypatch):
+    async def test_connect_without_args_opens_provider_setup(self, tmp_path, monkeypatch):
+        _configure_runtime(monkeypatch, tmp_path / "runtime")
+
+        import config.settings as app_settings
+        app_settings.get_settings.cache_clear()
+
+        app = DevSynapseTUI()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            await app._handle_slash_command("/connect")
+            await pilot.pause()
+
+            assert isinstance(app.screen, ProviderConnectionScreen)
+            app.screen.dismiss(None)
+            await pilot.pause()
+
+    @pytest.mark.asyncio
+    async def test_connect_with_args_saves_provider_and_default(self, tmp_path, monkeypatch):
         _configure_runtime(monkeypatch, tmp_path / "runtime")
 
         import config.settings as app_settings
@@ -366,9 +371,30 @@ class TestSlashCommandHandlers:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             mock_chat = _mock_chat(app)
-            await app._handle_slash_command("/connect")
+            await app._handle_slash_command("/connect openrouter sk-test openrouter/auto")
             await pilot.pause()
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
             text = " ".join(calls)
-            assert "connect" in text.lower()
+            assert "Saved" in text
+            assert os.environ["OPENROUTER_API_KEY"] == "sk-test"
+            assert os.environ["LLM_DEFAULT_PROVIDER"] == "openrouter"
+            assert os.environ["OPENROUTER_MODEL"] == "openrouter/auto"
+
+    @pytest.mark.asyncio
+    async def test_model_command_opens_searchable_model_picker(self, tmp_path, monkeypatch):
+        _configure_runtime(monkeypatch, tmp_path / "runtime")
+
+        import config.settings as app_settings
+        app_settings.get_settings.cache_clear()
+
+        app = DevSynapseTUI()
+        async with app.run_test(size=(120, 35)) as pilot:
+            await pilot.pause()
+            await app._handle_slash_command("/model openrouter")
+            await pilot.pause()
+
+            assert isinstance(app.screen, ModelSelectionScreen)
+            assert app.screen.query_one("#model-search") is not None
+            app.screen.dismiss(None)
+            await pilot.pause()

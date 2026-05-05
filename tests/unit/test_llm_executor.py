@@ -126,6 +126,8 @@ class TestCompleteAndRecord:
         )
         assert result.content == "batched"
         client.chat_completion.assert_called_once()
+        assert result.usage["provider"] == "openai"
+        assert result.usage["model"] == "gpt-4"
 
     @pytest.mark.asyncio
     async def test_enriches_usage(self):

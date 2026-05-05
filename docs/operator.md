@@ -6,7 +6,7 @@ DevSynapse AI is operated from one terminal command:
 devsynapse
 ```
 
-That command opens the Textual TUI. Setup, provider state, budget, routing,
+That command opens the Textual TUI. Setup, provider state, budget, model selection,
 usage and shell-tool execution happen inside the TUI through slash commands.
 External operator subcommands are not supported.
 
@@ -40,10 +40,17 @@ under one directory.
 Inside the TUI:
 
 ```text
+/connect
 /connect deepseek <api-key>
 /providers
 /status
 ```
+
+`/connect` opens the provider setup form. Choose the server, paste the API key,
+and keep or edit the default model. The selected server becomes
+`LLM_DEFAULT_PROVIDER` for manual model control.
+OpenRouter defaults to `openrouter/free` for normal chat. Use `/model` to search
+the refreshed principal catalog and choose a specific free or paid model.
 
 Supported provider names:
 
@@ -63,10 +70,8 @@ Supported provider names:
 /usage                           show recent token and cost telemetry
 /budget                          show daily/monthly budget state
 /budget daily|monthly <usd>      update budget limits
-/router                          show routing policy
-/router on|off                   enable or disable routing
-/router economy on|off           enable or disable economy mode
-/router adaptive on|off          enable or disable cheapest-model override
+/model                           search and select active model
+/router                          show manual model status
 /discover                        refresh model catalog
 /models [provider]               list known models
 !<command>                       run a shell command through the command bridge

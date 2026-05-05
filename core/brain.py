@@ -99,6 +99,13 @@ class DevSynapseBrain:
             deepseek_model=self.deepseek.model,
             provider_configs=self.deepseek.provider_configs,
             deepseek_api_key=self.deepseek.api_key,
+            default_provider=settings.llm_default_provider,
+            provider_model_defaults={
+                "deepseek": settings.deepseek_model,
+                "openrouter": settings.openrouter_model,
+                "opencode-zen": settings.opencode_zen_model,
+                "opencode-go": settings.opencode_go_model,
+            },
         )
 
         self.usage = UsageTracker(

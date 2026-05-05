@@ -1,8 +1,8 @@
 # DevSynapse AI
 
 DevSynapse AI is a local-first terminal UI coding agent for DeepSeek-compatible
-LLM providers. It runs as a Textual TUI, keeps project memory in SQLite, routes
-between configured models, and executes constrained local commands through a
+LLM providers. It runs as a Textual TUI, keeps project memory in SQLite, uses
+the manually selected model, and executes constrained local commands through a
 project-aware bridge. The product has one operator entry point: `devsynapse`.
 
 ## Product Surface
@@ -10,7 +10,7 @@ project-aware bridge. The product has one operator entry point: `devsynapse`.
 - opens a single terminal UI for chat, setup, status and command execution;
 - calls DeepSeek, OpenRouter, OpenCode Zen or OpenCode Go when a matching API key
   is configured;
-- persists conversations, project registry data, task runs, model routing
+- persists conversations, project registry data, task runs, model selection
   telemetry, procedural memories and skills in SQLite;
 - executes local tool calls through `bash`, `read`, `glob`, `grep`, `edit` and
   `write` with command validation and project scoping;
@@ -33,7 +33,16 @@ source venv/bin/activate
 make install-dev
 ```
 
-Configure a provider key in the runtime config:
+Configure a provider key inside the TUI:
+
+```bash
+devsynapse
+```
+
+Then run `/connect` and choose DeepSeek, OpenRouter, OpenCode Zen or OpenCode Go.
+The setup form saves the API key, the provider's default model, and the default
+provider route in the per-user runtime config. Manual config editing is still
+available for scripted setups:
 
 ```bash
 mkdir -p ~/.config/devsynapse-ai
@@ -56,7 +65,7 @@ devsynapse
 ## Canonical Flow
 
 `devsynapse` opens the terminal UI. That is the only supported operator flow.
-Provider setup, status, usage, budget, routing, project selection and shell-tool
+Provider setup, status, usage, budget, model selection, project selection and shell-tool
 commands are slash commands inside the TUI. External subcommands such as
 `devsynapse providers`, `devsynapse connect ...` or `devsynapse tui` are
 intentionally rejected so the product has one clear entry point.
@@ -64,16 +73,16 @@ intentionally rejected so the product has one clear entry point.
 Inside the TUI, DevSynapse exposes operational slash commands:
 
 ```text
+/connect                         open provider setup
+/connect <provider>              open setup with provider selected
 /connect <provider> <api-key>    save DeepSeek/OpenRouter/OpenCode keys
 /providers                       show configured provider status
 /discover                        refresh the model catalog
+/model                           search and select active model
 /models [provider]               list known models and pricing
 /budget                          show daily/monthly plan usage
 /budget daily|monthly <usd>      set budget limits
-/router                          show intelligent routing policy
-/router on|off                   enable or disable model routing
-/router economy on|off           toggle automatic economy mode
-/router adaptive on|off          toggle cheapest-model override
+/router                          show manual model status
 /usage                           show recent model/cost telemetry
 !<command>                       run a shell command as a tool result
 ```
@@ -81,7 +90,7 @@ Inside the TUI, DevSynapse exposes operational slash commands:
 The TUI keeps the conversation log, input line, session state, provider status,
 budget state and common commands visible in one terminal screen. It supports the
 slash commands above plus shortcuts such as `Ctrl+H` for help, `Ctrl+N` for a
-new conversation and `Ctrl+R` to refresh status.
+new conversation, `Ctrl+R` to refresh status and `F2` to choose a model.
 
 ## Runtime State
 
@@ -97,6 +106,13 @@ under one directory. The more specific `DEVSYNAPSE_CONFIG_FILE`,
 Set `ASSISTANT_USER_NAME` in the runtime config or environment to personalize
 the system prompt; the default prompt is generic for distributed installs.
 Set `LLM_STREAMING_ENABLED=false` to force non-streaming provider responses.
+Set `LLM_DEFAULT_PROVIDER` to `deepseek`, `openrouter`, `opencode-zen` or
+`opencode-go` to choose the first provider the router should prefer when more
+than one key is configured. Provider model defaults can be set with
+`DEEPSEEK_MODEL`, `OPENROUTER_MODEL`, `OPENCODE_ZEN_MODEL` and
+`OPENCODE_GO_MODEL`. OpenRouter defaults to `openrouter/free` so normal chat can
+use the free model router; `/model` lets operators switch to a specific free or
+paid model with search.
 
 The settings loader creates these files on a best-effort basis. Read-only
 runtime config should not break commands such as `devsynapse --help`; commands
@@ -129,7 +145,7 @@ For day-to-day operation, see [docs/operator.md](docs/operator.md).
 ```text
 devsynapse/        TUI launcher and Textual application
 config/            runtime settings and command policy constants
-core/              LLM orchestration, routing, memory, plugins and tools
+core/              LLM orchestration, model selection, memory, plugins and tools
 core/memory/       SQLite-backed stores
 plugins/           local plugin examples
 scripts/           install, update, migration and evaluation utilities

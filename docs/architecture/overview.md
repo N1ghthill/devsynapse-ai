@@ -4,7 +4,7 @@
 
 DevSynapse AI is a TUI-first local coding agent. Its main concerns are:
 
-- LLM orchestration and model routing;
+- LLM orchestration and manual model selection;
 - persistent local memory and project registry state;
 - constrained command execution against local projects;
 - plugin hooks around lifecycle and command events.
@@ -52,7 +52,7 @@ devsynapse
 ```
 
 The command opens the Textual TUI. Provider setup, status, usage, budget,
-routing, project selection and shell-tool execution are handled by slash
+model selection, project selection and shell-tool execution are handled by slash
 commands inside the TUI. External operator subcommands are rejected by design to
 avoid competing flows.
 
@@ -80,8 +80,8 @@ Responsibilities:
 - `checklist.py`: objective checklist helpers for implementation tasks.
 - `deepseek.py`: provider transport, streaming/non-streaming payload
   construction, pricing and `LLMResult` response contract.
-- `routing.py`: model selection, budget-aware routing and learned route
-  preferences.
+- `routing.py`: manual provider/model selection with configured-provider
+  fallback when the selected provider has no API key.
 - `prompts.py`: system prompt template construction.
 - `opencode_bridge.py`: command parsing, validation, authorization, path
   scoping and execution for `bash`, `read`, `glob`, `grep`, `edit` and `write`.
@@ -123,5 +123,7 @@ use memory still require a writable data directory.
 - Keep mutating command execution project-aware and auditable.
 - Persist command failures and policy blocks so later turns can continue with
   the original task context.
-- Prefer explicit provider configuration and local runtime files over hardcoded
-  credentials or repository-local secrets.
+- Prefer explicit provider configuration through the TUI setup form and local
+  runtime files over hardcoded credentials or repository-local secrets.
+- Keep model selection manual and provider-aware: use the provider/model chosen
+  in the TUI and only fall back when that provider is not configured.

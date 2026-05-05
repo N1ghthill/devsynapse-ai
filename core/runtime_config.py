@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from config.settings import (
@@ -42,7 +43,8 @@ def set_runtime_config_values(
     path = path or CONFIG_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
-    pending = {key: _serialize_value(value) for key, value in updates.items()}
+    serialized_updates = {key: _serialize_value(value) for key, value in updates.items()}
+    pending = dict(serialized_updates)
     output: list[str] = []
 
     for line in lines:
@@ -61,6 +63,7 @@ def set_runtime_config_values(
         output.append(f"{key}={value}")
 
     path.write_text("\n".join(output).rstrip() + "\n", encoding="utf-8")
+    os.environ.update(serialized_updates)
 
 
 def ensure_runtime_config_file(path: Path | None = None) -> None:

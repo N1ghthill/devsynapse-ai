@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional
 import requests
 
 logger = logging.getLogger(__name__)
+KNOWN_PROVIDER_PREFIXES = {"deepseek", "openrouter", "opencode-zen", "opencode-go"}
 
 
 @dataclass
@@ -58,10 +59,11 @@ class DeepSeekClient:
 
     def _resolve_provider_model(self, model: Optional[str]) -> tuple[str, str, str, Optional[str]]:
         selected = model or self.model
+        provider, provider_model = "deepseek", selected
         if ":" in selected:
-            provider, provider_model = selected.split(":", 1)
-        else:
-            provider, provider_model = "deepseek", selected
+            candidate_provider, candidate_model = selected.split(":", 1)
+            if candidate_provider in KNOWN_PROVIDER_PREFIXES or candidate_provider in self.provider_configs:
+                provider, provider_model = candidate_provider, candidate_model
 
         if provider == "deepseek":
             return provider, provider_model, self.base_url, self.api_key
@@ -123,7 +125,7 @@ class DeepSeekClient:
     ) -> LLMResult:
         """Non-streaming chat completion call."""
         provider, provider_model, base_url, api_key = self._resolve_provider_model(model)
-        if (provider != "deepseek" and not api_key) or not base_url:
+        if not api_key or not base_url:
             raise RuntimeError(f"LLM provider not configured: {provider}")
         url = f"{base_url}/chat/completions"
         payload = self._build_payload(
@@ -180,7 +182,7 @@ class DeepSeekClient:
         """Streaming chat completion call that returns the accumulated final result."""
 
         provider, provider_model, base_url, api_key = self._resolve_provider_model(model)
-        if (provider != "deepseek" and not api_key) or not base_url:
+        if not api_key or not base_url:
             raise RuntimeError(f"LLM provider not configured: {provider}")
         url = f"{base_url}/chat/completions"
         payload = self._build_payload(
