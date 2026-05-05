@@ -28,18 +28,6 @@ NOTIFICATION_ICONS = {
 class ToastNotification(Static):
     """A single toast notification widget."""
 
-    DEFAULT_CSS = """
-    ToastNotification {
-        width: auto;
-        max-width: 60;
-        height: auto;
-        padding: 1 2;
-        border: round #58a6ff;
-        background: #161b22;
-        dock: top;
-    }
-    """
-
     def __init__(
         self,
         message: str,
@@ -74,16 +62,6 @@ class ToastNotification(Static):
 
 class NotificationManager(Vertical):
     """Manages a queue of toast notifications."""
-
-    DEFAULT_CSS = """
-    NotificationManager {
-        dock: top;
-        width: 100%;
-        height: auto;
-        layers: above;
-        padding: 0 1;
-    }
-    """
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)

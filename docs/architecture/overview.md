@@ -112,12 +112,17 @@ Runtime paths are resolved in [config/settings.py](../../config/settings.py).
 Defaults follow XDG-style user directories:
 
 - config: `~/.config/devsynapse-ai/.env`
+- TUI preferences: `~/.config/devsynapse-ai/ui.json`
 - data: `~/.local/share/devsynapse-ai/data`
 - logs: `~/.local/state/devsynapse-ai/logs`
 
 `DEVSYNAPSE_HOME` relocates all three under one directory. Individual
 `DEVSYNAPSE_CONFIG_FILE`, `DEVSYNAPSE_DATA_DIR` and `DEVSYNAPSE_LOGS_DIR`
 overrides are also supported.
+
+TUI styles are loaded from `.tcss` files under `devsynapse/styles/`. The runtime
+`ui.json` selects a supported theme (`dark`, `light`, `dracula`) and layout
+(`default`, `dense`) without changing Python code.
 
 Settings import is intentionally tolerant of read-only config files so basic TUI
 commands such as `--help` do not fail before argument parsing. Agent runs that

@@ -1,0 +1,136 @@
+Screen {
+    layout: vertical;
+}
+
+#app-header {
+    height: 1;
+    content-align: center middle;
+}
+
+#app-footer {
+    height: 1;
+}
+
+#workspace {
+    height: 1fr;
+    min-height: 0;
+}
+
+#main-pane {
+    width: 1fr;
+    min-width: 0;
+}
+
+#chat {
+    height: 1fr;
+    border: none;
+}
+
+#input-container {
+    height: auto;
+    max-height: 20;
+    min-height: 3;
+}
+
+#command-suggestions {
+    height: auto;
+    max-height: 8;
+    margin-bottom: 1;
+}
+
+#command-suggestions.hidden {
+    display: none;
+}
+
+#input {
+    height: auto;
+    min-height: 3;
+}
+
+#input:disabled {
+    opacity: 0.5;
+}
+
+#status-bar,
+#typing-indicator {
+    height: 1;
+}
+
+.panel {
+    width: 100%;
+}
+
+.panel-title {
+    text-style: bold;
+}
+
+RichLog {
+    overflow-y: auto;
+}
+
+.spinner,
+.pulse {
+    text-style: bold;
+}
+
+DynamicSidebar {
+    overflow: hidden;
+}
+
+DynamicSidebar .sidebar-panel {
+    width: 100%;
+}
+
+DynamicSidebar .sidebar-panel.collapsed {
+    height: auto !important;
+}
+
+DynamicSidebar .sidebar-panel.collapsed > Static {
+    display: none;
+}
+
+DynamicSidebar .sidebar-toggle {
+    text-style: italic;
+}
+
+DynamicSidebar .sidebar-title,
+DynamicSidebar .metric-value {
+    text-style: bold;
+}
+
+DynamicSidebar #sidebar-session {
+    height: 6;
+}
+
+DynamicSidebar #sidebar-model {
+    height: 7;
+}
+
+DynamicSidebar #sidebar-telemetry {
+    height: 10;
+}
+
+DynamicSidebar #sidebar-commands {
+    height: auto;
+}
+
+DynamicSidebar .status-indicator {
+    width: 1;
+    text-align: center;
+}
+
+NotificationManager {
+    dock: top;
+    width: 100%;
+    height: auto;
+    layers: above;
+    padding: 0 1;
+}
+
+ToastNotification {
+    width: auto;
+    max-width: 60;
+    height: auto;
+    padding: 1 2;
+    dock: top;
+}

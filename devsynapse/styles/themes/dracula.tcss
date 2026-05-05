@@ -1,0 +1,89 @@
+Screen {
+    background: #1b1d29;
+    color: #f8f8f2;
+}
+
+#chat {
+    background: #1b1d29;
+    scrollbar-color: #bd93f9;
+    scrollbar-background: #44475a;
+}
+
+#input-container,
+#command-suggestions,
+#status-bar,
+#app-footer,
+DynamicSidebar .sidebar-panel,
+ToastNotification {
+    background: #212331;
+}
+
+#app-header {
+    background: #151620;
+    color: #ff79c6;
+}
+
+#command-suggestions,
+#input,
+DynamicSidebar .sidebar-panel {
+    border: tall #5b5f78;
+}
+
+#input {
+    background: #1b1d29;
+}
+
+#input:focus {
+    border: solid #ff79c6;
+    background: #1b1d29;
+}
+
+#input-container {
+    border-top: solid #5b5f78;
+}
+
+#status-bar,
+#app-footer,
+#typing-indicator,
+DynamicSidebar .metric,
+DynamicSidebar .sidebar-toggle {
+    color: #c7c7e5;
+}
+
+#typing-indicator {
+    background: #1b1d29;
+}
+
+.panel-title,
+DynamicSidebar .sidebar-title,
+DynamicSidebar .metric-value,
+.spinner,
+.pulse {
+    color: #ff79c6;
+}
+
+DynamicSidebar {
+    background: #1b1d29;
+    border-left: solid #5b5f78;
+}
+
+DynamicSidebar .status-ready {
+    color: #50fa7b;
+}
+
+DynamicSidebar .status-busy {
+    color: #ffb86c;
+}
+
+DynamicSidebar .status-error {
+    color: #ff5555;
+}
+
+RichLog {
+    scrollbar-color: #bd93f9;
+    scrollbar-background: #44475a;
+}
+
+ToastNotification {
+    border: round #bd93f9;
+}

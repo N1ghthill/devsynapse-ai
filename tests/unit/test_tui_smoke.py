@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 from textual.widgets import OptionList, RichLog, Static
 
 from devsynapse.tui_input import EnhancedInput
+from devsynapse.tui_preferences import load_tui_preferences
 from devsynapse.tui_sidebar import DynamicSidebar
 
 
@@ -20,6 +22,39 @@ def _configure_runtime(monkeypatch: pytest.MonkeyPatch, runtime_root: Path) -> N
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     monkeypatch.setenv("OPENCODE_ZEN_API_KEY", "")
     monkeypatch.setenv("OPENCODE_GO_API_KEY", "")
+    monkeypatch.delenv("DEVSYNAPSE_TUI_CONFIG_FILE", raising=False)
+    monkeypatch.delenv("DEVSYNAPSE_TUI_THEME", raising=False)
+    monkeypatch.delenv("DEVSYNAPSE_TUI_LAYOUT", raising=False)
+
+
+def test_tui_preferences_create_json_config_and_resolve_css_paths(tmp_path, monkeypatch):
+    _configure_runtime(monkeypatch, tmp_path / "runtime")
+    config_file = tmp_path / "runtime" / "config" / "ui.json"
+    monkeypatch.setenv("DEVSYNAPSE_TUI_CONFIG_FILE", str(config_file))
+
+    preferences = load_tui_preferences()
+
+    assert preferences.theme == "dark"
+    assert preferences.layout == "default"
+    assert config_file.is_file()
+    assert json.loads(config_file.read_text(encoding="utf-8"))["theme"] == "dark"
+    assert all(path.is_file() for path in preferences.css_paths)
+
+
+def test_tui_preferences_accept_theme_and_layout_overrides(tmp_path, monkeypatch):
+    _configure_runtime(monkeypatch, tmp_path / "runtime")
+    config_file = tmp_path / "runtime" / "config" / "ui.json"
+    config_file.parent.mkdir(parents=True)
+    config_file.write_text('{"theme": "light", "layout": "default"}\n', encoding="utf-8")
+    monkeypatch.setenv("DEVSYNAPSE_TUI_CONFIG_FILE", str(config_file))
+    monkeypatch.setenv("DEVSYNAPSE_TUI_THEME", "dracula")
+    monkeypatch.setenv("DEVSYNAPSE_TUI_LAYOUT", "dense")
+
+    preferences = load_tui_preferences()
+
+    assert preferences.theme == "dracula"
+    assert preferences.layout == "dense"
+    assert preferences.palette["thinking"] == "#8be9fd"
 
 
 @pytest.mark.asyncio
@@ -50,10 +85,68 @@ async def test_tui_mounts_and_handles_status_command(tmp_path, monkeypatch):
         await pilot.pause()
 
         status_bar = app.query_one("#status-bar", Static)
+        header = app.query_one("#app-header", Static)
+        footer = app.query_one("#app-footer", Static)
         content = str(status_bar.content)
         assert "DevSynapse AI" in content
         assert "ready" in content
         assert "budget:" in content
+        assert "DevSynapse AI" in str(header.content)
+        assert "/theme" in str(footer.content)
+
+
+@pytest.mark.asyncio
+async def test_tui_mounts_with_configured_theme_and_dense_layout(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "runtime"
+    _configure_runtime(monkeypatch, runtime_root)
+    config_file = runtime_root / "config" / "ui.json"
+    config_file.parent.mkdir(parents=True)
+    config_file.write_text('{"theme": "dracula", "layout": "dense"}\n', encoding="utf-8")
+    monkeypatch.setenv("DEVSYNAPSE_TUI_CONFIG_FILE", str(config_file))
+
+    import config.settings as app_settings
+    from devsynapse.tui import DevSynapseTUI
+
+    app_settings.get_settings.cache_clear()
+
+    app = DevSynapseTUI()
+    async with app.run_test(size=(90, 26)) as pilot:
+        await pilot.pause()
+
+        assert app.ui_preferences.theme == "dracula"
+        assert app.ui_preferences.layout == "dense"
+        assert any(str(path).endswith("dracula.tcss") for path in app.CSS_PATH)
+        assert any(str(path).endswith("dense.tcss") for path in app.CSS_PATH)
+        app.query_one("#sidebar", DynamicSidebar)
+
+
+@pytest.mark.asyncio
+async def test_tui_theme_command_persists_preferences(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "runtime"
+    _configure_runtime(monkeypatch, runtime_root)
+    config_file = runtime_root / "config" / "ui.json"
+    monkeypatch.setenv("DEVSYNAPSE_TUI_CONFIG_FILE", str(config_file))
+
+    import config.settings as app_settings
+    from devsynapse.commands import CommandDispatcher
+    from devsynapse.tui import DevSynapseTUI
+
+    app_settings.get_settings.cache_clear()
+
+    app = DevSynapseTUI()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+
+        dispatcher = CommandDispatcher(app)
+        await dispatcher.cmd_theme(["light", "dense"])
+        await pilot.pause()
+
+        saved = json.loads(config_file.read_text(encoding="utf-8"))
+        assert saved["theme"] == "light"
+        assert saved["layout"] == "dense"
+        assert app.ui_preferences.theme == "light"
+        assert app.ui_preferences.layout == "dense"
+        assert "light/dense" in str(app.query_one("#app-header", Static).content)
 
 
 @pytest.mark.asyncio
@@ -176,6 +269,16 @@ async def test_tui_command_suggestions_complete_commands_and_arguments(tmp_path,
         app.refresh_command_suggestions(input_widget.value)
         assert not app.accept_command_suggestion()
         assert menu.has_class("hidden")
+
+        input_widget.value = "/theme dr"
+        app.refresh_command_suggestions(input_widget.value)
+        assert app.accept_command_suggestion()
+        assert input_widget.value == "/theme dracula "
+
+        input_widget.value = "/theme dracula den"
+        app.refresh_command_suggestions(input_widget.value)
+        assert app.accept_command_suggestion()
+        assert input_widget.value == "/theme dracula dense "
 
 
 @pytest.mark.asyncio

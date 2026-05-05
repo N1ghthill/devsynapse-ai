@@ -22,87 +22,9 @@ logger = logging.getLogger(__name__)
 class DynamicSidebar(Vertical):
     """Dynamic sidebar with real-time updates."""
 
-    DEFAULT_CSS = """
-    DynamicSidebar {
-        width: 40;
-        min-width: 36;
-        background: #0d1117;
-        border-left: solid #30363d;
-        padding: 1;
-        overflow: hidden;
-    }
-
-    DynamicSidebar .sidebar-panel {
-        width: 100%;
-        margin-bottom: 1;
-        padding: 1;
-        border: tall #30363d;
-        background: #161b22;
-    }
-
-    DynamicSidebar .sidebar-panel.collapsed {
-        height: auto !important;
-    }
-
-    DynamicSidebar .sidebar-panel.collapsed > Static {
-        display: none;
-    }
-
-    DynamicSidebar .sidebar-toggle {
-        color: #8b949e;
-        text-style: italic;
-    }
-
-    DynamicSidebar .sidebar-title {
-        text-style: bold;
-        color: #58a6ff;
-    }
-
-    DynamicSidebar #sidebar-session {
-        height: 6;
-    }
-
-    DynamicSidebar #sidebar-model {
-        height: 7;
-    }
-
-    DynamicSidebar #sidebar-telemetry {
-        height: 10;
-    }
-
-    DynamicSidebar #sidebar-commands {
-        height: auto;
-    }
-
-    DynamicSidebar .metric {
-        color: #8b949e;
-    }
-
-    DynamicSidebar .metric-value {
-        color: #58a6ff;
-        text-style: bold;
-    }
-
-    DynamicSidebar .status-indicator {
-        width: 1;
-        text-align: center;
-    }
-
-    DynamicSidebar .status-ready {
-        color: #3fb950;
-    }
-
-    DynamicSidebar .status-busy {
-        color: #d29922;
-    }
-
-    DynamicSidebar .status-error {
-        color: #f85149;
-    }
-    """
-
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args, palette: dict[str, str] | None = None, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+        self.palette = palette or {}
         self.session_id: str = "unknown"
         self.project_name: str | None = None
         self.last_provider: str | None = None
@@ -172,19 +94,17 @@ class DynamicSidebar(Vertical):
             )
 
             status_text = "busy" if self.is_busy else "ready"
-            status_class = "status-busy" if self.is_busy else "status-ready"
+            status_color = self._color("executing" if self.is_busy else "success")
 
             panel = self.query_one("#sidebar-session", Static)
             panel.update(
                 "\n".join(
                     [
-                        "[bold #58a6ff]Session[/] "
-                        f"[{status_class}]{status_text}[/]",
-                        f"[dim]chat[/] {_shorten_middle(short_id, 24)}",
-                        f"[dim]project[/] {project}",
-                        f"[dim]providers[/] {provider_count}  "
-                        f"[dim]projects[/] {self.project_count}",
-                        f"[dim]budget[/] {self._level_markup(budget_level)}",
+                        f"{self._title('Session')} [{status_color}]{status_text}[/]",
+                        self._row("chat", _shorten_middle(short_id, 24)),
+                        self._row("project", project),
+                        self._row("scope", f"{provider_count} providers  {self.project_count} projects"),
+                        self._row("budget", self._level_markup(budget_level)),
                     ]
                 )
             )
@@ -219,7 +139,8 @@ class DynamicSidebar(Vertical):
                 default_provider = (settings.llm_default_provider or "deepseek").strip().lower()
                 active_model = _provider_model(settings, default_provider)
                 panel.update(
-                    f"[bold #58a6ff]Model[/] ▼ {default_provider}:{_shorten_middle(active_model, 18)}  [dim]F2[/]"
+                    f"{self._title('Model')} v {default_provider}:{_shorten_middle(active_model, 18)}  "
+                    f"{self._muted('F2')}"
                 )
                 panel.add_class("collapsed")
                 return
@@ -242,13 +163,15 @@ class DynamicSidebar(Vertical):
             panel.update(
                 "\n".join(
                     [
-                        "[bold #58a6ff]Model[/] [dim]manual[/]",
-                        f"[dim]active[/] {default_provider}",
+                        f"{self._title('Model')} {self._muted('manual')}",
+                        self._row("active", default_provider),
                         f"[bold]{_shorten_middle(active_model, 32)}[/]",
-                        f"[dim]last[/] {last_used}",
-                        f"[dim]session[/] [metric-value]{token_str}[/] tok  "
-                        f"[metric-value]{cost_str}[/]",
-                        f"[dim]catalog[/] {self.catalog_count}  [dim]F2 /model[/]",
+                        self._row("last", last_used),
+                        self._row(
+                            "session",
+                            f"{self._metric(token_str)} tok  {self._metric(cost_str)}",
+                        ),
+                        self._row("catalog", f"{self.catalog_count}  F2 /model"),
                     ]
                 )
             )
@@ -279,9 +202,10 @@ class DynamicSidebar(Vertical):
                 cost = float(totals.get("estimated_cost_usd") or 0.0)
                 daily = self.budget_status.get("daily", {})
                 panel.update(
-                    f"[bold #58a6ff]Telemetry[/] ▼ [dim]24h:[/] [metric-value]{requests}[/] req  "
-                    f"[metric-value]{_compact_number(tokens)}[/] tok  "
-                    f"[metric-value]{_money(cost)}[/]  [dim]day:[/] {self._budget_bar(daily)}"
+                    f"{self._title('Telemetry')} v {self._muted('24h')} "
+                    f"{self._metric(str(requests))} req  "
+                    f"{self._metric(_compact_number(tokens))} tok  "
+                    f"{self._metric(_money(cost))}  {self._muted('day')} {self._budget_bar(daily)}"
                 )
                 panel.add_class("collapsed")
                 return
@@ -307,16 +231,17 @@ class DynamicSidebar(Vertical):
             panel.update(
                 "\n".join(
                     [
-                        "[bold #58a6ff]Telemetry[/] [dim]24h[/]",
-                        f"[metric-value]{requests}[/] req  "
-                        f"[metric-value]{conversations}[/] chats  "
-                        f"[metric-value]{_compact_number(tokens)}[/] tok",
-                        f"[dim]cost[/] [metric-value]{_money(cost)}[/]  "
-                        f"[dim]cache[/] {_pct(cache_hit)}",
-                        f"[dim]errors[/] {self._error_markup(error_pct)}  "
-                        f"[dim]lat[/] {_latency(latency_ms)}",
-                        f"[dim]day[/]   {self._budget_bar(daily)}",
-                        f"[dim]month[/] {self._budget_bar(monthly)}",
+                        f"{self._title('Telemetry')} {self._muted('24h')}",
+                        self._row(
+                            "traffic",
+                            f"{self._metric(str(requests))} req  "
+                            f"{self._metric(str(conversations))} chats  "
+                            f"{self._metric(_compact_number(tokens))} tok",
+                        ),
+                        self._row("cost", f"{self._metric(_money(cost))}  cache {_pct(cache_hit)}"),
+                        self._row("health", f"{self._error_markup(error_pct)}  lat {_latency(latency_ms)}"),
+                        self._row("day", self._budget_bar(daily)),
+                        self._row("month", self._budget_bar(monthly)),
                         self._top_model_line(rows),
                     ]
                 )
@@ -332,15 +257,15 @@ class DynamicSidebar(Vertical):
             panel.update(
                 "\n".join(
                     [
-                        "[bold #58a6ff]Actions[/]",
-                        "[dim]F2[/] model    [dim]^p[/] providers",
-                        "[dim]F3[/] copy     [dim]^r[/] refresh",
-                        "[dim]^n[/] new      [dim]^l[/] clear",
+                        self._title("Actions"),
+                        f"{self._muted('F2')} model    {self._muted('^p')} providers",
+                        f"{self._muted('F3')} copy     {self._muted('^r')} refresh",
+                        f"{self._muted('^n')} new      {self._muted('^l')} clear",
                         "",
-                        "[dim]/[/] menu  [dim]/usage[/] telemetry",
-                        "[dim]/budget[/] limits  [dim]!cmd[/] shell",
+                        f"{self._muted('/')} menu  {self._muted('/theme')} theme",
+                        f"{self._muted('/usage')} telemetry  {self._muted('!cmd')} shell",
                         "",
-                        f"[dim]updated {now}[/]",
+                        self._muted(f"updated {now}"),
                     ]
                 )
             )
@@ -382,39 +307,57 @@ class DynamicSidebar(Vertical):
             return str(budget_status.get("overall_status") or "unknown")
         return str(budget_status or "unknown")
 
-    @staticmethod
-    def _level_markup(level: str) -> str:
+    def _level_markup(self, level: str) -> str:
         if level == "critical":
-            return "[#f85149]critical[/]"
+            return f"[{self._color('error')}]critical[/]"
         if level == "warning":
-            return "[#d29922]warning[/]"
+            return f"[{self._color('warning')}]warning[/]"
         if level == "healthy":
-            return "[#3fb950]healthy[/]"
+            return f"[{self._color('success')}]healthy[/]"
         if level == "disabled":
-            return "[dim]disabled[/]"
-        return "[dim]unknown[/]"
+            return self._muted("disabled")
+        return self._muted("unknown")
 
-    @staticmethod
-    def _error_markup(error_pct: float) -> str:
+    def _error_markup(self, error_pct: float) -> str:
         if error_pct >= 10:
-            return f"[#f85149]{error_pct:.1f}%[/]"
+            return f"[{self._color('error')}]{error_pct:.1f}%[/]"
         if error_pct > 0:
-            return f"[#d29922]{error_pct:.1f}%[/]"
-        return "[#3fb950]0.0%[/]"
+            return f"[{self._color('warning')}]{error_pct:.1f}%[/]"
+        return f"[{self._color('success')}]0.0%[/]"
 
     def _budget_bar(self, item: dict[str, Any]) -> str:
         pct = float(item.get("usage_pct") or 0.0)
         level = str(item.get("level") or "unknown")
         return f"{_bar(pct)} {self._level_markup(level)} {_money(item.get('actual_cost_usd'))}"
 
-    @staticmethod
-    def _top_model_line(rows: list[dict[str, Any]]) -> str:
+    def _top_model_line(self, rows: list[dict[str, Any]]) -> str:
         if not rows:
-            return "[dim]top model[/] none yet"
+            return self._row("top model", "none yet")
         row = rows[0]
         label = f"{row.get('provider') or '?'}:{row.get('model') or '?'}"
         count = int(row.get("request_count") or 0)
-        return f"[dim]top[/] {_shorten_middle(label, 27)} [metric-value]{count}[/] req"
+        return self._row("top", f"{_shorten_middle(label, 27)} {self._metric(str(count))} req")
+
+    def _title(self, text: str) -> str:
+        return f"[bold {self._color('title')}]{text}[/]"
+
+    def _row(self, label: str, value: str) -> str:
+        return f"{self._muted(label)} {value}"
+
+    def _muted(self, text: str) -> str:
+        return f"[{self._color('muted')}]{text}[/]"
+
+    def _metric(self, text: str) -> str:
+        return f"[{self._color('metric')}]{text}[/]"
+
+    def _color(self, name: str) -> str:
+        fallbacks = {
+            "title": "thinking",
+            "metric": "streaming",
+            "muted": "muted",
+        }
+        key = name if name in self.palette else fallbacks.get(name, name)
+        return self.palette.get(key, "#58a6ff")
 
 
 def _compact_number(value: int) -> str:

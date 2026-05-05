@@ -138,6 +138,7 @@ Inside the TUI, DevSynapse exposes operational slash commands:
 /budget daily|monthly <usd>      set budget limits
 /router                          show manual model status
 /usage                           show recent model/cost telemetry
+/theme [theme] [layout]          show or change TUI appearance
 !<command>                       run a shell command as a tool result
 ```
 
@@ -171,6 +172,7 @@ and `Tab` or `Enter` completes the highlighted command or argument.
 By default DevSynapse stores user runtime files outside the source checkout:
 
 - config: `~/.config/devsynapse-ai/.env`
+- TUI preferences: `~/.config/devsynapse-ai/ui.json`
 - SQLite data: `~/.local/share/devsynapse-ai/data/devsynapse_memory.db`
 - logs: `~/.local/state/devsynapse-ai/logs/devsynapse.log`
 - default source checkout for curl installs:
@@ -190,9 +192,16 @@ than one key is configured. Provider model defaults can be set with
 use the free model router; `/model` lets operators switch to a specific free or
 paid model with search.
 
-The settings loader creates these files on a best-effort basis. Read-only
-runtime config should not break commands such as `devsynapse --help`; commands
-that need persistent memory still require a writable SQLite data directory.
+TUI appearance is loaded from `ui.json`. Supported values are
+`"theme": "dark" | "light" | "dracula"` and
+`"layout": "default" | "dense"`. `DEVSYNAPSE_TUI_THEME`,
+`DEVSYNAPSE_TUI_LAYOUT` and `DEVSYNAPSE_TUI_CONFIG_FILE` can override the JSON
+file for temporary sessions. Inside the TUI, `/theme dracula dense` updates the
+same preference file.
+
+Runtime loaders create these files on a best-effort basis. Read-only runtime
+config should not break commands such as `devsynapse --help`; commands that need
+persistent memory still require a writable SQLite data directory.
 
 ## Common Commands
 

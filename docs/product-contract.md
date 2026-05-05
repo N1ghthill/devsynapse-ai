@@ -35,6 +35,7 @@ Official TUI commands:
 /router
 /usage
 /details
+/theme
 /new
 /clear
 /help
@@ -88,14 +89,18 @@ Default paths:
 
 ```text
 ~/.config/devsynapse-ai/.env
+~/.config/devsynapse-ai/ui.json
 ~/.local/share/devsynapse-ai/data/devsynapse_memory.db
 ~/.local/state/devsynapse-ai/logs/devsynapse.log
 ~/.local/share/devsynapse-ai/source
 ```
 
 `DEVSYNAPSE_HOME` relocates config, data and logs together. Specific path
-overrides are supported through `DEVSYNAPSE_CONFIG_FILE`, `DEVSYNAPSE_DATA_DIR`,
-`DEVSYNAPSE_LOGS_DIR`, `DEVSYNAPSE_BIN_DIR` and `DEVSYNAPSE_INSTALL_DIR`.
+overrides are supported through `DEVSYNAPSE_CONFIG_FILE`,
+`DEVSYNAPSE_DATA_DIR`, `DEVSYNAPSE_LOGS_DIR`, `DEVSYNAPSE_BIN_DIR` and
+`DEVSYNAPSE_INSTALL_DIR`. The TUI loads `ui.json` for theme/layout preferences
+and accepts temporary overrides via `DEVSYNAPSE_TUI_THEME`,
+`DEVSYNAPSE_TUI_LAYOUT` and `DEVSYNAPSE_TUI_CONFIG_FILE`.
 
 ## Version Contract
 

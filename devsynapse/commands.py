@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 import config.settings as app_settings
 from core.llm_discovery import fetch_openai_compatible_models, fetch_openrouter_models
+from devsynapse.tui_preferences import ALLOWED_LAYOUTS, ALLOWED_THEMES
 
 if TYPE_CHECKING:
     from devsynapse.tui import DevSynapseTUI
@@ -273,11 +274,12 @@ class CommandDispatcher:
             "discover": self.cmd_discover,
             "usage": self.cmd_usage,
             "budget": self.cmd_budget,
+            "theme": self.cmd_theme,
             "copy": self.cmd_copy,
             "router": self.cmd_router,
             "details": self.cmd_details,
             "new": self.cmd_new,
-            "clear": self.cmd_new,
+            "clear": self.cmd_clear,
             "exit": self.cmd_exit,
             "quit": self.cmd_exit,
             "q": self.cmd_exit,
@@ -582,6 +584,29 @@ class CommandDispatcher:
         chat = self.tui._chat()
         chat.write(f"[green]Details:[/] {'on' if self.tui.details_enabled else 'off'}")
 
+    async def cmd_theme(self, args: list[str]) -> None:
+        chat = self.tui._chat()
+        current = self.tui.ui_preferences
+        if not args:
+            chat.write("[bold]TUI Theme[/]")
+            chat.write(f"  theme: {current.theme}")
+            chat.write(f"  layout: {current.layout}")
+            chat.write("  usage: /theme dark|light|dracula [default|dense]")
+            return
+
+        theme = args[0].strip().lower()
+        layout = args[1].strip().lower() if len(args) >= 2 else current.layout
+        if theme not in ALLOWED_THEMES:
+            chat.write("[yellow]Usage:[/] /theme dark|light|dracula [default|dense]")
+            return
+        if layout not in ALLOWED_LAYOUTS:
+            chat.write("[yellow]Layout must be:[/] default or dense")
+            return
+
+        state = self.tui.apply_tui_preferences(theme=theme, layout=layout)
+        chat.write(f"[green]Theme {state}:[/] {theme}/{layout}")
+        chat.write(f"[dim]Config:[/] {self.tui.ui_preferences.config_file}")
+
     async def cmd_new(self, _args: list[str]) -> None:
         from core.correlation import generate_conversation_id
 
@@ -589,6 +614,12 @@ class CommandDispatcher:
         chat = self.tui._chat()
         chat.clear()
         chat.write(f"[green]New conversation:[/] {self.tui.conversation_id}")
+        self.tui._refresh_sidebar()
+
+    async def cmd_clear(self, _args: list[str]) -> None:
+        self.tui._chat().clear()
+        self.tui._write_welcome()
+        self.tui._refresh_sidebar()
 
     async def cmd_exit(self, _args: list[str]) -> None:
         self.tui.exit()

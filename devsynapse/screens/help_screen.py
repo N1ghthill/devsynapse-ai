@@ -41,6 +41,10 @@ CATEGORIES = {
         ("/copy", "copy last assistant answer"),
         ("/details", "toggle detailed tool output"),
     ],
+    "View": [
+        ("/theme", "show current theme/layout"),
+        ("/theme dracula dense", "switch TUI theme and density"),
+    ],
     "Shell": [
         ("!<command>", "run shell command"),
         ("/help", "show this help"),

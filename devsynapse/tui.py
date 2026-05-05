@@ -7,6 +7,7 @@ import asyncio
 import importlib
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +23,7 @@ if str(ROOT_DIR) not in sys.path:
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Header, OptionList, RichLog, Static
+from textual.widgets import OptionList, RichLog, Static
 from textual.widgets.option_list import Option
 
 import config.settings as app_settings
@@ -46,6 +47,7 @@ from devsynapse.commands import (
 from devsynapse.screens import ModelSelectionScreen, ProviderConnectionScreen
 from devsynapse.tui_input import EnhancedInput
 from devsynapse.tui_notifications import NotificationManager
+from devsynapse.tui_preferences import TUIPreferences, load_tui_preferences, save_tui_preferences
 from devsynapse.tui_sidebar import DynamicSidebar
 
 logger = logging.getLogger(__name__)
@@ -56,135 +58,6 @@ class DevSynapseTUI(App):
 
     TITLE = "DevSynapse AI"
     SUB_TITLE = "terminal coding agent"
-    CSS = """
-    Screen {
-        layout: vertical;
-        background: #0d1117;
-    }
-
-    #workspace {
-        height: 1fr;
-        min-height: 0;
-    }
-
-    #main-pane {
-        width: 1fr;
-        min-width: 0;
-    }
-
-    #chat {
-        height: 1fr;
-        border: none;
-        padding: 1 2 0 2;
-        background: #0d1117;
-        scrollbar-color: #58a6ff;
-        scrollbar-background: #21262d;
-    }
-
-    #input-container {
-        height: auto;
-        max-height: 20;
-        min-height: 3;
-        background: #161b22;
-        border-top: solid #30363d;
-        padding: 0 1;
-    }
-
-    #command-suggestions {
-        height: auto;
-        max-height: 8;
-        border: tall #30363d;
-        background: #161b22;
-        margin-bottom: 1;
-    }
-
-    #command-suggestions.hidden {
-        display: none;
-    }
-
-    #input {
-        height: auto;
-        min-height: 3;
-        background: #0d1117;
-        border: solid #30363d;
-        padding: 0 1;
-    }
-
-    #input:focus {
-        border: solid #58a6ff;
-        background: #0d1117;
-    }
-
-    #input:disabled {
-        opacity: 0.5;
-    }
-
-    #status-bar {
-        height: 1;
-        background: #161b22;
-        color: #8b949e;
-        padding: 0 2;
-    }
-
-    #typing-indicator {
-        height: 1;
-        padding: 0 2;
-        background: #0d1117;
-        color: #8b949e;
-    }
-
-    .panel {
-        width: 100%;
-        margin-bottom: 1;
-        padding: 1;
-        border: tall #30363d;
-        background: #161b22;
-    }
-
-    .panel-title {
-        text-style: bold;
-        color: #58a6ff;
-    }
-
-    .message-user {
-        border: round #1f6feb;
-        background: #0d1117;
-        padding: 1 2;
-        margin-left: 2;
-    }
-
-    .message-assistant {
-        border: round #238636;
-        background: #0d1117;
-        padding: 1 2;
-        margin-right: 2;
-    }
-
-    .message-command {
-        border: round #d29922;
-        background: #161b22;
-    }
-
-    .message-tool {
-        border: round #8957e5;
-        background: #161b22;
-    }
-
-    .message-system {
-        border: round #6e7681;
-        background: #161b22;
-    }
-
-    RichLog {
-        scrollbar-color: #58a6ff;
-        scrollbar-background: #21262d;
-    }
-
-    .spinner {
-        color: #58a6ff;
-        text-style: bold;
-    }
-    """
 
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit", show=False),
@@ -198,6 +71,8 @@ class DevSynapseTUI(App):
     ]
 
     def __init__(self):
+        self.ui_preferences: TUIPreferences = load_tui_preferences()
+        self.CSS_PATH = self.ui_preferences.css_paths
         super().__init__()
         self.brain = None
         self.opencode = None
@@ -216,7 +91,7 @@ class DevSynapseTUI(App):
         self._command_suggestions: list[CommandSuggestion] = []
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
+        yield Static(id="app-header")
         yield NotificationManager(id="notifications")
         with Horizontal(id="workspace"):
             with Vertical(id="main-pane"):
@@ -228,11 +103,13 @@ class DevSynapseTUI(App):
                         id="input",
                         placeholder="Message /help or !cmd (Shift+Enter for new line)",
                     )
-            yield DynamicSidebar(id="sidebar")
+            yield DynamicSidebar(id="sidebar", palette=self.ui_preferences.palette)
         yield Static(id="status-bar")
-        yield Footer()
+        yield Static(id="app-footer")
 
     async def on_mount(self):
+        self._update_chrome()
+        self.set_interval(1.0, self._update_header)
         input_w = self._input()
         input_w.focus()
         self._sidebar().refresh_all(
@@ -249,6 +126,12 @@ class DevSynapseTUI(App):
 
     def _sidebar(self) -> DynamicSidebar:
         return self.query_one("#sidebar", DynamicSidebar)
+
+    def _header(self) -> Static:
+        return self.query_one("#app-header", Static)
+
+    def _footer(self) -> Static:
+        return self.query_one("#app-footer", Static)
 
     def _notifications(self) -> NotificationManager:
         return self.query_one("#notifications", NotificationManager)
@@ -280,25 +163,25 @@ class DevSynapseTUI(App):
         )
 
     def _write_user_message(self, text: str) -> None:
-        self._write_panel("you", Text(text), border_style="cyan")
+        self._write_panel("you", Text(text), border_style=self._state_color("user"))
 
     def _write_assistant_message(self, text: str) -> None:
         self.last_response_text = text
         self._write_panel(
             "DevSynapse",
             Markdown(text),
-            border_style="green",
+            border_style=self._state_color("assistant"),
             subtitle="F3 copy",
         )
 
     def _write_command_message(self, command: str) -> None:
-        self._write_panel("command", Text(command), border_style="yellow")
+        self._write_panel("command", Text(command), border_style=self._state_color("executing"))
 
     def _write_model_message(self, provider: str, model: str) -> None:
         self._write_panel(
             "model",
             Text(f"{provider}:{model}", style="dim"),
-            border_style="bright_black",
+            border_style=self._state_color("muted"),
         )
 
     async def _init_engine(self):
@@ -472,24 +355,66 @@ class DevSynapseTUI(App):
 
         await self._process(task, chat, input_w)
 
-    def _get_color(self, color_name: str) -> str:
-        """Get color from palette for status bar."""
-        color_map = {
-            "accent_blue": "#58a6ff",
-            "accent_green": "#3fb950",
-            "accent_orange": "#d29922",
-            "accent_red": "#f85149",
-            "accent_purple": "#a371f7",
-            "foreground_secondary": "#8b949e",
-        }
-        return color_map.get(color_name, "#58a6ff")
+    def _state_color(self, state: str) -> str:
+        """Return a semantic color from the active TUI theme."""
+        return self.ui_preferences.palette.get(state, self.ui_preferences.palette["thinking"])
+
+    def _update_chrome(self) -> None:
+        self._update_header()
+        self._update_footer()
+
+    def _update_header(self) -> None:
+        now = datetime.now().strftime("%H:%M:%S")
+        theme = self.ui_preferences.theme
+        layout = self.ui_preferences.layout
+        self._header().update(
+            f"[bold {self._state_color('title')}]DevSynapse AI[/] "
+            f"[{self._state_color('muted')}]terminal coding agent[/] "
+            f"[{self._state_color('streaming')}]{theme}/{layout}[/] "
+            f"[{self._state_color('muted')}]{now}[/]"
+        )
+
+    def _update_footer(self) -> None:
+        muted = self._state_color("muted")
+        accent = self._state_color("streaming")
+        self._footer().update(
+            f"[{accent}]^l[/] Clear   [{accent}]^h[/] Help   "
+            f"[{accent}]F2[/] Model   [{accent}]F3[/] Copy   "
+            f"[{accent}]^n[/] New   [{accent}]^p[/] Providers   "
+            f"[{accent}]^r[/] Refresh   [{accent}]/[/] Commands   "
+            f"[{accent}]/theme[/] Theme   [{muted}]Esc quits dialogs[/]"
+        )
+
+    def apply_tui_preferences(
+        self,
+        *,
+        theme: str | None = None,
+        layout: str | None = None,
+    ) -> str:
+        """Persist and apply TUI appearance preferences."""
+        self.ui_preferences = save_tui_preferences(
+            theme=theme,
+            layout=layout,
+            config_file=self.ui_preferences.config_file,
+        )
+        self.CSS_PATH = self.ui_preferences.css_paths
+        self._sidebar().palette = self.ui_preferences.palette
+        self._update_chrome()
+        self._update_status_bar()
+        self._refresh_sidebar()
+        try:
+            self.refresh_css(animate=False)
+            return "applied"
+        except Exception:
+            logger.exception("Could not refresh TUI CSS after preference change")
+            return "saved"
 
     def _set_busy(self, busy: bool) -> None:
         """Set busy state with visual indicators."""
         self._is_busy = busy
         typing = self._typing_indicator()
         if busy:
-            typing.update(f"[bold {self._get_color('accent_blue')}]DevSynapse is thinking...[/]")
+            typing.update(f"[bold {self._state_color('thinking')}]DevSynapse is thinking...[/]")
             typing.add_class("pulse")
         else:
             typing.update("")
@@ -653,7 +578,7 @@ class DevSynapseTUI(App):
             project_name=self.project_name,
             conversation_id=self.conversation_id,
         )
-        color = "green" if result.success else "red"
+        color = self._state_color("success" if result.success else "error")
         body = result.message
         if result.reason_code:
             body += f"\nreason: {result.reason_code}"
@@ -809,10 +734,18 @@ class DevSynapseTUI(App):
         bar = self.query_one("#status-bar", Static)
         budget = self.memory.get_llm_budget_status()
         budget_str = budget.get("overall_status", "unknown")
-        budget_color = "green" if budget_str == "healthy" else ("yellow" if budget_str == "warning" else "red")
+        budget_color = (
+            self._state_color("success")
+            if budget_str == "healthy"
+            else (
+                self._state_color("warning")
+                if budget_str == "warning"
+                else self._state_color("error")
+            )
+        )
 
         if message:
-            bar.update(f"[bold {self._get_color('accent_blue')}]*[/] {message}")
+            bar.update(f"[bold {self._state_color('thinking')}]*[/] {message}")
             return
 
         if usage:
@@ -826,7 +759,7 @@ class DevSynapseTUI(App):
             )
         else:
             bar.update(
-                f"[dim]DevSynapse AI[/] [bold {self._get_color('accent_green')}]ready[/]  "
+                f"[dim]DevSynapse AI[/] [bold {self._state_color('success')}]ready[/]  "
                 f"budget:[{budget_color}]{budget_str}[/]"
             )
 

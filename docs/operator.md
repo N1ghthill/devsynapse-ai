@@ -80,11 +80,17 @@ The following are intentionally unsupported:
 Defaults:
 
 - config: `~/.config/devsynapse-ai/.env`
+- TUI preferences: `~/.config/devsynapse-ai/ui.json`
 - data: `~/.local/share/devsynapse-ai/data/devsynapse_memory.db`
 - logs: `~/.local/state/devsynapse-ai/logs/devsynapse.log`
 
 Use `DEVSYNAPSE_HOME=/path/to/runtime` to keep config, data and logs together
 under one directory.
+
+The TUI preference file supports `"theme": "dark" | "light" | "dracula"` and
+`"layout": "default" | "dense"`. Use `DEVSYNAPSE_TUI_THEME`,
+`DEVSYNAPSE_TUI_LAYOUT` or `DEVSYNAPSE_TUI_CONFIG_FILE` for temporary overrides.
+Inside the TUI, `/theme dracula dense` persists the same preference change.
 
 ## First Provider
 
@@ -127,6 +133,7 @@ Supported provider names:
 /project                         clear active project
 /usage                           show recent token and cost telemetry
 /budget                          show daily/monthly budget state
+/theme [theme] [layout]          show or change TUI appearance
 /budget daily|monthly <usd>      update budget limits
 /model                           search and select active model
 /copy                            copy last assistant answer

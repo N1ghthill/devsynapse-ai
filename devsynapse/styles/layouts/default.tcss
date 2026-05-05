@@ -1,0 +1,28 @@
+#chat {
+    padding: 1 2 0 2;
+}
+
+#input-container {
+    padding: 0 1;
+}
+
+#input {
+    padding: 0 1;
+}
+
+#status-bar,
+#typing-indicator {
+    padding: 0 2;
+}
+
+.panel,
+DynamicSidebar .sidebar-panel {
+    margin-bottom: 1;
+    padding: 1;
+}
+
+DynamicSidebar {
+    width: 40;
+    min-width: 36;
+    padding: 1;
+}
