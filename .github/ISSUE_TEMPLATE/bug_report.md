@@ -28,15 +28,15 @@ Describe what actually happened.
 
 - OS:
 - Python version:
-- Node version:
-- Browser:
+- DevSynapse version (`devsynapse --version`):
+- Install method (`curl`, checkout, other):
 
 ## Evidence
 
 Include any relevant:
 - logs
-- screenshots
-- API responses
+- terminal output
+- provider/API responses
 - test output
 
 ## Additional context

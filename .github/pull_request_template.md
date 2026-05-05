@@ -18,4 +18,4 @@ Describe any known risks, limitations or follow-up work.
 
 ## Evidence
 
-Include relevant logs, screenshots or API samples when useful.
+Include relevant logs, terminal output or provider/API samples when useful.

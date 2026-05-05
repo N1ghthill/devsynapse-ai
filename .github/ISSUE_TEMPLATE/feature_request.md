@@ -24,4 +24,4 @@ Who benefits and how?
 
 ## Additional context
 
-Add any supporting material, references or screenshots.
+Add any supporting material, references, terminal output or operator notes.
