@@ -10,6 +10,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 from rich import box
@@ -100,6 +101,7 @@ class DevSynapseTUI(App):
         self._typing_widget: Static | None = None
         self._busy_message = ""
         self._busy_frame = 0
+        self._busy_started_at: float | None = None
 
     def compose(self) -> ComposeResult:
         yield Static(id="app-header")
@@ -500,10 +502,12 @@ class DevSynapseTUI(App):
         if busy:
             self._busy_message = message or "DevSynapse is thinking"
             self._busy_frame = 0
+            self._busy_started_at = monotonic()
             self._update_busy_indicator()
             typing.add_class("pulse")
         else:
             self._busy_message = ""
+            self._busy_started_at = None
             typing.update("")
             typing.remove_class("pulse")
         self._sidebar().set_busy(busy)
@@ -514,10 +518,22 @@ class DevSynapseTUI(App):
             return
         dots = "." * (self._busy_frame % 4)
         padding = " " * (3 - len(dots))
+        progress = self._busy_progress_label()
         self._typing_indicator().update(
-            f"[bold {self._state_color('thinking')}]{self._busy_message}{dots}{padding}[/]"
+            f"[bold {self._state_color('thinking')}]{self._busy_message}{dots}{padding}[/] "
+            f"[dim]{progress}[/]"
         )
+        self._update_status_bar(message=f"{self._busy_message} {progress}")
         self._busy_frame += 1
+
+    def _busy_progress_label(self) -> str:
+        width = 10
+        position = self._busy_frame % width
+        bar = "".join(">" if index == position else "-" for index in range(width))
+        elapsed = 0
+        if self._busy_started_at is not None:
+            elapsed = max(0, int(monotonic() - self._busy_started_at))
+        return f"|{bar}| {elapsed}s"
 
     async def _process(self, task, chat, input_w):
         streamed_chunks: list[str] = []

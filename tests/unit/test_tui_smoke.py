@@ -353,12 +353,18 @@ async def test_tui_busy_indicator_animates(tmp_path, monkeypatch):
 
         indicator = app.query_one("#typing-indicator", Static)
         app._set_busy(True, "Executing shell command")
+        app._busy_started_at = app._busy_started_at - 2 if app._busy_started_at else None
         first = str(indicator.content)
         app._update_busy_indicator()
         second = str(indicator.content)
+        status_bar = app.query_one("#status-bar", Static)
+        status_content = str(status_bar.content)
         app._set_busy(False)
 
         assert "Executing shell command" in first
+        assert "|" in second
+        assert "s" in second
+        assert "Executing shell command" in status_content
         assert first != second
         assert str(indicator.content) == ""
 

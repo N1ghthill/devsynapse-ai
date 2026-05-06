@@ -113,7 +113,8 @@ Typing `/` in the main input opens the command menu. `Up` and `Down` move throug
 suggestions, and `Tab` or `Enter` completes the highlighted command or provider,
 budget, or project argument. `Ctrl+Space` opens the same menu from an empty input.
 The status bar shows the trusted local approval mode, session token/cost totals,
-effective cwd, project, session ID and budget health. The right panel updates as
+effective cwd, project, session ID and budget health. Long-running agent and
+shell work also shows an elapsed progress ticker. The right panel updates as
 requests run: it shows session state, active model, 24h requests/chats/tokens/cost,
 cache rate, error rate, average latency, daily and monthly budget bars, and the
 top recent model.
