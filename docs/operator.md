@@ -170,7 +170,13 @@ worktree changes and links the next inspection path to `!git diff`.
 | `Ctrl+L` | Clear chat |
 | `Ctrl+P` | Open command palette |
 | `Ctrl+R` | Refresh status |
+| `Ctrl+Space` | Command menu |
+| `PageUp/PageDown` | Scroll chat log |
+| `Ctrl+Home/Ctrl+End` | Jump to top/bottom of chat log |
 | `Shift+Enter` | New line in input |
+| `Up/Down`, `Ctrl+K/J` | Navigate command history or menu suggestions |
+| `Tab` | Autocomplete |
+| `Esc` | Close command suggestions/dialogs |
 
 ## Update
 

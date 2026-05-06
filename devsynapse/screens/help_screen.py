@@ -63,6 +63,8 @@ SHORTCUTS = [
     ("Ctrl+R", "refresh status"),
     ("Ctrl+H", "show help"),
     ("Ctrl+Space", "command menu"),
+    ("PageUp/Down", "scroll chat"),
+    ("Ctrl+Home/End", "chat top/bottom"),
     ("Up/Down", "history or menu"),
     ("Ctrl+K/J", "history or menu"),
     ("Tab", "autocomplete"),

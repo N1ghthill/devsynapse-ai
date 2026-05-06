@@ -177,6 +177,7 @@ async def test_tui_mounts_and_handles_status_command(tmp_path, monkeypatch):
         assert "DevSynapse AI" in str(header.content)
         assert "/theme" in str(footer.content)
         assert "^k/^j" in str(footer.content)
+        assert "PgUp/PgDn" in str(footer.content)
 
 
 @pytest.mark.asyncio
@@ -425,6 +426,7 @@ async def test_tui_help_shortcut_works_before_slash_command(tmp_path, monkeypatc
         assert app._dispatcher is not None
         shortcuts = app.screen_stack[-1].query_one("#shortcuts-content", Static)
         assert "Ctrl+K/J" in str(shortcuts.content)
+        assert "PageUp/Down" in str(shortcuts.content)
         assert "close menu/modal" in str(shortcuts.content)
 
 
@@ -558,6 +560,33 @@ async def test_tui_input_supports_vim_style_history_shortcuts(tmp_path, monkeypa
         await pilot.press("ctrl+j")
         await pilot.pause()
         assert input_widget.value == "second task"
+
+
+@pytest.mark.asyncio
+async def test_tui_chat_scroll_actions_are_available(tmp_path, monkeypatch):
+    _configure_runtime(monkeypatch, tmp_path / "runtime")
+
+    import config.settings as app_settings
+    from devsynapse.tui import DevSynapseTUI
+
+    app_settings.get_settings.cache_clear()
+
+    app = DevSynapseTUI()
+    async with app.run_test(size=(100, 18)) as pilot:
+        await pilot.pause()
+
+        chat = app.query_one("#chat", RichLog)
+        for index in range(80):
+            chat.write(f"line {index}")
+        await pilot.pause()
+
+        app.action_scroll_chat_top()
+        app.action_scroll_chat_page_down()
+        app.action_scroll_chat_page_up()
+        app.action_scroll_chat_bottom()
+        await pilot.pause()
+
+        assert chat.max_scroll_y >= 0
 
 
 @pytest.mark.asyncio

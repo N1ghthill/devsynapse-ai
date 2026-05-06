@@ -75,6 +75,10 @@ class DevSynapseTUI(App):
         Binding("ctrl+n", "new_session", "New"),
         Binding("ctrl+p", "open_command_palette", "Palette"),
         Binding("ctrl+r", "refresh_status", "Refresh"),
+        Binding("pageup", "scroll_chat_page_up", "Chat Up", show=False),
+        Binding("pagedown", "scroll_chat_page_down", "Chat Down", show=False),
+        Binding("ctrl+home", "scroll_chat_top", "Chat Top", show=False),
+        Binding("ctrl+end", "scroll_chat_bottom", "Chat Bottom", show=False),
         Binding("escape", "dismiss_command_menu", "Dismiss Menu", show=False, priority=True),
     ]
 
@@ -356,6 +360,18 @@ class DevSynapseTUI(App):
         self._chat().clear()
         self._notification_manager().show("Chat cleared", "info")
 
+    def action_scroll_chat_page_up(self) -> None:
+        self._chat().scroll_page_up(animate=False)
+
+    def action_scroll_chat_page_down(self) -> None:
+        self._chat().scroll_page_down(animate=False)
+
+    def action_scroll_chat_top(self) -> None:
+        self._chat().scroll_home(animate=False, immediate=True)
+
+    def action_scroll_chat_bottom(self) -> None:
+        self._chat().scroll_end(animate=False, immediate=True)
+
     async def action_show_help(self):
         await self._command_dispatcher().cmd_help([])
 
@@ -497,7 +513,7 @@ class DevSynapseTUI(App):
             f"[{accent}]F4[/] Model panel   [{accent}]F5[/] Telemetry   "
             f"[{accent}]^n[/] New   [{accent}]^p[/] Palette   "
             f"[{accent}]^r[/] Refresh   [{accent}]/[/] Commands   "
-            f"[{accent}]^k/^j[/] Nav   [{accent}]/theme[/] Theme   "
+            f"[{accent}]PgUp/PgDn[/] Scroll   [{accent}]^k/^j[/] Nav   [{accent}]/theme[/] Theme   "
             f"[{muted}]Esc closes menus[/]"
         )
 
