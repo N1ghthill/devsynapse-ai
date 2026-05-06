@@ -522,14 +522,17 @@ class DevSynapseTUI(App):
         *,
         theme: str | None = None,
         layout: str | None = None,
+        chat_max_lines: int | None = None,
     ) -> str:
         """Persist and apply TUI appearance preferences."""
         self.ui_preferences = save_tui_preferences(
             theme=theme,
             layout=layout,
+            chat_max_lines=chat_max_lines,
             config_file=self.ui_preferences.config_file,
         )
         self.CSS_PATH = self.ui_preferences.css_paths
+        self._chat().max_lines = self.ui_preferences.chat_max_lines
         self._sidebar().palette = self.ui_preferences.palette
         self._update_chrome()
         self._update_status_bar()

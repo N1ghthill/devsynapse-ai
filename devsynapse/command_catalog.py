@@ -50,7 +50,12 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
     CommandSpec("router", "/router", "manual model status", "Ops", 52),
     CommandSpec("details", "/details", "toggle details", "View", 60),
     CommandSpec(
-        "theme", "/theme <theme> <layout>", "TUI theme and density", "View", 61, accepts_args=True
+        "theme",
+        "/theme <theme> <layout> <lines>",
+        "TUI theme, density and history",
+        "View",
+        61,
+        accepts_args=True,
     ),
     CommandSpec("copy", "/copy", "copy last answer", "Chat", 70),
     CommandSpec("new", "/new", "new conversation", "Chat", 71),
@@ -101,6 +106,13 @@ THEME_VALUES: tuple[tuple[str, str], ...] = (
 LAYOUT_VALUES: tuple[tuple[str, str], ...] = (
     ("default", "comfortable spacing"),
     ("dense", "compact terminal layout"),
+)
+
+MAX_LINE_VALUES: tuple[tuple[str, str], ...] = (
+    ("1000", "short chat log"),
+    ("2000", "default chat log"),
+    ("5000", "long chat log"),
+    ("10000", "very long chat log"),
 )
 
 SLASH_COMMANDS: tuple[str, ...] = tuple(f"/{spec.name}" for spec in COMMAND_SPECS)
@@ -176,6 +188,15 @@ def build_command_suggestions(
         if arg_index == 2:
             theme = tokens[1].lower() if len(tokens) > 1 else "dark"
             return _value_suggestions(f"/{spec.name} {theme}", arg_prefix, LAYOUT_VALUES, limit)
+        if arg_index == 3:
+            theme = tokens[1].lower() if len(tokens) > 1 else "dark"
+            layout = tokens[2].lower() if len(tokens) > 2 else "default"
+            return _value_suggestions(
+                f"/{spec.name} {theme} {layout}",
+                arg_prefix,
+                MAX_LINE_VALUES,
+                limit,
+            )
 
     if spec.name == "project" and arg_index <= 1:
         projects = tuple((name, "registered project") for name in sorted(project_names))

@@ -247,9 +247,19 @@ async def test_tui_theme_command_persists_preferences(tmp_path, monkeypatch):
         saved = json.loads(config_file.read_text(encoding="utf-8"))
         assert saved["theme"] == "light"
         assert saved["layout"] == "dense"
+        assert saved["chat"]["max_lines"] == 2000
         assert app.ui_preferences.theme == "light"
         assert app.ui_preferences.layout == "dense"
         assert "light/dense" in str(app.query_one("#app-header", Static).content)
+        await dispatcher.cmd_theme(["dracula", "default", "5000"])
+        await pilot.pause()
+
+        saved = json.loads(config_file.read_text(encoding="utf-8"))
+        assert saved["theme"] == "dracula"
+        assert saved["layout"] == "default"
+        assert saved["chat"]["max_lines"] == 5000
+        assert app.ui_preferences.chat_max_lines == 5000
+        assert app.query_one("#chat", RichLog).max_lines == 5000
 
 
 @pytest.mark.asyncio
@@ -512,6 +522,11 @@ async def test_tui_command_suggestions_complete_commands_and_arguments(tmp_path,
         app.refresh_command_suggestions(input_widget.value)
         assert app.accept_command_suggestion()
         assert input_widget.value == "/theme dracula dense "
+
+        input_widget.value = "/theme dracula dense 5"
+        app.refresh_command_suggestions(input_widget.value)
+        assert app.accept_command_suggestion()
+        assert input_widget.value == "/theme dracula dense 5000 "
 
         input_widget.value = "/"
         app.refresh_command_suggestions(input_widget.value, force=True)

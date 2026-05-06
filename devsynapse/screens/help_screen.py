@@ -44,6 +44,7 @@ CATEGORIES = {
     "View": [
         ("/theme", "show current theme/layout"),
         ("/theme dracula dense", "switch TUI theme and density"),
+        ("/theme dracula dense 5000", "set rendered chat history"),
     ],
     "Shell": [
         ("!<command>", "run shell command"),

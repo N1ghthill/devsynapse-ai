@@ -138,7 +138,7 @@ Inside the TUI, DevSynapse exposes operational slash commands:
 /budget daily|monthly <usd>      set budget limits
 /router                          show manual model status
 /usage                           show recent model/cost telemetry
-/theme [theme] [layout]          show or change TUI appearance
+/theme [theme] [layout] [lines]  show or change TUI appearance
 !<command>                       run a shell command as a tool result
 ```
 
@@ -212,8 +212,8 @@ TUI appearance is loaded from `ui.json`. Supported values are
 `"layout": "default" | "dense"`, plus chat log `max_lines` and persisted sidebar
 panel collapse state. `DEVSYNAPSE_TUI_THEME`, `DEVSYNAPSE_TUI_LAYOUT`,
 `DEVSYNAPSE_TUI_MAX_LINES` and `DEVSYNAPSE_TUI_CONFIG_FILE` can override the JSON
-file for temporary sessions. Inside the TUI, `/theme dracula dense` updates the
-same preference file.
+file for temporary sessions. Inside the TUI, `/theme dracula dense 5000` updates
+the same preference file.
 
 Runtime loaders create these files on a best-effort basis. Read-only runtime
 config should not break commands such as `devsynapse --help`; commands that need

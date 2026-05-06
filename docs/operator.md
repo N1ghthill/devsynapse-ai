@@ -91,8 +91,8 @@ The TUI preference file supports `"theme": "dark" | "light" | "dracula"`,
 `"layout": "default" | "dense"`, chat log `max_lines` and persisted sidebar
 panel collapse state. Use `DEVSYNAPSE_TUI_THEME`, `DEVSYNAPSE_TUI_LAYOUT`,
 `DEVSYNAPSE_TUI_MAX_LINES` or `DEVSYNAPSE_TUI_CONFIG_FILE` for temporary
-overrides. Inside the TUI, `/theme dracula dense` persists the same preference
-change.
+overrides. Inside the TUI, `/theme dracula dense 5000` persists the same
+preference change.
 
 ## First Provider
 
@@ -140,7 +140,7 @@ Supported provider names:
 /project                         clear active project
 /usage                           show recent token and cost telemetry
 /budget                          show daily/monthly budget state
-/theme [theme] [layout]          show or change TUI appearance
+/theme [theme] [layout] [lines]  show or change TUI appearance
 /budget daily|monthly <usd>      update budget limits
 /model                           search and select active model
 /copy                            copy last assistant answer

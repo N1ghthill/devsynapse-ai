@@ -15,6 +15,8 @@ LAYOUT_DIR = STYLE_DIR / "layouts"
 
 ALLOWED_THEMES = {"dark", "light", "dracula"}
 ALLOWED_LAYOUTS = {"default", "dense"}
+CHAT_MAX_LINES_MIN = 200
+CHAT_MAX_LINES_MAX = 20000
 SIDEBAR_PANELS = ("model", "telemetry")
 
 DEFAULT_UI_CONFIG: dict[str, Any] = {
@@ -130,6 +132,7 @@ def save_tui_preferences(
     *,
     theme: str | None = None,
     layout: str | None = None,
+    chat_max_lines: int | None = None,
     sidebar_collapsed: dict[str, bool] | None = None,
     config_file: Path | None = None,
 ) -> TUIPreferences:
@@ -141,6 +144,13 @@ def save_tui_preferences(
     if layout is not None:
         data["layout"] = _normalized_choice(layout, allowed=ALLOWED_LAYOUTS, default="default")
     chat = data.get("chat") if isinstance(data.get("chat"), dict) else {}
+    if chat_max_lines is not None:
+        chat["max_lines"] = _normalized_int(
+            chat_max_lines,
+            default=2000,
+            minimum=CHAT_MAX_LINES_MIN,
+            maximum=CHAT_MAX_LINES_MAX,
+        )
     data["chat"] = {**DEFAULT_UI_CONFIG["chat"], **chat}
     sidebar = data.get("sidebar") if isinstance(data.get("sidebar"), dict) else {}
     if sidebar_collapsed is not None:
