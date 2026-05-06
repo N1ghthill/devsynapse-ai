@@ -2,9 +2,24 @@
 from __future__ import annotations
 
 from textual.binding import Binding
-from textual.widgets import Input
+from textual.widgets import Input, OptionList
 
 from devsynapse.command_catalog import SLASH_COMMANDS, build_command_suggestions
+
+
+class CommandSuggestionList(OptionList):
+    """Suggestion menu that can be dismissed from keyboard focus."""
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Dismiss Menu", show=False, priority=True),
+    ]
+
+    def action_dismiss(self) -> None:
+        app = self.app
+        if hasattr(app, "_hide_command_suggestions"):
+            app._hide_command_suggestions()
+        if hasattr(app, "_input"):
+            app._input().focus()
 
 
 class EnhancedInput(Input):
@@ -15,7 +30,10 @@ class EnhancedInput(Input):
         Binding("shift+enter", "insert_newline", "New Line", show=False, priority=True),
         Binding("up", "history_previous", "History Prev", show=False),
         Binding("down", "history_next", "History Next", show=False),
+        Binding("ctrl+k", "history_previous", "History Prev", show=False, priority=True),
+        Binding("ctrl+j", "history_next", "History Next", show=False, priority=True),
         Binding("tab", "autocomplete", "Autocomplete", show=False),
+        Binding("escape", "dismiss_command_menu", "Dismiss Menu", show=False, priority=True),
         Binding("ctrl+space", "show_command_menu", "Commands", show=False),
     ]
 
@@ -91,6 +109,12 @@ class EnhancedInput(Input):
         app = self.app
         if hasattr(app, "refresh_command_suggestions"):
             app.refresh_command_suggestions(self.value, force=True)
+
+    def action_dismiss_command_menu(self) -> None:
+        """Close the contextual slash command menu."""
+        app = self.app
+        if hasattr(app, "_hide_command_suggestions"):
+            app._hide_command_suggestions()
 
     async def action_submit_or_accept(self) -> None:
         """Accept the active menu suggestion before submitting the input."""

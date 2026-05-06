@@ -464,6 +464,12 @@ async def test_tui_command_suggestions_complete_commands_and_arguments(tmp_path,
         assert app.accept_command_suggestion()
         assert input_widget.value == "/theme dracula dense "
 
+        input_widget.value = "/"
+        app.refresh_command_suggestions(input_widget.value, force=True)
+        assert not menu.has_class("hidden")
+        app.action_dismiss_command_menu()
+        assert menu.has_class("hidden")
+
 
 @pytest.mark.asyncio
 async def test_tui_enter_submits_chat_message(tmp_path, monkeypatch):
@@ -485,6 +491,36 @@ async def test_tui_enter_submits_chat_message(tmp_path, monkeypatch):
 
         assert input_widget.value == ""
         assert input_widget._history[-1] == "hello from enter"
+
+
+@pytest.mark.asyncio
+async def test_tui_input_supports_vim_style_history_shortcuts(tmp_path, monkeypatch):
+    _configure_runtime(monkeypatch, tmp_path / "runtime")
+
+    import config.settings as app_settings
+    from devsynapse.tui import DevSynapseTUI
+
+    app_settings.get_settings.cache_clear()
+
+    app = DevSynapseTUI()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+
+        input_widget = app.query_one("#input", EnhancedInput)
+        input_widget.add_to_history("first task")
+        input_widget.add_to_history("second task")
+
+        await pilot.press("ctrl+k")
+        await pilot.pause()
+        assert input_widget.value == "second task"
+
+        await pilot.press("ctrl+k")
+        await pilot.pause()
+        assert input_widget.value == "first task"
+
+        await pilot.press("ctrl+j")
+        await pilot.pause()
+        assert input_widget.value == "second task"
 
 
 @pytest.mark.asyncio

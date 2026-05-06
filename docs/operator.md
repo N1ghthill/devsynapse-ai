@@ -109,9 +109,10 @@ and keep or edit the default model. The selected server becomes
 OpenRouter defaults to `openrouter/free` for normal chat. Use `/model` to search
 the refreshed principal catalog and choose a specific free or paid model.
 
-Typing `/` in the main input opens the command menu. `Up` and `Down` move through
-suggestions, and `Tab` or `Enter` completes the highlighted command or provider,
-budget, or project argument. `Ctrl+Space` opens the same menu from an empty input.
+Typing `/` in the main input opens the command menu. `Up`/`Down` or `Ctrl+K`/`Ctrl+J`
+move through suggestions, and `Tab` or `Enter` completes the highlighted command
+or provider, budget, or project argument. `Esc` closes suggestions. `Ctrl+Space`
+opens the same menu from an empty input.
 The status bar shows the trusted local approval mode, session token/cost totals,
 effective cwd, project, session ID and budget health. Long-running agent and
 shell work also shows an elapsed progress ticker. The right panel updates as

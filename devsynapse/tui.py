@@ -48,7 +48,7 @@ from devsynapse.commands import (
 )
 from devsynapse.screens import ModelSelectionScreen, ProviderConnectionScreen
 from devsynapse.screens.command_palette import CommandPaletteScreen
-from devsynapse.tui_input import EnhancedInput
+from devsynapse.tui_input import CommandSuggestionList, EnhancedInput
 from devsynapse.tui_notifications import NotificationManager
 from devsynapse.tui_preferences import TUIPreferences, load_tui_preferences, save_tui_preferences
 from devsynapse.tui_rendering import render_command_result, strip_ansi
@@ -75,6 +75,7 @@ class DevSynapseTUI(App):
         Binding("ctrl+n", "new_session", "New"),
         Binding("ctrl+p", "open_command_palette", "Palette"),
         Binding("ctrl+r", "refresh_status", "Refresh"),
+        Binding("escape", "dismiss_command_menu", "Dismiss Menu", show=False, priority=True),
     ]
 
     def __init__(self):
@@ -111,7 +112,7 @@ class DevSynapseTUI(App):
                 yield RichLog(id="chat", highlight=True, markup=True, wrap=True)
                 yield Static("", id="typing-indicator")
                 with Vertical(id="input-container"):
-                    yield OptionList(id="command-suggestions", classes="hidden")
+                    yield CommandSuggestionList(id="command-suggestions", classes="hidden")
                     yield EnhancedInput(
                         id="input",
                         placeholder="Message /help or !cmd (Shift+Enter for new line)",
@@ -369,6 +370,10 @@ class DevSynapseTUI(App):
     async def action_open_command_palette(self):
         await self.push_screen(CommandPaletteScreen(), callback=self._command_palette_callback)
 
+    def action_dismiss_command_menu(self) -> None:
+        self._hide_command_suggestions()
+        self._input().focus()
+
     def _command_palette_callback(self, value: str | None) -> None:
         if not value:
             self._input().focus()
@@ -439,6 +444,18 @@ class DevSynapseTUI(App):
             return
 
         await self._process(task, chat, input_w)
+
+    def on_key(self, event) -> None:
+        if event.key != "escape":
+            return
+        try:
+            menu = self.query_one("#command-suggestions", OptionList)
+        except Exception:
+            return
+        if menu.has_class("hidden"):
+            return
+        event.stop()
+        self.action_dismiss_command_menu()
 
     def _state_color(self, state: str) -> str:
         """Return a semantic color from the active TUI theme."""

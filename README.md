@@ -173,8 +173,9 @@ argument. `Ctrl+P` opens the command palette for fuzzy command search.
 | `Ctrl+R` | Refresh status |
 | `Ctrl+Space` | Command menu |
 | `Shift+Enter` | New line in input |
-| `Up/Down` | Navigate command history |
+| `Up/Down`, `Ctrl+K/J` | Navigate command history or menu suggestions |
 | `Tab` | Autocomplete |
+| `Esc` | Close command suggestions/dialogs |
 
 ## Runtime State
 
