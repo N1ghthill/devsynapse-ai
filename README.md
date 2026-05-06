@@ -155,7 +155,8 @@ theme borders so keyboard location is visible while navigating.
 Shell outputs that look like unified diffs, git patches, JSON, YAML, CSV or TSV
 are rendered with richer formatting. JSON objects and arrays use a tree view,
 CSV/TSV uses a table view, and diffs include a compact file/hunk/add/remove
-summary.
+summary. Output lines that explicitly report `progress: current/total` or
+`progress: pct%` also show a deterministic progress bar.
 
 Typing `/` opens contextual command suggestions; `Up` and `Down` move through
 suggestions, and `Tab` or `Enter` completes the highlighted command or

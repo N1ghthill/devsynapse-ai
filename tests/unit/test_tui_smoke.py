@@ -14,7 +14,9 @@ from devsynapse.tui_preferences import load_tui_preferences
 from devsynapse.tui_rendering import (
     diff_stats,
     is_unified_diff,
+    progress_summary,
     render_command_result,
+    render_progress_bar,
     render_structured_tree,
     structured_output_lexer,
     tabular_output_rows,
@@ -124,6 +126,17 @@ def test_tui_renderer_builds_tree_for_json_objects_and_arrays():
     assert "JSON" in str(tree.label)
     assert render_structured_tree('"plain scalar"') is None
     assert render_command_result(message="ok", output='{"items": [{"name": "api"}]}') is not None
+
+
+def test_tui_renderer_detects_explicit_progress_output():
+    progress = progress_summary("starting\nprogress: 3/10 files\n")
+
+    assert progress is not None
+    assert progress.percent == 30.0
+    assert progress_summary("copying\nprogress: 42%\n").percent == 42.0
+    assert progress_summary("loaded 3/10 files\n") is None
+    assert render_progress_bar(progress) is not None
+    assert render_command_result(message="ok", output="progress: 3/10 files\n") is not None
 
 
 def test_tui_renderer_detects_csv_and_tsv_table_outputs():

@@ -24,6 +24,16 @@ class DiffStats:
     deletions: int
 
 
+@dataclass(frozen=True)
+class ProgressSummary:
+    """Summary for explicit command progress output."""
+
+    current: float
+    total: float
+    percent: float
+    label: str
+
+
 def is_unified_diff(text: str) -> bool:
     """Return True when text looks like a unified diff or git patch."""
     if not text.strip():
@@ -145,6 +155,10 @@ def render_command_result(
         )
         return Group(*sections)
 
+    progress = progress_summary(output)
+    if progress is not None:
+        sections.append(render_progress_bar(progress))
+
     sections.append(Text(output))
     return Group(*sections)
 
@@ -186,6 +200,40 @@ def render_structured_tree(text: str, *, max_depth: int = 5, max_items: int = 40
     root = Tree(_container_label("JSON", parsed))
     _append_tree_items(root, parsed, depth=0, max_depth=max_depth, max_items=max_items)
     return root
+
+
+def progress_summary(text: str) -> ProgressSummary | None:
+    """Return explicit progress from command output when a line declares it."""
+    for line in reversed(strip_ansi(text).splitlines()):
+        stripped = line.strip()
+        if not re.search(r"\b(progress|completed|done)\b", stripped, flags=re.IGNORECASE):
+            continue
+        ratio = re.search(r"(?P<current>\d+(?:\.\d+)?)\s*/\s*(?P<total>\d+(?:\.\d+)?)", stripped)
+        if ratio:
+            current = float(ratio.group("current"))
+            total = float(ratio.group("total"))
+            if total <= 0:
+                continue
+            percent = max(0.0, min(current / total * 100.0, 100.0))
+            return ProgressSummary(current=current, total=total, percent=percent, label=stripped)
+
+        percent_match = re.search(r"(?P<percent>\d+(?:\.\d+)?)\s*%", stripped)
+        if percent_match:
+            percent = max(0.0, min(float(percent_match.group("percent")), 100.0))
+            return ProgressSummary(current=percent, total=100.0, percent=percent, label=stripped)
+    return None
+
+
+def render_progress_bar(progress: ProgressSummary, *, width: int = 24) -> Text:
+    """Build a deterministic static progress bar."""
+    filled = int(round(width * progress.percent / 100.0))
+    bar = "#" * filled + "-" * (width - filled)
+    return Text.assemble(
+        ("progress ", "bold"),
+        (f"[{bar}] ", "cyan"),
+        (f"{progress.percent:5.1f}% ", "green"),
+        (progress.label, "dim"),
+    )
 
 
 def tabular_output_rows(text: str) -> list[list[str]] | None:

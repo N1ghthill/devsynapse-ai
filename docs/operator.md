@@ -153,7 +153,8 @@ Supported provider names:
 Shell output that looks like a unified diff, git patch, JSON, YAML, CSV or TSV
 is rendered with richer formatting. JSON objects and arrays use a tree view,
 CSV/TSV uses a table view, and diffs include a compact file, hunk, addition and
-deletion summary.
+deletion summary. Output lines that explicitly report `progress: current/total`
+or `progress: pct%` also show a deterministic progress bar.
 
 When an active project is selected, the sidebar Files panel summarizes git
 worktree changes and links the next inspection path to `!git diff`.
