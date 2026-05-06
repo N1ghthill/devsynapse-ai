@@ -11,6 +11,7 @@ from rich.console import Group, RenderableType
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
+from rich.tree import Tree
 
 
 @dataclass(frozen=True)
@@ -118,6 +119,12 @@ def render_command_result(
         sections.append(table)
         return Group(*sections)
 
+    tree = render_structured_tree(output)
+    if tree is not None:
+        sections.append(Text.assemble(("tree ", "bold"), ("JSON", "dim")))
+        sections.append(tree)
+        return Group(*sections)
+
     structured = structured_output_lexer(output)
     if structured is not None:
         lexer, normalized = structured
@@ -160,6 +167,25 @@ def structured_output_lexer(text: str) -> tuple[str, str] | None:
         return "yaml", stripped
 
     return None
+
+
+def render_structured_tree(text: str, *, max_depth: int = 5, max_items: int = 40) -> Tree | None:
+    """Build a Rich tree for JSON objects and arrays."""
+    stripped = strip_ansi(text).strip()
+    if not stripped.startswith(("{", "[")):
+        return None
+
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(parsed, (dict, list)):
+        return None
+
+    root = Tree(_container_label("JSON", parsed))
+    _append_tree_items(root, parsed, depth=0, max_depth=max_depth, max_items=max_items)
+    return root
 
 
 def tabular_output_rows(text: str) -> list[list[str]] | None:
@@ -222,6 +248,82 @@ def render_table_output(text: str, *, max_rows: int = 30) -> Table | None:
 def strip_ansi(text: str) -> str:
     """Remove ANSI control sequences before diff detection."""
     return re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
+
+
+def _append_tree_items(
+    parent: Tree,
+    value: dict | list,
+    *,
+    depth: int,
+    max_depth: int,
+    max_items: int,
+) -> None:
+    if depth >= max_depth:
+        parent.add(Text("... max depth reached", style="dim"))
+        return
+
+    if isinstance(value, dict):
+        items = list(value.items())
+        for key, item in items[:max_items]:
+            key_text = str(key)
+            if isinstance(item, (dict, list)):
+                branch = parent.add(_container_label(key_text, item))
+                _append_tree_items(
+                    branch,
+                    item,
+                    depth=depth + 1,
+                    max_depth=max_depth,
+                    max_items=max_items,
+                )
+            else:
+                parent.add(_scalar_row(key_text, item))
+        _append_truncation(parent, len(items), max_items)
+        return
+
+    for index, item in enumerate(value[:max_items]):
+        key_text = f"[{index}]"
+        if isinstance(item, (dict, list)):
+            branch = parent.add(_container_label(key_text, item))
+            _append_tree_items(
+                branch,
+                item,
+                depth=depth + 1,
+                max_depth=max_depth,
+                max_items=max_items,
+            )
+        else:
+            parent.add(_scalar_row(key_text, item))
+    _append_truncation(parent, len(value), max_items)
+
+
+def _container_label(name: str, value: dict | list) -> Text:
+    if isinstance(value, dict):
+        shape = f"{len(value)} keys"
+    else:
+        shape = f"{len(value)} items"
+    return Text.assemble((name, "bold cyan"), ("  ", "dim"), (shape, "dim"))
+
+
+def _scalar_row(name: str, value: object) -> Text:
+    return Text.assemble((name, "bold"), (": ", "dim"), _scalar_value(value))
+
+
+def _scalar_value(value: object) -> Text:
+    if value is None:
+        return Text("null", style="dim")
+    if isinstance(value, bool):
+        return Text(str(value).lower(), style="magenta")
+    if isinstance(value, (int, float)):
+        return Text(str(value), style="green")
+    serialized = json.dumps(value, ensure_ascii=False)
+    if len(serialized) > 100:
+        serialized = f"{serialized[:97]}..."
+    return Text(serialized)
+
+
+def _append_truncation(parent: Tree, total: int, max_items: int) -> None:
+    if total > max_items:
+        parent.add(Text(f"... {total - max_items} more", style="dim"))
 
 
 def _looks_like_yaml(text: str) -> bool:

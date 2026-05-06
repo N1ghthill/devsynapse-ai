@@ -15,6 +15,7 @@ from devsynapse.tui_rendering import (
     diff_stats,
     is_unified_diff,
     render_command_result,
+    render_structured_tree,
     structured_output_lexer,
     tabular_output_rows,
 )
@@ -98,6 +99,17 @@ def test_tui_renderer_detects_json_and_yaml_outputs():
     assert '"ok": true' in json_result[1]
     assert yaml_result == ("yaml", "name: devsynapse\nstatus: ready")
     assert render_command_result(message="ok", output='{"status": "ready"}') is not None
+
+
+def test_tui_renderer_builds_tree_for_json_objects_and_arrays():
+    tree = render_structured_tree(
+        '{"project": {"name": "devsynapse", "checks": ["lint", "test"]}, "ok": true}'
+    )
+
+    assert tree is not None
+    assert "JSON" in str(tree.label)
+    assert render_structured_tree('"plain scalar"') is None
+    assert render_command_result(message="ok", output='{"items": [{"name": "api"}]}') is not None
 
 
 def test_tui_renderer_detects_csv_and_tsv_table_outputs():
