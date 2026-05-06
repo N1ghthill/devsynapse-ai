@@ -51,6 +51,12 @@ CATEGORIES = {
         ("/help", "show this help"),
         ("/exit", "close DevSynapse"),
     ],
+    "Mouse": [
+        ("Wheel", "scroll chat, sidebars and lists"),
+        ("Click suggestion", "select command suggestions"),
+        ("Click palette row", "select command palette results"),
+        ("Click input", "return focus to message input"),
+    ],
 }
 
 SHORTCUTS = [

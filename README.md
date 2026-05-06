@@ -183,6 +183,10 @@ argument. `Ctrl+P` opens the command palette for fuzzy command search.
 | `Tab` | Autocomplete |
 | `Esc` | Close command suggestions/dialogs |
 
+Mouse support is available in supported terminals: wheel scrolls chat, sidebars
+and lists; clicking suggestions or command palette rows selects them; clicking
+the input returns focus to message entry.
+
 ## Runtime State
 
 By default DevSynapse stores user runtime files outside the source checkout:

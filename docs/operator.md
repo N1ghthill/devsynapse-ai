@@ -180,6 +180,10 @@ worktree changes and links the next inspection path to `!git diff`.
 | `Tab` | Autocomplete |
 | `Esc` | Close command suggestions/dialogs |
 
+Mouse support is available in supported terminals: wheel scrolls chat, sidebars
+and lists; clicking suggestions or command palette rows selects them; clicking
+the input returns focus to message entry.
+
 ## Update
 
 ```bash

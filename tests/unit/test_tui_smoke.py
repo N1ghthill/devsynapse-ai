@@ -461,6 +461,10 @@ async def test_tui_help_shortcut_works_before_slash_command(tmp_path, monkeypatc
         assert "Ctrl+K/J" in str(shortcuts.content)
         assert "PageUp/Down" in str(shortcuts.content)
         assert "close menu/modal" in str(shortcuts.content)
+        await app.screen_stack[-1]._show_category("Mouse")
+        commands = app.screen_stack[-1].query_one("#commands-content", Static)
+        assert "Wheel" in str(commands.content)
+        assert "Click input" in str(commands.content)
 
 
 @pytest.mark.asyncio
