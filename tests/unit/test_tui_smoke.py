@@ -70,6 +70,16 @@ def test_tui_preferences_accept_theme_and_layout_overrides(tmp_path, monkeypatch
     assert preferences.palette["thinking"] == "#8be9fd"
 
 
+def test_tui_themes_define_high_contrast_focus_states():
+    theme_dir = Path("devsynapse/styles/themes")
+
+    for theme_name in ("dark", "light", "dracula"):
+        content = (theme_dir / f"{theme_name}.tcss").read_text(encoding="utf-8")
+        assert "#chat:focus" in content
+        assert "#command-suggestions:focus" in content
+        assert "#palette-results:focus" in content
+
+
 def test_tui_diff_renderer_detects_and_summarizes_unified_diff():
     diff = "\n".join(
         [

@@ -120,7 +120,8 @@ effective cwd, project, session ID and budget health. Long-running agent and
 shell work also shows an elapsed progress ticker. The right panel updates as
 requests run: it shows session state, active model, 24h requests/chats/tokens/cost,
 cache rate, error rate, average latency, daily and monthly budget bars, and the
-top recent model.
+top recent model. Focused chat, command suggestion and command palette regions
+use high-contrast theme borders so keyboard location is visible while navigating.
 
 Supported provider names:
 

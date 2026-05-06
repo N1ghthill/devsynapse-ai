@@ -38,6 +38,12 @@ DynamicSidebar .sidebar-panel {
     background: #0d1117;
 }
 
+#chat:focus,
+#command-suggestions:focus,
+#palette-results:focus {
+    border: solid #58a6ff;
+}
+
 #input-container {
     border-top: solid #30363d;
 }

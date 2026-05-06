@@ -150,6 +150,8 @@ shows an elapsed progress ticker. The right panel summarizes the active session,
 selected model, 24h request/token/cost telemetry, cache rate, error rate,
 latency, budget usage, active project file changes and the top recent model. The
 sidebar panels (Model, Telemetry) are collapsible for a cleaner view.
+Focused chat, command suggestion and command palette regions use high-contrast
+theme borders so keyboard location is visible while navigating.
 Shell outputs that look like unified diffs, git patches, JSON, YAML, CSV or TSV
 are rendered with richer formatting. JSON objects and arrays use a tree view,
 CSV/TSV uses a table view, and diffs include a compact file/hunk/add/remove
