@@ -45,6 +45,7 @@ def test_tui_preferences_create_json_config_and_resolve_css_paths(tmp_path, monk
 
     assert preferences.theme == "dark"
     assert preferences.layout == "default"
+    assert preferences.sidebar_collapsed == {"model": False, "telemetry": False}
     assert config_file.is_file()
     assert json.loads(config_file.read_text(encoding="utf-8"))["theme"] == "dark"
     assert all(path.is_file() for path in preferences.css_paths)
@@ -178,9 +179,15 @@ async def test_tui_mounts_with_configured_theme_and_dense_layout(tmp_path, monke
     runtime_root = tmp_path / "runtime"
     _configure_runtime(monkeypatch, runtime_root)
     config_file = runtime_root / "config" / "ui.json"
-    config_file.parent.mkdir(parents=True)
-    config_file.write_text('{"theme": "dracula", "layout": "dense"}\n', encoding="utf-8")
     monkeypatch.setenv("DEVSYNAPSE_TUI_CONFIG_FILE", str(config_file))
+    config_file.parent.mkdir(parents=True)
+    config_file.write_text(
+        (
+            '{"theme": "dracula", "layout": "dense", '
+            '"sidebar": {"collapsed_panels": {"model": true}}}\n'
+        ),
+        encoding="utf-8",
+    )
 
     import config.settings as app_settings
     from devsynapse.tui import DevSynapseTUI
@@ -193,9 +200,11 @@ async def test_tui_mounts_with_configured_theme_and_dense_layout(tmp_path, monke
 
         assert app.ui_preferences.theme == "dracula"
         assert app.ui_preferences.layout == "dense"
+        assert app.ui_preferences.sidebar_collapsed["model"] is True
         assert any(str(path).endswith("dracula.tcss") for path in app.CSS_PATH)
         assert any(str(path).endswith("dense.tcss") for path in app.CSS_PATH)
-        app.query_one("#sidebar", DynamicSidebar)
+        sidebar = app.query_one("#sidebar", DynamicSidebar)
+        assert sidebar.query_one("#sidebar-model", Static).has_class("collapsed")
 
 
 @pytest.mark.asyncio
@@ -323,7 +332,10 @@ def test_tui_project_file_changes_reads_git_status(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_tui_sidebar_panels_toggle_with_shortcuts(tmp_path, monkeypatch):
-    _configure_runtime(monkeypatch, tmp_path / "runtime")
+    runtime_root = tmp_path / "runtime"
+    _configure_runtime(monkeypatch, runtime_root)
+    config_file = runtime_root / "config" / "ui.json"
+    monkeypatch.setenv("DEVSYNAPSE_TUI_CONFIG_FILE", str(config_file))
 
     import config.settings as app_settings
     from devsynapse.tui import DevSynapseTUI
@@ -348,6 +360,11 @@ async def test_tui_sidebar_panels_toggle_with_shortcuts(tmp_path, monkeypatch):
         assert model_panel.has_class("collapsed")
         assert telemetry_panel.has_class("collapsed")
         assert "F4" in str(app.query_one("#app-footer", Static).content)
+        saved = json.loads(config_file.read_text(encoding="utf-8"))
+        assert saved["sidebar"]["collapsed_panels"] == {
+            "model": True,
+            "telemetry": True,
+        }
 
 
 @pytest.mark.asyncio

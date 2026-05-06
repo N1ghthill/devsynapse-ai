@@ -22,7 +22,13 @@ logger = logging.getLogger(__name__)
 class DynamicSidebar(Vertical):
     """Dynamic sidebar with real-time updates."""
 
-    def __init__(self, *args, palette: dict[str, str] | None = None, **kwargs) -> None:
+    def __init__(
+        self,
+        *args,
+        palette: dict[str, str] | None = None,
+        collapsed_panels: dict[str, bool] | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__(*args, **kwargs)
         self.palette = palette or {}
         self.session_id: str = "unknown"
@@ -43,6 +49,9 @@ class DynamicSidebar(Vertical):
             "telemetry": False,
             "model": False,
         }
+        if collapsed_panels:
+            for panel in self._collapsed_panels:
+                self._collapsed_panels[panel] = bool(collapsed_panels.get(panel, False))
 
     def compose(self):
         yield Static(id="sidebar-session", classes="sidebar-panel")
@@ -64,6 +73,10 @@ class DynamicSidebar(Vertical):
                     panel.remove_class("collapsed")
             except Exception:
                 pass
+
+    def collapsed_panels(self) -> dict[str, bool]:
+        """Return persisted sidebar panel state."""
+        return dict(self._collapsed_panels)
 
     def update_session(
         self,

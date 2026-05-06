@@ -117,7 +117,11 @@ class DevSynapseTUI(App):
                         id="input",
                         placeholder="Message /help or !cmd (Shift+Enter for new line)",
                     )
-            yield DynamicSidebar(id="sidebar", palette=self.ui_preferences.palette)
+            yield DynamicSidebar(
+                id="sidebar",
+                palette=self.ui_preferences.palette,
+                collapsed_panels=self.ui_preferences.sidebar_collapsed,
+            )
         yield Static(id="status-bar")
         yield Static(id="app-footer")
 
@@ -392,11 +396,13 @@ class DevSynapseTUI(App):
 
     def action_toggle_model_panel(self) -> None:
         self._sidebar().toggle_panel("model")
+        self._persist_sidebar_preferences()
         self._sidebar().update_model()
         self._notification_manager().show("Model panel toggled", "info")
 
     def action_toggle_telemetry_panel(self) -> None:
         self._sidebar().toggle_panel("telemetry")
+        self._persist_sidebar_preferences()
         self._sidebar().update_telemetry()
         self._notification_manager().show("Telemetry panel toggled", "info")
 
@@ -511,6 +517,12 @@ class DevSynapseTUI(App):
         except Exception:
             logger.exception("Could not refresh TUI CSS after preference change")
             return "saved"
+
+    def _persist_sidebar_preferences(self) -> None:
+        self.ui_preferences = save_tui_preferences(
+            sidebar_collapsed=self._sidebar().collapsed_panels(),
+            config_file=self.ui_preferences.config_file,
+        )
 
     def _set_busy(self, busy: bool, message: str | None = None) -> None:
         """Set busy state with visual indicators."""

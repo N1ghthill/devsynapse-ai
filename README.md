@@ -205,10 +205,10 @@ paid model with search.
 
 TUI appearance is loaded from `ui.json`. Supported values are
 `"theme": "dark" | "light" | "dracula"` and
-`"layout": "default" | "dense"`. `DEVSYNAPSE_TUI_THEME`,
-`DEVSYNAPSE_TUI_LAYOUT` and `DEVSYNAPSE_TUI_CONFIG_FILE` can override the JSON
-file for temporary sessions. Inside the TUI, `/theme dracula dense` updates the
-same preference file.
+`"layout": "default" | "dense"`, plus persisted sidebar panel collapse state.
+`DEVSYNAPSE_TUI_THEME`, `DEVSYNAPSE_TUI_LAYOUT` and
+`DEVSYNAPSE_TUI_CONFIG_FILE` can override the JSON file for temporary sessions.
+Inside the TUI, `/theme dracula dense` updates the same preference file.
 
 Runtime loaders create these files on a best-effort basis. Read-only runtime
 config should not break commands such as `devsynapse --help`; commands that need

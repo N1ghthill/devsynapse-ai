@@ -15,11 +15,16 @@ LAYOUT_DIR = STYLE_DIR / "layouts"
 
 ALLOWED_THEMES = {"dark", "light", "dracula"}
 ALLOWED_LAYOUTS = {"default", "dense"}
+SIDEBAR_PANELS = ("model", "telemetry")
 
 DEFAULT_UI_CONFIG: dict[str, Any] = {
     "theme": "dark",
     "layout": "default",
     "sidebar": {
+        "collapsed_panels": {
+            "model": False,
+            "telemetry": False,
+        },
         "visible": True,
     },
 }
@@ -75,6 +80,7 @@ class TUIPreferences:
     layout: str
     config_file: Path
     palette: dict[str, str]
+    sidebar_collapsed: dict[str, bool]
 
     @property
     def css_paths(self) -> list[Path]:
@@ -105,6 +111,7 @@ def load_tui_preferences(config_file: Path | None = None) -> TUIPreferences:
         layout=layout,
         config_file=config_file,
         palette=THEME_PALETTES[theme],
+        sidebar_collapsed=_normalized_sidebar_collapsed(data.get("sidebar")),
     )
 
 
@@ -112,6 +119,7 @@ def save_tui_preferences(
     *,
     theme: str | None = None,
     layout: str | None = None,
+    sidebar_collapsed: dict[str, bool] | None = None,
     config_file: Path | None = None,
 ) -> TUIPreferences:
     """Persist TUI appearance preferences and return the resolved values."""
@@ -121,7 +129,12 @@ def save_tui_preferences(
         data["theme"] = _normalized_choice(theme, allowed=ALLOWED_THEMES, default="dark")
     if layout is not None:
         data["layout"] = _normalized_choice(layout, allowed=ALLOWED_LAYOUTS, default="default")
-    data.setdefault("sidebar", DEFAULT_UI_CONFIG["sidebar"])
+    sidebar = data.get("sidebar") if isinstance(data.get("sidebar"), dict) else {}
+    if sidebar_collapsed is not None:
+        sidebar["collapsed_panels"] = _normalized_sidebar_collapsed(
+            {"collapsed_panels": sidebar_collapsed}
+        )
+    data["sidebar"] = {**DEFAULT_UI_CONFIG["sidebar"], **sidebar}
     config_file.write_text(
         json.dumps(data, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -141,17 +154,33 @@ def _read_or_create_config(path: Path) -> dict[str, Any]:
             json.dumps(DEFAULT_UI_CONFIG, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-        return dict(DEFAULT_UI_CONFIG)
+        return _default_ui_config()
 
     try:
         parsed = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return dict(DEFAULT_UI_CONFIG)
+        return _default_ui_config()
     if not isinstance(parsed, dict):
-        return dict(DEFAULT_UI_CONFIG)
+        return _default_ui_config()
     return parsed
 
 
 def _normalized_choice(value: object, *, allowed: set[str], default: str) -> str:
     text = str(value or "").strip().lower()
     return text if text in allowed else default
+
+
+def _default_ui_config() -> dict[str, Any]:
+    return json.loads(json.dumps(DEFAULT_UI_CONFIG))
+
+
+def _normalized_sidebar_collapsed(value: object) -> dict[str, bool]:
+    if not isinstance(value, dict):
+        value = {}
+    collapsed = value.get("collapsed_panels")
+    if not isinstance(collapsed, dict):
+        collapsed = {}
+    return {
+        panel: bool(collapsed.get(panel, False))
+        for panel in SIDEBAR_PANELS
+    }
