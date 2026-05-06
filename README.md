@@ -143,13 +143,15 @@ Inside the TUI, DevSynapse exposes operational slash commands:
 ```
 
 The TUI keeps the conversation log, input line, session state, provider status,
-budget state and common commands visible in one terminal screen. The right panel
-summarizes the active session, selected model, 24h request/token/cost telemetry,
-cache rate, error rate, latency, budget usage, active project file changes and
-the top recent model. The sidebar panels (Model, Telemetry) are collapsible for
-a cleaner view. Shell outputs that look like unified diffs, git patches, JSON,
-YAML, CSV or TSV are rendered with richer formatting; diffs also include a
-compact file/hunk/add/remove summary.
+budget state and common commands visible in one terminal screen. The status bar
+shows the trusted local approval mode, session token/cost totals, effective cwd,
+project, session ID and budget health. The right panel summarizes the active
+session, selected model, 24h request/token/cost telemetry, cache rate, error
+rate, latency, budget usage, active project file changes and the top recent
+model. The sidebar panels (Model, Telemetry) are collapsible for a cleaner view.
+Shell outputs that look like unified diffs, git patches, JSON, YAML, CSV or TSV
+are rendered with richer formatting; diffs also include a compact
+file/hunk/add/remove summary.
 
 Typing `/` opens contextual command suggestions; `Up` and `Down` move through
 suggestions, and `Tab` or `Enter` completes the highlighted command or

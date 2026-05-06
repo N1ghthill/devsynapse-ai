@@ -840,12 +840,12 @@ class DevSynapseTUI(App):
                 else self._state_color("error")
             )
         )
+        context = self._status_context()
 
         if message:
-            project = self.project_name or "no project"
             bar.update(
                 f"[bold {self._state_color('thinking')}]*[/] {message}  "
-                f"[dim]{project}[/]"
+                f"[dim]{context}[/]"
             )
             return
 
@@ -856,16 +856,35 @@ class DevSynapseTUI(App):
             cost = _format_money(usage.get("estimated_cost_usd"))
             bar.update(
                 f"[dim]{provider}[/] [bold]{model}[/] [dim]{tokens} tok[/] "
-                f"[{budget_color}]{cost}[/]"
+                f"[{budget_color}]{cost}[/]  [dim]{context}[/]"
             )
         else:
-            short_id = self.conversation_id.removeprefix("chat_")[-12:]
-            project = self.project_name or "no project"
             bar.update(
                 f"[dim]DevSynapse AI[/] [bold {self._state_color('success')}]ready[/]  "
                 f"budget:[{budget_color}]{budget_str}[/]  "
-                f"[dim]project:{project} session:{short_id}[/]"
+                f"[dim]{context}[/]"
             )
+
+    def _status_context(self) -> str:
+        short_id = self.conversation_id.removeprefix("chat_")[-12:]
+        project = self.project_name or "none"
+        cwd = self._status_cwd()
+        return (
+            "approval:trusted-auto  "
+            f"tok:{_compact_count(self._total_tokens)}  "
+            f"cost:{_format_money(self._total_cost)}  "
+            f"cwd:{cwd}  project:{project}  session:{short_id}"
+        )
+
+    def _status_cwd(self) -> str:
+        settings = app_settings.get_settings()
+        project_lookup = self.memory.get_project_lookup() if self.memory else {}
+        if self.project_name:
+            project = project_lookup.get(self.project_name) or {}
+            path = project.get("path")
+            if path:
+                return _short_path(Path(str(path)).expanduser())
+        return _short_path(settings.default_execution_cwd)
 
 
 def run_tui():
@@ -875,3 +894,29 @@ def run_tui():
 
 def _status_has(line: str, code: str) -> bool:
     return code in line[:2]
+
+
+def _compact_count(value: int | float | None) -> str:
+    number = int(value or 0)
+    if number >= 1_000_000:
+        return f"{number / 1_000_000:.1f}m"
+    if number >= 1_000:
+        return f"{number / 1_000:.1f}k"
+    return str(number)
+
+
+def _short_path(path: Path) -> str:
+    try:
+        resolved = path.expanduser().resolve()
+    except OSError:
+        resolved = path.expanduser()
+    home = Path.home()
+    try:
+        relative = resolved.relative_to(home)
+    except ValueError:
+        display = str(resolved)
+    else:
+        display = "~" if str(relative) == "." else f"~/{relative}"
+    if len(display) <= 36:
+        return display
+    return f"{display[:16]}...{display[-17:]}"

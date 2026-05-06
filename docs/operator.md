@@ -112,9 +112,11 @@ the refreshed principal catalog and choose a specific free or paid model.
 Typing `/` in the main input opens the command menu. `Up` and `Down` move through
 suggestions, and `Tab` or `Enter` completes the highlighted command or provider,
 budget, or project argument. `Ctrl+Space` opens the same menu from an empty input.
-The right panel updates as requests run: it shows session state, active model,
-24h requests/chats/tokens/cost, cache rate, error rate, average latency, daily
-and monthly budget bars, and the top recent model.
+The status bar shows the trusted local approval mode, session token/cost totals,
+effective cwd, project, session ID and budget health. The right panel updates as
+requests run: it shows session state, active model, 24h requests/chats/tokens/cost,
+cache rate, error rate, average latency, daily and monthly budget bars, and the
+top recent model.
 
 Supported provider names:
 

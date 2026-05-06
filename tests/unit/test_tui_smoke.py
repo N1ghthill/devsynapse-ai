@@ -152,6 +152,10 @@ async def test_tui_mounts_and_handles_status_command(tmp_path, monkeypatch):
         assert "DevSynapse AI" in content
         assert "ready" in content
         assert "budget:" in content
+        assert "approval:trusted-auto" in content
+        assert "tok:0" in content
+        assert "cost:$0.0000" in content
+        assert "cwd:" in content
         assert "session:" in content
         assert "DevSynapse AI" in str(header.content)
         assert "/theme" in str(footer.content)
