@@ -109,7 +109,13 @@ class DevSynapseTUI(App):
         yield NotificationManager(id="notifications")
         with Horizontal(id="workspace"):
             with Vertical(id="main-pane"):
-                yield RichLog(id="chat", highlight=True, markup=True, wrap=True)
+                yield RichLog(
+                    id="chat",
+                    highlight=True,
+                    markup=True,
+                    wrap=True,
+                    max_lines=self.ui_preferences.chat_max_lines,
+                )
                 yield Static("", id="typing-indicator")
                 with Vertical(id="input-container"):
                     yield CommandSuggestionList(id="command-suggestions", classes="hidden")
@@ -491,7 +497,8 @@ class DevSynapseTUI(App):
             f"[{accent}]F4[/] Model panel   [{accent}]F5[/] Telemetry   "
             f"[{accent}]^n[/] New   [{accent}]^p[/] Palette   "
             f"[{accent}]^r[/] Refresh   [{accent}]/[/] Commands   "
-            f"[{accent}]/theme[/] Theme   [{muted}]Esc quits dialogs[/]"
+            f"[{accent}]^k/^j[/] Nav   [{accent}]/theme[/] Theme   "
+            f"[{muted}]Esc closes menus[/]"
         )
 
     def apply_tui_preferences(

@@ -45,6 +45,7 @@ def test_tui_preferences_create_json_config_and_resolve_css_paths(tmp_path, monk
 
     assert preferences.theme == "dark"
     assert preferences.layout == "default"
+    assert preferences.chat_max_lines == 2000
     assert preferences.sidebar_collapsed == {"model": False, "telemetry": False}
     assert config_file.is_file()
     assert json.loads(config_file.read_text(encoding="utf-8"))["theme"] == "dark"
@@ -59,11 +60,13 @@ def test_tui_preferences_accept_theme_and_layout_overrides(tmp_path, monkeypatch
     monkeypatch.setenv("DEVSYNAPSE_TUI_CONFIG_FILE", str(config_file))
     monkeypatch.setenv("DEVSYNAPSE_TUI_THEME", "dracula")
     monkeypatch.setenv("DEVSYNAPSE_TUI_LAYOUT", "dense")
+    monkeypatch.setenv("DEVSYNAPSE_TUI_MAX_LINES", "500")
 
     preferences = load_tui_preferences()
 
     assert preferences.theme == "dracula"
     assert preferences.layout == "dense"
+    assert preferences.chat_max_lines == 500
     assert preferences.palette["thinking"] == "#8be9fd"
 
 
@@ -146,7 +149,8 @@ async def test_tui_mounts_and_handles_status_command(tmp_path, monkeypatch):
         await pilot.pause()
 
         input_widget = app.query_one("#input", EnhancedInput)
-        app.query_one("#chat", RichLog)
+        chat = app.query_one("#chat", RichLog)
+        assert chat.max_lines == 2000
         sidebar = app.query_one("#sidebar", DynamicSidebar)
 
         assert app.memory is not None
@@ -172,6 +176,7 @@ async def test_tui_mounts_and_handles_status_command(tmp_path, monkeypatch):
         assert "session:" in content
         assert "DevSynapse AI" in str(header.content)
         assert "/theme" in str(footer.content)
+        assert "^k/^j" in str(footer.content)
 
 
 @pytest.mark.asyncio
@@ -418,6 +423,9 @@ async def test_tui_help_shortcut_works_before_slash_command(tmp_path, monkeypatc
 
         assert isinstance(app.screen_stack[-1], HelpScreen)
         assert app._dispatcher is not None
+        shortcuts = app.screen_stack[-1].query_one("#shortcuts-content", Static)
+        assert "Ctrl+K/J" in str(shortcuts.content)
+        assert "close menu/modal" in str(shortcuts.content)
 
 
 @pytest.mark.asyncio

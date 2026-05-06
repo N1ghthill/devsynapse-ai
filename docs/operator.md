@@ -88,10 +88,11 @@ Use `DEVSYNAPSE_HOME=/path/to/runtime` to keep config, data and logs together
 under one directory.
 
 The TUI preference file supports `"theme": "dark" | "light" | "dracula"`,
-`"layout": "default" | "dense"` and persisted sidebar panel collapse state. Use
-`DEVSYNAPSE_TUI_THEME`, `DEVSYNAPSE_TUI_LAYOUT` or
-`DEVSYNAPSE_TUI_CONFIG_FILE` for temporary overrides. Inside the TUI,
-`/theme dracula dense` persists the same preference change.
+`"layout": "default" | "dense"`, chat log `max_lines` and persisted sidebar
+panel collapse state. Use `DEVSYNAPSE_TUI_THEME`, `DEVSYNAPSE_TUI_LAYOUT`,
+`DEVSYNAPSE_TUI_MAX_LINES` or `DEVSYNAPSE_TUI_CONFIG_FILE` for temporary
+overrides. Inside the TUI, `/theme dracula dense` persists the same preference
+change.
 
 ## First Provider
 

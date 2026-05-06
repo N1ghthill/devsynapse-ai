@@ -18,6 +18,9 @@ ALLOWED_LAYOUTS = {"default", "dense"}
 SIDEBAR_PANELS = ("model", "telemetry")
 
 DEFAULT_UI_CONFIG: dict[str, Any] = {
+    "chat": {
+        "max_lines": 2000,
+    },
     "theme": "dark",
     "layout": "default",
     "sidebar": {
@@ -80,6 +83,7 @@ class TUIPreferences:
     layout: str
     config_file: Path
     palette: dict[str, str]
+    chat_max_lines: int
     sidebar_collapsed: dict[str, bool]
 
     @property
@@ -111,6 +115,13 @@ def load_tui_preferences(config_file: Path | None = None) -> TUIPreferences:
         layout=layout,
         config_file=config_file,
         palette=THEME_PALETTES[theme],
+        chat_max_lines=_normalized_int(
+            os.getenv("DEVSYNAPSE_TUI_MAX_LINES")
+            or _nested_value(data, "chat", "max_lines"),
+            default=2000,
+            minimum=200,
+            maximum=20000,
+        ),
         sidebar_collapsed=_normalized_sidebar_collapsed(data.get("sidebar")),
     )
 
@@ -129,6 +140,8 @@ def save_tui_preferences(
         data["theme"] = _normalized_choice(theme, allowed=ALLOWED_THEMES, default="dark")
     if layout is not None:
         data["layout"] = _normalized_choice(layout, allowed=ALLOWED_LAYOUTS, default="default")
+    chat = data.get("chat") if isinstance(data.get("chat"), dict) else {}
+    data["chat"] = {**DEFAULT_UI_CONFIG["chat"], **chat}
     sidebar = data.get("sidebar") if isinstance(data.get("sidebar"), dict) else {}
     if sidebar_collapsed is not None:
         sidebar["collapsed_panels"] = _normalized_sidebar_collapsed(
@@ -168,6 +181,27 @@ def _read_or_create_config(path: Path) -> dict[str, Any]:
 def _normalized_choice(value: object, *, allowed: set[str], default: str) -> str:
     text = str(value or "").strip().lower()
     return text if text in allowed else default
+
+
+def _normalized_int(
+    value: object,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    try:
+        parsed = int(str(value or "").strip())
+    except ValueError:
+        parsed = default
+    return max(minimum, min(parsed, maximum))
+
+
+def _nested_value(data: dict[str, Any], section: str, key: str) -> object:
+    section_data = data.get(section)
+    if not isinstance(section_data, dict):
+        return None
+    return section_data.get(key)
 
 
 def _default_ui_config() -> dict[str, Any]:

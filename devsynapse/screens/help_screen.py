@@ -63,9 +63,10 @@ SHORTCUTS = [
     ("Ctrl+R", "refresh status"),
     ("Ctrl+H", "show help"),
     ("Ctrl+Space", "command menu"),
-    ("Up/Down", "command history"),
+    ("Up/Down", "history or menu"),
+    ("Ctrl+K/J", "history or menu"),
     ("Tab", "autocomplete"),
-    ("Esc", "close modal/cancel"),
+    ("Esc", "close menu/modal"),
 ]
 
 
