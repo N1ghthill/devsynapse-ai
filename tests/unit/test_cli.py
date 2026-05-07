@@ -103,5 +103,5 @@ def test_tui_launcher_rejects_external_subcommands(tmp_path, command):
 
     assert result.returncode == 2
     assert "opens the TUI directly" in result.stderr
-    assert "/connect deepseek" in result.stderr
+    assert "/connect <provider>" in result.stderr
     assert not (runtime_root / "data" / "devsynapse_memory.db").exists()

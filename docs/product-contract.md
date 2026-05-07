@@ -16,8 +16,16 @@ uninstall-devsynapse
 ```
 
 `devsynapse` opens the Textual TUI. It does not expose operational subcommands.
-Provider setup, status, budgets, usage, model selection, projects and local
+Provider setup, status, budgets, usage, model selection, workspaces and local
 tool execution happen inside the TUI through slash commands.
+
+DevSynapse exposes two agent modes in the TUI: Build for implementation work and
+Plan for read-only analysis. `Tab` on an empty input toggles the mode; `/mode
+build|plan` sets it explicitly.
+
+`/project <name>` selects a registered workspace. `/project <path>` registers
+and selects an existing directory inside the configured workspace or
+repositories root, including directories that are not Git repositories.
 
 Official TUI commands:
 
@@ -25,6 +33,7 @@ Official TUI commands:
 /connect
 /providers
 /status
+/mode
 /projects
 /project
 /discover

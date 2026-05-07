@@ -8,6 +8,7 @@ import importlib
 import logging
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from time import monotonic
@@ -91,9 +92,12 @@ class DevSynapseTUI(App):
         self.memory = None
         self.conversation_id = generate_conversation_id()
         self.project_name = None
+        self.agent_mode = "build"
         self.details_enabled = False
         self.last_provider = None
         self.last_model = None
+        self.last_tokens = 0
+        self.last_cost = 0.0
         self.last_response_text = ""
         self._dispatcher: CommandDispatcher | None = None
         self._is_busy = False
@@ -107,6 +111,16 @@ class DevSynapseTUI(App):
         self._busy_message = ""
         self._busy_frame = 0
         self._busy_started_at: float | None = None
+
+        # Sidebar refresh caching to avoid expensive DB queries every 5s
+        self._sidebar_cache: dict[str, Any] = {}
+        self._sidebar_cache_time: float = 0.0
+        self._sidebar_cache_ttl: float = 10.0  # seconds
+        self._model_catalog_cache: dict[str, Any] = {}
+        self._model_catalog_cache_time: float = 0.0
+        self._model_catalog_cache_ttl: float = 60.0  # seconds
+        self._sidebar_refresh_lock = asyncio.Lock()
+        self._background_tasks: set[asyncio.Task] = set()
 
     def compose(self) -> ComposeResult:
         yield Static(id="app-header")
@@ -142,12 +156,17 @@ class DevSynapseTUI(App):
         self._update_chrome()
         self.set_interval(1.0, self._update_header)
         self.set_interval(0.4, self._update_busy_indicator)
+        self.set_interval(5.0, self._refresh_sidebar)
         input_w = self._input()
         input_w.focus()
         self._sidebar().refresh_all(
             session_id=self.conversation_id,
             project_name=self.project_name,
         )
+
+        if self._is_first_time_user():
+            self._show_onboarding()
+
         await self._init_engine()
 
     def _chat(self) -> RichLog:
@@ -181,6 +200,27 @@ class DevSynapseTUI(App):
         if self._dispatcher is None:
             self._dispatcher = CommandDispatcher(self)
         return self._dispatcher
+
+    def _create_task(self, coro) -> asyncio.Task:
+        """Create an async task with proper error handling.
+
+        Stores task reference and adds done callback to log exceptions.
+        Prevents fire-and-forget tasks from silently failing.
+        """
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        task.add_done_callback(self._log_task_exception)
+        return task
+
+    def _log_task_exception(self, task: asyncio.Task) -> None:
+        """Log exception from a background task if it failed."""
+        try:
+            exc = task.exception()
+            if exc is not None:
+                logger.exception("Background task failed: %s", exc)
+        except asyncio.CancelledError:
+            pass  # Task was cancelled, not an error
 
     def _write_panel(
         self,
@@ -244,7 +284,7 @@ class DevSynapseTUI(App):
                 chat.write("[yellow]No provider key configured.[/]")
                 chat.write(
                     "Use [bold]/connect[/] to open provider setup, or "
-                    "[bold]/connect deepseek <api-key>[/]."
+                    "[bold]/connect <provider> <api-key>[/]."
                 )
             else:
                 self._write_welcome()
@@ -291,36 +331,117 @@ class DevSynapseTUI(App):
     def _has_provider_key(settings) -> bool:
         return any(_provider_key(settings, provider) for provider in PROVIDER_CONFIGS)
 
-    def _refresh_sidebar(self) -> None:
+    def _is_first_time_user(self) -> bool:
+        """Verifica se é um usuário de primeira vez."""
         try:
-            project_lookup = self.memory.get_project_lookup() if self.memory else {}
-            project_count = len(project_lookup)
-            budget = self.memory.get_llm_budget_status() if self.memory else {}
-            usage_stats = self.memory.get_llm_usage_stats(hours=24) if self.memory else {}
-            telemetry_stats = (
-                self.memory.get_llm_telemetry_stats(hours=24) if self.memory else {}
-            )
-            catalog_count = (
-                len(self.memory.list_llm_models(limit=500)) if self.memory else 0
-            )
-            file_changes = self._project_file_changes(project_lookup)
+            settings = app_settings.get_settings()
+            has_key = self._has_provider_key(settings)
+            has_ui_pref = getattr(self.ui_preferences, 'onboarding_completed', False)
+            return not has_key and not has_ui_pref
+        except Exception:
+            return False
 
-            self._sidebar().refresh_all(
-                session_id=self.conversation_id,
-                project_name=self.project_name,
-                project_count=project_count,
-                budget_status=budget,
-                provider=self.last_provider,
-                model=self.last_model,
-                tokens=self._total_tokens,
-                cost=self._total_cost,
-                usage_stats=usage_stats,
-                telemetry_stats=telemetry_stats,
-                catalog_count=catalog_count,
-                file_changes=file_changes,
+    def _show_onboarding(self) -> None:
+        """Mostra o wizard de onboarding para novos usuários."""
+        from devsynapse.screens.onboarding import OnboardingScreen
+
+        def on_onboarding_complete(result: bool | None) -> None:
+            if result:
+                logger.info("Onboarding concluído com sucesso")
+            else:
+                logger.info("Onboarding pulado pelo usuário")
+
+        self.push_screen(OnboardingScreen(), callback=on_onboarding_complete)
+
+    def _refresh_sidebar(self) -> None:
+        """Refresh sidebar with caching to avoid expensive DB queries every 5s.
+
+        Caching strategy:
+        - Full sidebar data cached for 10 seconds
+        - Model catalog cached for 60 seconds (expensive query, rarely changes)
+        - Uses lock to prevent concurrent refresh storms
+        """
+        now = time.monotonic()
+
+        # Reuse cached data only while volatile session fields still match.
+        cache_is_valid = now - self._sidebar_cache_time < self._sidebar_cache_ttl
+        cache_matches_state = self._sidebar_cache and all(
+            (
+                self._sidebar_cache.get("session_id") == self.conversation_id,
+                self._sidebar_cache.get("project_name") == self.project_name,
+                self._sidebar_cache.get("provider") == self.last_provider,
+                self._sidebar_cache.get("model") == self.last_model,
+                self._sidebar_cache.get("tokens") == self._total_tokens,
+                self._sidebar_cache.get("cost") == self._total_cost,
+                self._sidebar_cache.get("last_tokens") == self.last_tokens,
+                self._sidebar_cache.get("last_cost") == self.last_cost,
             )
-        except Exception as e:
-            logger.exception("Could not refresh TUI sidebar: %s", e)
+        )
+        if cache_is_valid and cache_matches_state:
+            try:
+                self._sidebar().refresh_all(**self._sidebar_cache)
+            except Exception as e:
+                logger.exception("Could not refresh TUI sidebar from cache: %s", e)
+            return
+
+        # Prevent concurrent refresh storms
+        if self._sidebar_refresh_lock.locked():
+            return  # Another refresh is in progress
+
+        # Acquire lock and refresh
+        async def _do_refresh():
+            async with self._sidebar_refresh_lock:
+                # Double-check after acquiring lock (another task may have refreshed)
+                now = time.monotonic()
+                if now - self._sidebar_cache_time < self._sidebar_cache_ttl:
+                    return
+
+                try:
+                    # Get model catalog (cached separately for 60s)
+                    if now - self._model_catalog_cache_time < self._model_catalog_cache_ttl:
+                        catalog_count = self._model_catalog_cache.get("count", 0)
+                    else:
+                        models = self.memory.list_llm_models(limit=500) if self.memory else []
+                        catalog_count = len(models)
+                        self._model_catalog_cache = {"count": catalog_count}
+                        self._model_catalog_cache_time = time.monotonic()
+
+                    # Fetch fresh data
+                    project_lookup = self.memory.get_project_lookup() if self.memory else {}
+                    project_count = len(project_lookup)
+                    budget = self.memory.get_llm_budget_status() if self.memory else {}
+                    usage_stats = self.memory.get_llm_usage_stats(hours=24) if self.memory else {}
+                    telemetry_stats = (
+                        self.memory.get_llm_telemetry_stats(hours=24) if self.memory else {}
+                    )
+                    file_changes = self._project_file_changes(project_lookup)
+
+                    # Build cache data
+                    self._sidebar_cache = {
+                        "session_id": self.conversation_id,
+                        "project_name": self.project_name,
+                        "project_count": project_count,
+                        "budget_status": budget,
+                        "provider": self.last_provider,
+                        "model": self.last_model,
+                        "tokens": self._total_tokens,
+                        "cost": self._total_cost,
+                        "usage_stats": usage_stats,
+                        "telemetry_stats": telemetry_stats,
+                        "catalog_count": catalog_count,
+                        "file_changes": file_changes,
+                        "last_tokens": self.last_tokens,
+                        "last_cost": self.last_cost,
+                    }
+                    self._sidebar_cache_time = time.monotonic()
+
+                    # Update sidebar
+                    self._sidebar().refresh_all(**self._sidebar_cache)
+                except Exception as e:
+                    logger.exception("Could not refresh TUI sidebar: %s", e)
+
+        # Schedule async refresh
+        self._create_task(_do_refresh())
 
     def _project_file_changes(self, project_lookup: dict[str, Any]) -> dict[str, Any]:
         """Return a compact git worktree summary for the active project."""
@@ -413,6 +534,16 @@ class DevSynapseTUI(App):
     async def action_open_model_picker(self):
         await self._open_model_screen()
 
+    def cycle_agent_mode(self) -> str:
+        """Toggle between Build and Plan agent modes."""
+        self.agent_mode = "plan" if self.agent_mode == "build" else "build"
+        label = self.agent_mode.title()
+        self._update_chrome()
+        self._update_status_bar(message=f"Mode: {label}")
+        self._refresh_sidebar()
+        self._notification_manager().show(f"Mode: {label}", "info")
+        return self.agent_mode
+
     async def action_copy_last_response(self):
         await self._command_dispatcher().cmd_copy([])
 
@@ -464,7 +595,7 @@ class DevSynapseTUI(App):
             chat.write("[red]No provider key configured.[/]")
             chat.write(
                 "Use [bold]/connect[/] to open provider setup, or "
-                "[bold]/connect deepseek <api-key>[/].\n"
+                "[bold]/connect <provider> <api-key>[/].\n"
             )
             self._set_busy(False)
             input_w.disabled = False
@@ -500,6 +631,7 @@ class DevSynapseTUI(App):
         self._header().update(
             f"[bold {self._state_color('title')}]DevSynapse AI[/] "
             f"[{self._state_color('muted')}]terminal coding agent[/] "
+            f"[{self._state_color('streaming')}]{self.agent_mode.title()}[/] "
             f"[{self._state_color('streaming')}]{theme}/{layout}[/] "
             f"[{self._state_color('muted')}]{now}[/]"
         )
@@ -513,6 +645,7 @@ class DevSynapseTUI(App):
             f"[{accent}]F4[/] Model panel   [{accent}]F5[/] Telemetry   "
             f"[{accent}]^n[/] New   [{accent}]^p[/] Palette   "
             f"[{accent}]^r[/] Refresh   [{accent}]/[/] Commands   "
+            f"[{accent}]Tab[/] Mode   "
             f"[{accent}]PgUp/PgDn[/] Scroll   [{accent}]^k/^j[/] Nav   [{accent}]/theme[/] Theme   "
             f"[{muted}]Esc closes menus[/]"
         )
@@ -608,6 +741,7 @@ class DevSynapseTUI(App):
                 user_id="tui",
                 user_role="admin",
                 auto_execute=True,
+                agent_mode=self.agent_mode,
                 on_token=on_token,
             )
 
@@ -626,6 +760,8 @@ class DevSynapseTUI(App):
                     self._write_model_message(self.last_provider, self.last_model)
                 tokens = usage.get("total_tokens") or 0
                 cost = usage.get("estimated_cost_usd") or 0.0
+                self.last_tokens = tokens
+                self.last_cost = cost
                 self._total_tokens += tokens
                 self._total_cost += cost
                 self._update_status_bar(usage)
@@ -667,7 +803,10 @@ class DevSynapseTUI(App):
             suggestions = build_command_suggestions("/", project_names=project_names)
         self._command_suggestions = suggestions
 
-        menu = self.query_one("#command-suggestions", OptionList)
+        try:
+            menu = self.query_one("#command-suggestions", OptionList)
+        except Exception:
+            return
         menu.clear_options()
         if not suggestions:
             self._hide_command_suggestions()
@@ -739,7 +878,13 @@ class DevSynapseTUI(App):
             chat.write("[red]Command bridge is not initialized.[/]")
             return
         self._update_status_bar(message=f"executing: {command[:60]}")
-        escaped_command = command.replace("\\", "\\\\").replace('"', '\\"')
+        escaped_command = (
+            command.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+        )
         result = await self.opencode.execute_command(
             f'bash "{escaped_command}"',
             user_id="tui",
@@ -763,7 +908,7 @@ class DevSynapseTUI(App):
         chat = self.query_one("#chat", RichLog)
         settings = app_settings.get_settings()
         selected_provider = (
-            (provider or settings.llm_default_provider or "deepseek").strip().lower()
+            (provider or settings.llm_default_provider or "openrouter").strip().lower()
         )
         if selected_provider not in PROVIDER_CONFIGS:
             chat.write(f"[red]Unknown provider:[/] {provider}")
@@ -777,7 +922,7 @@ class DevSynapseTUI(App):
         )
 
     def _connect_screen_callback(self, result: dict[str, str] | None) -> None:
-        asyncio.create_task(self._handle_connect_screen_result(result))
+        self._create_task(self._handle_connect_screen_result(result))
 
     async def _handle_connect_screen_result(self, result: dict[str, str] | None) -> None:
         chat = self.query_one("#chat", RichLog)
@@ -809,7 +954,7 @@ class DevSynapseTUI(App):
         config = _provider_config(provider)
         if config is None:
             raise ValueError(f"Unknown provider: {provider}")
-        normalized_provider = (provider or "deepseek").strip().lower()
+        normalized_provider = (provider or "openrouter").strip().lower()
         selected_model = (model or "").strip() or config["default_model"]
         set_runtime_config_values(
             {
@@ -844,7 +989,7 @@ class DevSynapseTUI(App):
         )
 
     def _model_screen_callback(self, result: dict[str, str] | None) -> None:
-        asyncio.create_task(self._handle_model_screen_result(result))
+        self._create_task(self._handle_model_screen_result(result))
 
     async def _handle_model_screen_result(self, result: dict[str, str] | None) -> None:
         chat = self.query_one("#chat", RichLog)
@@ -938,13 +1083,13 @@ class DevSynapseTUI(App):
 
     def _status_context(self) -> str:
         short_id = self.conversation_id.removeprefix("chat_")[-12:]
-        project = self.project_name or "none"
+        workspace = self.project_name or "none"
         cwd = self._status_cwd()
         return (
-            "approval:trusted-auto  "
+            f"mode:{self.agent_mode}  "
             f"tok:{_compact_count(self._total_tokens)}  "
             f"cost:{_format_money(self._total_cost)}  "
-            f"cwd:{cwd}  project:{project}  session:{short_id}"
+            f"cwd:{cwd}  workspace:{workspace}  session:{short_id}"
         )
 
     def _status_cwd(self) -> str:

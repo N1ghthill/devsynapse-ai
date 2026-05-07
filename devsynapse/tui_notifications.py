@@ -10,13 +10,6 @@ from textual.widgets import Static
 
 NotificationType = Literal["success", "error", "info", "warning"]
 
-NOTIFICATION_STYLES = {
-    "success": {"border": "#3fb950", "bg": "#0d1f0d", "fg": "#3fb950"},
-    "error": {"border": "#f85149", "bg": "#1f0d0d", "fg": "#f85149"},
-    "info": {"border": "#58a6ff", "bg": "#0d1520", "fg": "#58a6ff"},
-    "warning": {"border": "#d29922", "bg": "#1f1a0d", "fg": "#d29922"},
-}
-
 NOTIFICATION_ICONS = {
     "success": "OK",
     "error": "ERR",
@@ -38,16 +31,13 @@ class ToastNotification(Static):
         self.notification_type = notification_type
         self.duration = duration
         self.message = message
+        self.add_class(f"toast-{notification_type}")
 
     def compose(self) -> ComposeResult:
-        style = NOTIFICATION_STYLES[self.notification_type]
         icon = NOTIFICATION_ICONS[self.notification_type]
-        yield Static(f"[bold {style['fg']}]{icon}[/] {self.message}")
+        yield Static(f"[bold]{icon}[/] {self.message}", classes="toast-message")
 
     async def on_mount(self) -> None:
-        style = NOTIFICATION_STYLES[self.notification_type]
-        self.styles.border = ("round", style["border"])
-        self.styles.background = style["bg"]
         if self.duration > 0:
             await asyncio.sleep(self.duration)
             await self.fade_out()

@@ -118,7 +118,7 @@ devsynapse
 ## Canonical Flow
 
 `devsynapse` opens the terminal UI. That is the only supported operator flow.
-Provider setup, status, usage, budget, model selection, project selection and shell-tool
+Provider setup, status, usage, budget, model selection, workspace selection and shell-tool
 commands are slash commands inside the TUI. External subcommands such as
 `devsynapse providers`, `devsynapse connect ...` or `devsynapse tui` are
 intentionally rejected so the product has one clear entry point.
@@ -128,8 +128,9 @@ Inside the TUI, DevSynapse exposes operational slash commands:
 ```text
 /connect                         open provider setup
 /connect <provider>              open setup with provider selected
-/connect <provider> <api-key>    save DeepSeek/OpenRouter/OpenCode keys
+/connect <provider> <api-key>    save provider keys
 /providers                       show configured provider status
+/mode build|plan                 switch Build or read-only Plan mode
 /discover                        refresh the model catalog
 /model                           search and select active model
 /models [provider]               list known models and pricing
@@ -139,16 +140,18 @@ Inside the TUI, DevSynapse exposes operational slash commands:
 /router                          show manual model status
 /usage                           show recent model/cost telemetry
 /theme [theme] [layout] [lines]  show or change TUI appearance
+/projects                        list registered workspaces
+/project <path|name>             set workspace from a local path or known name
 !<command>                       run a shell command as a tool result
 ```
 
 The TUI keeps the conversation log, input line, session state, provider status,
 budget state and common commands visible in one terminal screen. The status bar
-shows the trusted local approval mode, session token/cost totals, effective cwd,
-project, session ID and budget health; long-running agent and shell work also
+shows the active agent mode, session token/cost totals, effective cwd,
+workspace, session ID and budget health; long-running agent and shell work also
 shows an elapsed progress ticker. The right panel summarizes the active session,
 selected model, 24h request/token/cost telemetry, cache rate, error rate,
-latency, budget usage, active project file changes and the top recent model. The
+latency, budget usage, active workspace file changes and the top recent model. The
 sidebar panels (Model, Telemetry) are collapsible for a cleaner view.
 Focused chat, command suggestion and command palette regions use high-contrast
 theme borders so keyboard location is visible while navigating.
@@ -160,7 +163,8 @@ summary. Output lines that explicitly report `progress: current/total` or
 
 Typing `/` opens contextual command suggestions; `Up` and `Down` move through
 suggestions, and `Tab` or `Enter` completes the highlighted command or
-argument. `Ctrl+P` opens the command palette for fuzzy command search.
+argument. With an empty input, `Tab` toggles between Build mode and read-only
+Plan mode. `Ctrl+P` opens the command palette for fuzzy command search.
 
 ## Keyboard Shortcuts
 
@@ -205,8 +209,9 @@ Set `ASSISTANT_USER_NAME` in the runtime config or environment to personalize
 the system prompt; the default prompt is generic for distributed installs.
 Set `LLM_STREAMING_ENABLED=false` to force non-streaming provider responses.
 Set `LLM_DEFAULT_PROVIDER` to `deepseek`, `openrouter`, `opencode-zen` or
-`opencode-go` to choose the first provider the router should prefer when more
-than one key is configured. Provider model defaults can be set with
+`opencode-go` to choose the active provider. If that provider is not configured
+or its request fails, DevSynapse tries the next configured provider before
+falling back to degraded local-only help. Provider model defaults can be set with
 `DEEPSEEK_MODEL`, `OPENROUTER_MODEL`, `OPENCODE_ZEN_MODEL` and
 `OPENCODE_GO_MODEL`. OpenRouter defaults to `openrouter/free` so normal chat can
 use the free model router; `/model` lets operators switch to a specific free or

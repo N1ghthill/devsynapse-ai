@@ -396,7 +396,7 @@ install() {
     echo -e "  ${CYAN}devsynapse${NC}"
     echo ""
     echo -e "${BOLD}Inside the TUI:${NC}"
-    echo -e "  ${CYAN}/connect deepseek <api-key>${NC}"
+    echo -e "  ${CYAN}/connect <provider> <api-key>${NC}"
     echo -e "  ${CYAN}/providers${NC}"
     echo -e "  ${CYAN}/status${NC}"
     echo -e "  ${CYAN}/usage${NC}"

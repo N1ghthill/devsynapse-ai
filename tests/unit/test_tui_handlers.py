@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -364,7 +364,7 @@ class TestSlashCommandHandlers:
 
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
             text = " ".join(calls)
-            assert "Projects" in text or "projects" in text
+            assert "Workspaces" in text or "workspaces" in text
 
     @pytest.mark.asyncio
     async def test_connect_without_args_opens_provider_setup(self, tmp_path, monkeypatch):
@@ -478,3 +478,28 @@ class TestSlashCommandHandlers:
             assert copied == ["resposta final"]
             calls = [c[0][0] for c in mock_chat.write.call_args_list]
             assert any("Copied" in str(call) for call in calls)
+
+    @pytest.mark.asyncio
+    async def test_shell_message_uses_opencode_bash_contract(self, tmp_path, monkeypatch):
+        _configure_runtime(monkeypatch, tmp_path / "runtime")
+
+        import config.settings as app_settings
+        from core.opencode_bridge import CommandResult
+
+        app_settings.get_settings.cache_clear()
+
+        app = DevSynapseTUI()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            _mock_chat(app)
+            app.opencode = MagicMock()
+            app.opencode.execute_command = AsyncMock(
+                return_value=CommandResult(True, "ok", "done", "success")
+            )
+
+            await app._handle_shell_message('python -c "print(1)"')
+            await pilot.pause()
+
+            app.opencode.execute_command.assert_awaited_once()
+            command = app.opencode.execute_command.await_args.args[0]
+            assert command == 'bash "python -c \\"print(1)\\""'

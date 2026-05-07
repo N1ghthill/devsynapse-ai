@@ -1,4 +1,4 @@
-"""Dynamic sidebar for DevSynapse AI TUI."""
+"""Dynamic sidebar for DevSynapse AI TUI - Reorganized for clarity."""
 from __future__ import annotations
 
 import logging
@@ -20,7 +20,15 @@ logger = logging.getLogger(__name__)
 
 
 class DynamicSidebar(Vertical):
-    """Dynamic sidebar with real-time updates."""
+    """Dynamic sidebar with real-time updates.
+
+    Panels:
+    - Session: Chat ID, workspace, budget status
+    - Model: Active model, last call details, session totals
+    - Files: Git status, workspace
+    - Telemetry: Usage by model, budget bars, health metrics
+    - Actions: Quick commands reference
+    """
 
     def __init__(
         self,
@@ -35,6 +43,8 @@ class DynamicSidebar(Vertical):
         self.project_name: str | None = None
         self.last_provider: str | None = None
         self.last_model: str | None = None
+        self.last_tokens: int = 0
+        self.last_cost: float = 0.0
         self.is_busy: bool = False
         self.token_count: int = 0
         self.total_cost: float = 0.0
@@ -45,6 +55,7 @@ class DynamicSidebar(Vertical):
         self.file_changes: dict[str, Any] = {}
         self.project_count: int = 0
         self.catalog_count: int = 0
+        self.intent_mode: str = "chat"  # chat, planning, build
         self._collapsed_panels: dict[str, bool] = {
             "telemetry": False,
             "model": False,
@@ -103,7 +114,7 @@ class DynamicSidebar(Vertical):
             )
 
             short_id = self.session_id.removeprefix("chat_")
-            project = _shorten_middle(self.project_name or "none", 20)
+            workspace = _shorten_middle(self.project_name or "none", 20)
             budget_level = self._budget_level(
                 budget_status if budget_status is not None else self.budget_status
             )
@@ -111,14 +122,22 @@ class DynamicSidebar(Vertical):
             status_text = "busy" if self.is_busy else "ready"
             status_color = self._color("executing" if self.is_busy else "success")
 
+            # Mode indicator
+            mode_icons = {
+                "chat": "💬",
+                "planning": "📋",
+                "build": "🏗️",
+            }
+            mode_icon = mode_icons.get(self.intent_mode, "💬")
+
             panel = self.query_one("#sidebar-session", Static)
             panel.update(
                 "\n".join(
                     [
-                        f"{self._title('Session')} [{status_color}]{status_text}[/]",
+                        f"{self._title('Session')} [{status_color}]{status_text}[/] {mode_icon}",
                         self._row("chat", _shorten_middle(short_id, 24)),
-                        self._row("project", project),
-                        self._row("scope", f"{provider_count} providers  {self.project_count} projects"),
+                        self._row("workspace", workspace),
+                        self._row("scope", f"{provider_count} providers  {self.project_count} workspaces"),
                         self._row("budget", self._level_markup(budget_level)),
                     ]
                 )
@@ -133,8 +152,10 @@ class DynamicSidebar(Vertical):
         tokens: int | None = None,
         cost: float | None = None,
         catalog_count: int | None = None,
+        last_tokens: int | None = None,
+        last_cost: float | None = None,
     ) -> None:
-        """Update model panel."""
+        """Update model panel with clear separation of active vs last call."""
         if provider:
             self.last_provider = provider
         if model:
@@ -145,13 +166,17 @@ class DynamicSidebar(Vertical):
             self.total_cost = cost
         if catalog_count is not None:
             self.catalog_count = catalog_count
+        if last_tokens is not None:
+            self.last_tokens = last_tokens
+        if last_cost is not None:
+            self.last_cost = last_cost
 
         try:
             panel = self.query_one("#sidebar-model", Static)
 
             if self._collapsed_panels.get("model", True):
                 settings = app_settings.get_settings()
-                default_provider = (settings.llm_default_provider or "deepseek").strip().lower()
+                default_provider = (settings.llm_default_provider or "openrouter").strip().lower()
                 active_model = _provider_model(settings, default_provider)
                 panel.update(
                     f"{self._title('Model')} v {default_provider}:{_shorten_middle(active_model, 18)}  "
@@ -163,15 +188,19 @@ class DynamicSidebar(Vertical):
             panel.remove_class("collapsed")
 
             settings = app_settings.get_settings()
-            default_provider = (settings.llm_default_provider or "deepseek").strip().lower()
+            default_provider = (settings.llm_default_provider or "openrouter").strip().lower()
             active_model = _provider_model(settings, default_provider)
 
+            # Last call info
             last_used = (
                 f"{_shorten_middle(self.last_model, 28)}"
                 if self.last_model
                 else "none"
             )
+            last_tokens_str = f"{self.last_tokens:,}" if self.last_tokens else "0"
+            last_cost_str = f"${self.last_cost:.4f}" if self.last_cost else "$0.0000"
 
+            # Session totals
             token_str = f"{self.token_count:,}" if self.token_count else "0"
             cost_str = f"${self.total_cost:.4f}" if self.total_cost else "$0.0000"
 
@@ -181,12 +210,18 @@ class DynamicSidebar(Vertical):
                         f"{self._title('Model')} {self._muted('manual')}",
                         self._row("active", default_provider),
                         f"[bold]{_shorten_middle(active_model, 32)}[/]",
-                        self._row("last", last_used),
-                        self._row(
-                            "session",
-                            f"{self._metric(token_str)} tok  {self._metric(cost_str)}",
-                        ),
-                        self._row("catalog", f"{self.catalog_count}  F2 /model"),
+                        "",
+                        f"{self._title('Last Call')}",
+                        self._row("model", last_used),
+                        self._row("tokens", f"{self._metric(last_tokens_str)} tok"),
+                        self._row("cost", self._metric(last_cost_str)),
+                        "",
+                        f"{self._title('Session')}",
+                        self._row("calls", f"{self._metric(str(self.request_count))} req"),
+                        self._row("tokens", f"{self._metric(token_str)} tok"),
+                        self._row("cost", self._metric(cost_str)),
+                        "",
+                        self._row("catalog", f"{self.catalog_count} models  F2 /model"),
                     ]
                 )
             )
@@ -206,7 +241,7 @@ class DynamicSidebar(Vertical):
                         [
                             f"{self._title('Files')} [{self._color('success')}]clean[/]",
                             self._row("worktree", "no local changes"),
-                            self._row("project", _shorten_middle(self.project_name or "none", 22)),
+                            self._row("workspace", _shorten_middle(self.project_name or "none", 22)),
                         ]
                     )
                 )
@@ -233,7 +268,7 @@ class DynamicSidebar(Vertical):
                     "\n".join(
                         [
                             f"{self._title('Files')} {self._muted('not a git repo')}",
-                            self._row("project", _shorten_middle(self.project_name or "none", 22)),
+                            self._row("workspace", _shorten_middle(self.project_name or "none", 22)),
                         ]
                     )
                 )
@@ -242,7 +277,7 @@ class DynamicSidebar(Vertical):
                 "\n".join(
                     [
                         f"{self._title('Files')} {self._muted('idle')}",
-                        self._row("project", self.file_changes.get("message") or "select project"),
+                        self._row("workspace", self.file_changes.get("message") or "select workspace"),
                     ]
                 )
             )
@@ -255,7 +290,7 @@ class DynamicSidebar(Vertical):
         telemetry_stats: dict[str, Any] | None = None,
         budget_status: dict[str, Any] | None = None,
     ) -> None:
-        """Update telemetry and budget panel."""
+        """Update telemetry panel with clear breakdown by model."""
         if usage_stats is not None:
             self.usage_stats = usage_stats
         if telemetry_stats is not None:
@@ -299,21 +334,48 @@ class DynamicSidebar(Vertical):
             daily = self.budget_status.get("daily", {})
             monthly = self.budget_status.get("monthly", {})
 
+            # Build model breakdown section
+            model_lines = []
+            if rows:
+                model_lines.append(f"{self._title('By Model')}")
+                # Show top 3 models
+                for row in rows[:3]:
+                    provider = row.get("provider") or "?"
+                    model = row.get("model") or "?"
+                    label = f"{provider}:{_shorten_middle(model, 15)}"
+                    count = int(row.get("request_count") or 0)
+                    row_cost = float(row.get("estimated_cost_usd") or 0.0)
+                    model_lines.append(
+                        self._row(
+                            "",
+                            f"{label}  {self._metric(str(count))} req  {self._metric(_money(row_cost))}",
+                        )
+                    )
+            else:
+                model_lines.append(self._row("top model", "none yet"))
+
             panel.update(
                 "\n".join(
                     [
                         f"{self._title('Telemetry')} {self._muted('24h')}",
+                        "",
+                        f"{self._title('Usage')}",
                         self._row(
-                            "traffic",
+                            "requests",
                             f"{self._metric(str(requests))} req  "
                             f"{self._metric(str(conversations))} chats  "
                             f"{self._metric(_compact_number(tokens))} tok",
                         ),
                         self._row("cost", f"{self._metric(_money(cost))}  cache {_pct(cache_hit)}"),
-                        self._row("health", f"{self._error_markup(error_pct)}  lat {_latency(latency_ms)}"),
+                        "",
+                        f"{self._title('Health')}",
+                        self._row("", f"{self._error_markup(error_pct)} errors  lat {_latency(latency_ms)}"),
+                        "",
+                        *model_lines,
+                        "",
+                        f"{self._title('Budget')}",
                         self._row("day", self._budget_bar(daily)),
                         self._row("month", self._budget_bar(monthly)),
-                        self._top_model_line(rows),
                     ]
                 )
             )
@@ -349,6 +411,11 @@ class DynamicSidebar(Vertical):
         self.is_busy = busy
         self.update_session()
 
+    def set_intent_mode(self, mode: str) -> None:
+        """Set current intent mode (chat, planning, build)."""
+        self.intent_mode = mode
+        self.update_session()
+
     def refresh_all(
         self,
         session_id: str | None = None,
@@ -363,10 +430,15 @@ class DynamicSidebar(Vertical):
         telemetry_stats: dict[str, Any] | None = None,
         catalog_count: int | None = None,
         file_changes: dict[str, Any] | None = None,
+        last_tokens: int | None = None,
+        last_cost: float | None = None,
     ) -> None:
         """Refresh all panels."""
         self.update_session(session_id, project_name, project_count, budget_status)
-        self.update_model(provider, model, tokens=tokens, cost=cost, catalog_count=catalog_count)
+        self.update_model(
+            provider, model, tokens=tokens, cost=cost, catalog_count=catalog_count,
+            last_tokens=last_tokens, last_cost=last_cost,
+        )
         self.update_files(file_changes)
         self.update_telemetry(
             usage_stats=usage_stats,

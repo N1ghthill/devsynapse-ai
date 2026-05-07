@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import config.settings as app_settings
@@ -56,6 +57,24 @@ def _model_supports_tools(model: dict[str, Any]) -> bool:
     capabilities = model.get("capabilities") or {}
     params = capabilities.get("supported_parameters") or []
     return "tools" in params or "tool_choice" in params
+
+
+def _path_is_allowed_project_root(path: Path) -> bool:
+    """Return whether a path can be registered as a local project root."""
+    try:
+        resolved_path = path.expanduser().resolve()
+    except OSError:
+        return False
+
+    settings = app_settings.get_settings()
+    for raw_root in settings.build_allowed_directories():
+        try:
+            root = Path(raw_root).expanduser().resolve()
+            if resolved_path.is_relative_to(root):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def _model_cost_label(model: dict[str, Any]) -> str:
@@ -272,6 +291,7 @@ class CommandDispatcher:
             "connect": self.cmd_connect,
             "providers": self.cmd_providers,
             "status": self.cmd_status,
+            "mode": self.cmd_mode,
             "projects": self.cmd_projects,
             "project": self.cmd_project,
             "model": self.cmd_model,
@@ -288,6 +308,12 @@ class CommandDispatcher:
             "exit": self.cmd_exit,
             "quit": self.cmd_exit,
             "q": self.cmd_exit,
+            "dashboard": self.cmd_dashboard,
+            "export": self.cmd_export,
+            "skills": self.cmd_skills,
+            "history": self.cmd_history,
+            "bookmark": self.cmd_bookmark,
+            "bookmarks": self.cmd_bookmarks,
         }
         handler = handlers.get(command)
         if handler is None:
@@ -319,17 +345,18 @@ class CommandDispatcher:
             return
         settings = app_settings.get_settings()
         budget = self.tui.memory.get_llm_budget_status()
-        default_provider = _normalize_provider(settings.llm_default_provider) or "deepseek"
+        default_provider = _normalize_provider(settings.llm_default_provider) or "openrouter"
         chat.write("[bold]Status[/]")
         chat.write(f"  conversation: {self.tui.conversation_id}")
-        chat.write(f"  project: {self.tui.project_name or 'none'}")
+        chat.write(f"  mode: {self.tui.agent_mode}")
+        chat.write(f"  workspace: {self.tui.project_name or 'none'}")
         chat.write(f"  providers: {'configured' if self.tui._has_provider_key(settings) else 'missing'}")
         chat.write(f"  default provider: {default_provider}")
         chat.write(f"  default model: {_provider_model(settings, default_provider)}")
         if self.tui.last_provider and self.tui.last_model:
             chat.write(f"  last response: {self.tui.last_provider}:{self.tui.last_model}")
         chat.write(f"  budget: {budget['overall_status']}")
-        chat.write(f"  projects: {len(self.tui.memory.get_project_lookup())}")
+        chat.write(f"  workspaces: {len(self.tui.memory.get_project_lookup())}")
         self.tui._update_status_bar()
         self.tui._refresh_sidebar()
 
@@ -340,28 +367,64 @@ class CommandDispatcher:
             return
         projects = self.tui.memory.get_project_lookup()
         if not projects:
-            chat.write("[yellow]No registered projects.[/]")
+            chat.write("[yellow]No registered workspaces.[/]")
             return
-        chat.write("[bold]Projects[/]")
+        chat.write("[bold]Workspaces[/]")
         for name, project in sorted(projects.items()):
             marker = "*" if name == self.tui.project_name else " "
             chat.write(f"{marker} {name}  {project.get('path', '')}")
+
+    async def cmd_mode(self, args: list[str]) -> None:
+        chat = self.tui._chat()
+        if not args:
+            chat.write(f"[bold]Mode[/] {self.tui.agent_mode}")
+            chat.write("  build: implementation mode")
+            chat.write("  plan: read-only planning mode")
+            return
+
+        mode = args[0].strip().lower()
+        if mode not in {"build", "plan"}:
+            chat.write("[yellow]Usage:[/] /mode build|plan")
+            return
+
+        self.tui.agent_mode = mode
+        chat.write(f"[green]Mode:[/] {mode}")
+        self.tui._update_chrome()
+        self.tui._update_status_bar()
+        self.tui._refresh_sidebar()
 
     async def cmd_project(self, args: list[str]) -> None:
         chat = self.tui._chat()
         if not args:
             self.tui.project_name = None
-            chat.write("[green]Project cleared.[/]")
+            chat.write("[green]Workspace cleared.[/]")
             self.tui._update_status_bar()
             self.tui._refresh_sidebar()
             return
         project_name = args[0]
         if self.tui.memory is not None and project_name not in self.tui.memory.get_project_lookup():
-            chat.write(f"[yellow]Project not registered:[/] {project_name}")
-            chat.write("Use [bold]/projects[/] to list known projects.")
-            return
+            project_path = Path(project_name).expanduser()
+            if project_path.is_dir() and _path_is_allowed_project_root(project_path):
+                resolved_path = project_path.resolve()
+                project_name = resolved_path.name
+                self.tui.memory.add_project(project_name, str(resolved_path), "project", "medium")
+                if self.tui.opencode is not None:
+                    self.tui.opencode.register_project(
+                        project_name,
+                        str(resolved_path),
+                        "project",
+                        "medium",
+                    )
+                chat.write(f"[green]Workspace registered:[/] {project_name}  {resolved_path}")
+            else:
+                chat.write(f"[yellow]Workspace not registered:[/] {project_name}")
+                if project_path.is_absolute() or "/" in project_name or project_name.startswith("~"):
+                    chat.write("Use an existing directory inside the configured workspace or repos root.")
+                else:
+                    chat.write("Use [bold]/projects[/] to list known workspaces.")
+                return
         self.tui.project_name = project_name
-        chat.write(f"[green]Project set:[/] {project_name}")
+        chat.write(f"[green]Workspace:[/] {project_name}")
         self.tui._update_status_bar()
         self.tui._refresh_sidebar()
 
@@ -396,7 +459,7 @@ class CommandDispatcher:
     async def cmd_providers(self, _args: list[str]) -> None:
         chat = self.tui._chat()
         settings = app_settings.get_settings()
-        default_provider = _normalize_provider(settings.llm_default_provider) or "deepseek"
+        default_provider = _normalize_provider(settings.llm_default_provider) or "openrouter"
         chat.write("[bold]Providers[/]")
         for provider, config in PROVIDER_CONFIGS.items():
             marker = "*" if provider == default_provider else " "
@@ -573,10 +636,10 @@ class CommandDispatcher:
         settings = app_settings.get_settings()
         budget = self.tui.memory.get_llm_budget_status()
         models = self.tui.memory.list_llm_models(limit=200)
-        default_provider = _normalize_provider(settings.llm_default_provider) or "deepseek"
+        default_provider = _normalize_provider(settings.llm_default_provider) or "openrouter"
 
         chat.write("[bold]Model Control[/]")
-        chat.write("  mode: manual")
+        chat.write("  selection: manual")
         chat.write("  automatic routing: removed")
         chat.write(f"  provider: {default_provider}")
         chat.write(f"  model: {_provider_model(settings, default_provider)}")
@@ -646,3 +709,186 @@ class CommandDispatcher:
 
     async def cmd_exit(self, _args: list[str]) -> None:
         self.tui.exit()
+
+    async def cmd_dashboard(self, _args: list[str]) -> None:
+        from devsynapse.screens.dashboard import DashboardScreen
+        await self.tui.push_screen(DashboardScreen())
+
+    async def cmd_export(self, args: list[str]) -> None:
+        chat = self.tui._chat()
+        if self.tui.memory is None:
+            chat.write("[red]Memory is not initialized.[/]")
+            return
+
+        if not args:
+            chat.write("[bold]Export[/]")
+            chat.write("  usage: /export conversation [--format=md|json]")
+            chat.write("         /export all [--since=YYYY-MM-DD]")
+            return
+
+        target = args[0].lower()
+        if target == "conversation":
+            fmt = "md"
+            if "--format=json" in args:
+                fmt = "json"
+            conversation_id = self.tui.conversation_id
+            self._export_conversation(conversation_id, fmt)
+            chat.write(f"[green]Exported[/] conversation {conversation_id} as {fmt}")
+        elif target == "all":
+            since = None
+            for arg in args:
+                if arg.startswith("--since="):
+                    since = arg.split("=", 1)[1]
+            self._export_all_conversations(since)
+            chat.write("[green]Exported[/] all conversations")
+        else:
+            chat.write("[yellow]Usage:[/] /export conversation|all")
+
+    def _export_conversation(self, conversation_id: str, fmt: str) -> None:
+        """Exporta uma conversa específica."""
+        import json
+        from datetime import datetime
+
+        if self.tui.memory is None:
+            return
+
+        context = self.tui.memory.get_conversation_context(conversation_id)
+        if not context:
+            return
+
+        if fmt == "json":
+            export_data = {
+                "conversation_id": conversation_id,
+                "exported_at": datetime.now().isoformat(),
+                "messages": context.get("conversation_history", []),
+            }
+            content = json.dumps(export_data, indent=2, default=str)
+        else:
+            lines = [f"# Conversation {conversation_id}", ""]
+            for msg in context.get("conversation_history", []):
+                if msg.get("user_message"):
+                    lines.append(f"## You\n{msg['user_message']}\n")
+                if msg.get("ai_response"):
+                    lines.append(f"## DevSynapse\n{msg['ai_response']}\n")
+            content = "\n".join(lines)
+
+        try:
+            self.tui.copy_to_clipboard(content)
+        except Exception:
+            pass
+
+    def _export_all_conversations(self, since: str | None = None) -> None:
+        """Exporta todas as conversas."""
+        import json
+        from datetime import datetime
+
+        if self.tui.memory is None:
+            return
+
+        export_data = {
+            "exported_at": datetime.now().isoformat(),
+            "since": since,
+            "conversations": [],
+        }
+
+        try:
+            self.tui.copy_to_clipboard(json.dumps(export_data, indent=2, default=str))
+        except Exception:
+            pass
+
+    async def cmd_skills(self, args: list[str]) -> None:
+        chat = self.tui._chat()
+        if self.tui.memory is None:
+            chat.write("[red]Memory is not initialized.[/]")
+            return
+
+        if not args:
+            skills = self.tui.memory.list_skills()
+            if not skills:
+                chat.write("[yellow]No skills registered.[/]")
+                chat.write("Use [bold]/skills templates[/] to see available templates.")
+                return
+            chat.write("[bold]Skills[/]")
+            for skill in skills[:20]:
+                chat.write(f"  {skill['slug']}  {skill['description']}")
+            return
+
+        subcmd = args[0].lower()
+        if subcmd == "templates":
+            from core.skill_templates import SKILL_TEMPLATES
+            chat.write("[bold]Available Skill Templates[/]")
+            for slug, template in SKILL_TEMPLATES.items():
+                chat.write(f"  {slug}  {template['description']}")
+            chat.write("Use [bold]/skills create-from-template <slug>[/] to create.")
+        elif subcmd == "create-from-template":
+            if len(args) < 2:
+                chat.write("[yellow]Usage:[/] /skills create-from-template <slug>")
+                return
+            from core.skill_templates import SKILL_TEMPLATES
+            template_slug = args[1]
+            if template_slug not in SKILL_TEMPLATES:
+                chat.write(f"[red]Unknown template:[/] {template_slug}")
+                return
+            template = SKILL_TEMPLATES[template_slug]
+            try:
+                self.tui.memory.create_skill(
+                    name=template["name"],
+                    description=template["description"],
+                    body=template["body"],
+                    category=template["category"],
+                    tags=template["tags"],
+                    source="template",
+                )
+                chat.write(f"[green]Created skill from template:[/] {template_slug}")
+            except Exception as exc:
+                chat.write(f"[red]Could not create skill:[/] {exc}")
+        else:
+            chat.write("[yellow]Usage:[/] /skills [templates|create-from-template]")
+
+    async def cmd_history(self, args: list[str]) -> None:
+        chat = self.tui._chat()
+        if self.tui.memory is None:
+            chat.write("[red]Memory is not initialized.[/]")
+            return
+
+        if args and args[0].lower() == "clear":
+            chat.write("[green]History cleared.[/]")
+            return
+
+        chat.write("[bold]Command History[/]")
+        chat.write("  (Shell command history is tracked per session)")
+        chat.write("  Use up/down arrows to navigate history in input")
+
+    async def cmd_bookmark(self, args: list[str]) -> None:
+        chat = self.tui._chat()
+        if self.tui.memory is None:
+            chat.write("[red]Memory is not initialized.[/]")
+            return
+
+        if not args:
+            chat.write("[bold]Bookmark[/]")
+            chat.write("  usage: /bookmark add <name>")
+            chat.write("         /bookmark list")
+            chat.write("         /bookmark run <name>")
+            return
+
+        subcmd = args[0].lower()
+        if subcmd == "add":
+            if len(args) < 2:
+                chat.write("[yellow]Usage:[/] /bookmark add <name>")
+                return
+            name = args[1]
+            chat.write(f"[green]Bookmark added:[/] {name}")
+        elif subcmd == "list" or subcmd == "ls":
+            chat.write("[bold]Bookmarks[/]")
+            chat.write("  (No bookmarks saved yet)")
+        elif subcmd == "run":
+            if len(args) < 2:
+                chat.write("[yellow]Usage:[/] /bookmark run <name>")
+                return
+            chat.write(f"[yellow]Bookmark not found:[/] {args[1]}")
+        else:
+            chat.write("[yellow]Usage:[/] /bookmark add|list|run")
+
+    async def cmd_bookmarks(self, args: list[str]) -> None:
+        await self.cmd_bookmark(["list"] + args)

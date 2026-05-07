@@ -32,6 +32,7 @@ DEFAULT_UI_CONFIG: dict[str, Any] = {
         },
         "visible": True,
     },
+    "onboarding_completed": False,
 }
 
 THEME_PALETTES: dict[str, dict[str, str]] = {
@@ -79,7 +80,7 @@ THEME_PALETTES: dict[str, dict[str, str]] = {
 
 @dataclass(frozen=True)
 class TUIPreferences:
-    """Resolved TUI preferences and style assets."""
+    """Resolved TUI appearance preferences."""
 
     theme: str
     layout: str
@@ -87,6 +88,7 @@ class TUIPreferences:
     palette: dict[str, str]
     chat_max_lines: int
     sidebar_collapsed: dict[str, bool]
+    onboarding_completed: bool = False
 
     @property
     def css_paths(self) -> list[Path]:
@@ -125,6 +127,7 @@ def load_tui_preferences(config_file: Path | None = None) -> TUIPreferences:
             maximum=20000,
         ),
         sidebar_collapsed=_normalized_sidebar_collapsed(data.get("sidebar")),
+        onboarding_completed=bool(data.get("onboarding_completed", False)),
     )
 
 
@@ -134,6 +137,7 @@ def save_tui_preferences(
     layout: str | None = None,
     chat_max_lines: int | None = None,
     sidebar_collapsed: dict[str, bool] | None = None,
+    onboarding_completed: bool | None = None,
     config_file: Path | None = None,
 ) -> TUIPreferences:
     """Persist TUI appearance preferences and return the resolved values."""
@@ -158,6 +162,8 @@ def save_tui_preferences(
             {"collapsed_panels": sidebar_collapsed}
         )
     data["sidebar"] = {**DEFAULT_UI_CONFIG["sidebar"], **sidebar}
+    if onboarding_completed is not None:
+        data["onboarding_completed"] = onboarding_completed
     config_file.write_text(
         json.dumps(data, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

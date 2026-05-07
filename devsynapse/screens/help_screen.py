@@ -22,13 +22,14 @@ CATEGORIES = {
     ],
     "Session": [
         ("/status", "show runtime status"),
+        ("/mode build|plan", "switch agent mode"),
         ("/new", "start new conversation"),
         ("/clear", "clear current chat"),
     ],
-    "Project": [
-        ("/projects", "list registered projects"),
-        ("/project <name>", "set active project"),
-        ("/project", "clear active project"),
+    "Workspace": [
+        ("/projects", "list registered workspaces"),
+        ("/project <path|name>", "set workspace"),
+        ("/project", "clear workspace"),
     ],
     "Ops": [
         ("/usage", "token and cost telemetry"),
@@ -74,99 +75,13 @@ SHORTCUTS = [
     ("Ctrl+Home/End", "chat top/bottom"),
     ("Up/Down", "history or menu"),
     ("Ctrl+K/J", "history or menu"),
-    ("Tab", "autocomplete"),
+    ("Tab", "mode on empty input, autocomplete otherwise"),
     ("Esc", "close menu/modal"),
 ]
 
 
 class HelpScreen(ModalScreen[None]):
     """Help overlay screen with categorized commands."""
-
-    CSS = """
-    HelpScreen {
-        align: center middle;
-    }
-
-    #help-container {
-        width: 80;
-        height: 80%;
-        background: #161b22;
-        border: solid #30363d;
-        padding: 1 2;
-    }
-
-    #help-header {
-        height: 3;
-        background: #0d1117;
-        border-bottom: solid #30363d;
-        padding: 1 0;
-    }
-
-    #help-title {
-        text-style: bold;
-        color: #58a6ff;
-    }
-
-    #help-content {
-        height: 1fr;
-        layout: horizontal;
-    }
-
-    #help-categories {
-        width: 30;
-        border-right: solid #30363d;
-        padding-right: 1;
-    }
-
-    .category-button {
-        width: 100%;
-        height: 3;
-        background: #21262d;
-        border: none;
-        margin-bottom: 1;
-        text-align: left;
-    }
-
-    .category-button:focus {
-        background: #30363d;
-    }
-
-    .category-button.active {
-        background: #58a6ff;
-    }
-
-    #help-commands {
-        width: 1fr;
-        padding-left: 1;
-    }
-
-    #help-shortcuts {
-        height: 8;
-        border-top: solid #30363d;
-        background: #0d1117;
-        padding: 1;
-    }
-
-    .shortcut-key {
-        color: #58a6ff;
-        text-style: bold;
-    }
-
-    .shortcut-desc {
-        color: #8b949e;
-    }
-
-    #help-footer {
-        height: 2;
-        background: #0d1117;
-        border-top: solid #30363d;
-        padding: 0 1;
-    }
-
-    #help-footer Button {
-        margin-left: 1;
-    }
-    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -175,7 +90,7 @@ class HelpScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="help-container"):
             with Horizontal(id="help-header"):
-                yield Label("[bold #58a6ff]DevSynapse AI Help[/]", id="help-title")
+                yield Label("DevSynapse AI Help", id="help-title")
             with Horizontal(id="help-content"):
                 with Vertical(id="help-categories"):
                     for category in CATEGORIES.keys():
@@ -205,17 +120,23 @@ class HelpScreen(ModalScreen[None]):
             if btn.id == f"cat-{category}":
                 btn.add_class("active")
 
-        lines = [f"[bold #58a6ff]{category}[/]", ""]
+        title = self._color("title")
+        accent = self._color("streaming")
+        muted = self._color("muted")
+        lines = [f"[bold {title}]{category}[/]", ""]
         for cmd, desc in commands:
-            lines.append(f"[cyan]{cmd:<25}[/] [dim]{desc}[/]")
+            lines.append(f"[{accent}]{cmd:<25}[/] [{muted}]{desc}[/]")
 
         commands_panel = self.query_one("#commands-content", Static)
         commands_panel.update("\n".join(lines))
 
     async def _update_shortcuts(self) -> None:
-        lines = ["[bold #58a6ff]Keyboard Shortcuts[/]  "]
+        title = self._color("title")
+        accent = self._color("streaming")
+        muted = self._color("muted")
+        lines = [f"[bold {title}]Keyboard Shortcuts[/]  "]
         for key, desc in SHORTCUTS:
-            lines.append(f"[#58a6ff]{key:<10}[/] [#8b949e]{desc}[/]  ")
+            lines.append(f"[{accent}]{key:<10}[/] [{muted}]{desc}[/]  ")
 
         shortcuts_panel = self.query_one("#shortcuts-content", Static)
         shortcuts_panel.update("  ".join(lines))
@@ -242,3 +163,15 @@ class HelpScreen(ModalScreen[None]):
             current_idx = categories.index(self._current_category)
             prev_idx = (current_idx - 1) % len(categories)
             self.run_task(self._show_category(categories[prev_idx]))
+
+    def _color(self, name: str) -> str:
+        app = self.app
+        preferences = getattr(app, "ui_preferences", None)
+        palette = getattr(preferences, "palette", {}) or {}
+        fallbacks = {
+            "title": "thinking",
+            "streaming": "streaming",
+            "muted": "muted",
+        }
+        key = name if name in palette else fallbacks.get(name, name)
+        return palette.get(key, "cyan")

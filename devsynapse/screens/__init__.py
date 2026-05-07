@@ -26,51 +26,10 @@ from devsynapse.screens.command_palette import CommandPaletteScreen as CommandPa
 class ProviderConnectionScreen(ModalScreen[dict[str, str] | None]):
     """Modal setup form for provider credentials."""
 
-    CSS = """
-    ProviderConnectionScreen {
-        align: center middle;
-    }
-
-    #connect-dialog {
-        width: 72;
-        max-width: 90%;
-        height: auto;
-        padding: 1 2;
-        border: round $primary;
-        background: $panel;
-    }
-
-    #connect-title {
-        text-style: bold;
-        color: $accent;
-        margin-bottom: 1;
-    }
-
-    #connect-help {
-        color: $text-muted;
-        margin-top: 1;
-    }
-
-    #connect-error {
-        color: $error;
-        height: 1;
-    }
-
-    #connect-actions {
-        height: 3;
-        align-horizontal: right;
-        margin-top: 1;
-    }
-
-    #connect-actions Button {
-        margin-left: 1;
-    }
-    """
-
-    def __init__(self, provider: str = "deepseek", model: str | None = None) -> None:
+    def __init__(self, provider: str = "openrouter", model: str | None = None) -> None:
         super().__init__()
-        normalized = _normalize_provider(provider) or "deepseek"
-        self.initial_provider = normalized if normalized in PROVIDER_CONFIGS else "deepseek"
+        normalized = _normalize_provider(provider) or "openrouter"
+        self.initial_provider = normalized if normalized in PROVIDER_CONFIGS else "openrouter"
         self.initial_model = model or PROVIDER_CONFIGS[self.initial_provider]["default_model"]
 
     def compose(self) -> Any:
@@ -136,51 +95,6 @@ class ProviderConnectionScreen(ModalScreen[dict[str, str] | None]):
 
 class ModelSelectionScreen(ModalScreen[dict[str, str] | None]):
     """Modal model picker with search over the configured catalog."""
-
-    CSS = """
-    ModelSelectionScreen {
-        align: center middle;
-    }
-
-    #model-dialog {
-        width: 104;
-        max-width: 95%;
-        height: auto;
-        padding: 1 2 2 2;
-        border: round $primary;
-        background: $panel;
-    }
-
-    #model-title {
-        text-style: bold;
-        color: $accent;
-        margin-bottom: 1;
-    }
-
-    #model-help {
-        color: $text-muted;
-        margin-top: 1;
-        margin-bottom: 1;
-    }
-
-    #model-actions {
-        height: 3;
-        align-horizontal: right;
-        margin-top: 1;
-    }
-
-    #model-actions Button {
-        margin-left: 1;
-    }
-
-    #model-search {
-        margin-bottom: 1;
-    }
-
-    #model-select {
-        height: 8;
-    }
-    """
 
     def __init__(
         self,

@@ -38,7 +38,7 @@ class TestCliMain:
         assert exc_info.value.code == 2
         captured = capsys.readouterr()
         assert "opens the TUI directly" in captured.err
-        assert "/connect deepseek" in captured.err
+        assert "/connect <provider>" in captured.err
 
     @pytest.mark.parametrize(
         "command",

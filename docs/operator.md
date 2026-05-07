@@ -100,7 +100,7 @@ Inside the TUI:
 
 ```text
 /connect
-/connect deepseek <api-key>
+/connect <provider> <api-key>
 /providers
 /status
 ```
@@ -108,15 +108,18 @@ Inside the TUI:
 `/connect` opens the provider setup form. Choose the server, paste the API key,
 and keep or edit the default model. The selected server becomes
 `LLM_DEFAULT_PROVIDER` for manual model control.
+If the active provider is not configured or its request fails, DevSynapse tries
+the next configured provider before switching to degraded local-only help.
 OpenRouter defaults to `openrouter/free` for normal chat. Use `/model` to search
 the refreshed principal catalog and choose a specific free or paid model.
 
 Typing `/` in the main input opens the command menu. `Up`/`Down` or `Ctrl+K`/`Ctrl+J`
 move through suggestions, and `Tab` or `Enter` completes the highlighted command
-or provider, budget, or project argument. `Esc` closes suggestions. `Ctrl+Space`
+or provider, budget, mode, or workspace argument. With an empty input, `Tab`
+toggles between Build mode and read-only Plan mode. `Esc` closes suggestions. `Ctrl+Space`
 opens the same menu from an empty input.
-The status bar shows the trusted local approval mode, session token/cost totals,
-effective cwd, project, session ID and budget health. Long-running agent and
+The status bar shows the active agent mode, session token/cost totals,
+effective cwd, workspace, session ID and budget health. Long-running agent and
 shell work also shows an elapsed progress ticker. The right panel updates as
 requests run: it shows session state, active model, 24h requests/chats/tokens/cost,
 cache rate, error rate, average latency, daily and monthly budget bars, and the
@@ -135,9 +138,10 @@ Supported provider names:
 ```text
 /help                            list TUI commands (opens overlay)
 /status                          show runtime state
-/projects                        list registered projects
-/project <name>                  set active project
-/project                         clear active project
+/mode build|plan                 switch Build or read-only Plan mode
+/projects                        list registered workspaces
+/project <name|path>             set workspace or register a local directory
+/project                         clear workspace
 /usage                           show recent token and cost telemetry
 /budget                          show daily/monthly budget state
 /theme [theme] [layout] [lines]  show or change TUI appearance
@@ -156,8 +160,12 @@ CSV/TSV uses a table view, and diffs include a compact file, hunk, addition and
 deletion summary. Output lines that explicitly report `progress: current/total`
 or `progress: pct%` also show a deterministic progress bar.
 
-When an active project is selected, the sidebar Files panel summarizes git
+When an active workspace is selected, the sidebar Files panel summarizes git
 worktree changes and links the next inspection path to `!git diff`.
+
+Use `/project /absolute/path/to/project` to register and select an existing
+directory inside the configured workspace or repositories root. This works for
+scratch directories that are not Git repositories.
 
 ## Keyboard Shortcuts
 

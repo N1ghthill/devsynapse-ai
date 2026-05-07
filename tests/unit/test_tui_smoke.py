@@ -33,9 +33,20 @@ def _configure_runtime(monkeypatch: pytest.MonkeyPatch, runtime_root: Path) -> N
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     monkeypatch.setenv("OPENCODE_ZEN_API_KEY", "")
     monkeypatch.setenv("OPENCODE_GO_API_KEY", "")
-    monkeypatch.delenv("DEVSYNAPSE_TUI_CONFIG_FILE", raising=False)
+    monkeypatch.setenv("DEVSYNAPSE_TUI_CONFIG_FILE", str(runtime_root / "config" / "ui.json"))
     monkeypatch.delenv("DEVSYNAPSE_TUI_THEME", raising=False)
     monkeypatch.delenv("DEVSYNAPSE_TUI_LAYOUT", raising=False)
+    monkeypatch.delenv("DEVSYNAPSE_TUI_MAX_LINES", raising=False)
+
+    ui_config = runtime_root / "config" / "ui.json"
+    ui_config.parent.mkdir(parents=True, exist_ok=True)
+    ui_config.write_text(
+        '{"theme": "dark", "layout": "default", "onboarding_completed": true}\n',
+        encoding="utf-8",
+    )
+
+    import config.settings as app_settings
+    app_settings.get_settings.cache_clear()
 
 
 def test_tui_preferences_create_json_config_and_resolve_css_paths(tmp_path, monkeypatch):
@@ -57,7 +68,7 @@ def test_tui_preferences_create_json_config_and_resolve_css_paths(tmp_path, monk
 def test_tui_preferences_accept_theme_and_layout_overrides(tmp_path, monkeypatch):
     _configure_runtime(monkeypatch, tmp_path / "runtime")
     config_file = tmp_path / "runtime" / "config" / "ui.json"
-    config_file.parent.mkdir(parents=True)
+    config_file.parent.mkdir(parents=True, exist_ok=True)
     config_file.write_text('{"theme": "light", "layout": "default"}\n', encoding="utf-8")
     monkeypatch.setenv("DEVSYNAPSE_TUI_CONFIG_FILE", str(config_file))
     monkeypatch.setenv("DEVSYNAPSE_TUI_THEME", "dracula")
@@ -80,6 +91,36 @@ def test_tui_themes_define_high_contrast_focus_states():
         assert "#chat:focus" in content
         assert "#command-suggestions:focus" in content
         assert "#palette-results:focus" in content
+        assert "#provider-api-key:focus" in content
+        assert "#model-search:focus" in content
+        assert "#model-select:focus" in content
+
+
+def test_tui_modal_styles_are_theme_owned():
+    screen_sources = [
+        Path("devsynapse/screens/__init__.py").read_text(encoding="utf-8"),
+        Path("devsynapse/screens/help_screen.py").read_text(encoding="utf-8"),
+        Path("devsynapse/tui_notifications.py").read_text(encoding="utf-8"),
+    ]
+    assert all("CSS =" not in source for source in screen_sources)
+    assert all("#58a6ff" not in source for source in screen_sources)
+
+    base = Path("devsynapse/styles/base.tcss").read_text(encoding="utf-8")
+    assert "ProviderConnectionScreen" in base
+    assert "ModelSelectionScreen" in base
+    assert "HelpScreen" in base
+    assert "#connect-dialog" in base
+    assert "#model-dialog" in base
+    assert "#help-container" in base
+
+    for theme_name in ("dark", "light", "dracula"):
+        content = Path(f"devsynapse/styles/themes/{theme_name}.tcss").read_text(
+            encoding="utf-8"
+        )
+        assert "#connect-dialog" in content
+        assert "#model-dialog" in content
+        assert "#help-container" in content
+        assert "ToastNotification.toast-success" in content
 
 
 def test_tui_diff_renderer_detects_and_summarizes_unified_diff():
@@ -192,13 +233,14 @@ async def test_tui_mounts_and_handles_status_command(tmp_path, monkeypatch):
         assert "DevSynapse AI" in content
         assert "ready" in content
         assert "budget:" in content
-        assert "approval:trusted-auto" in content
+        assert "mode:build" in content
         assert "tok:0" in content
         assert "cost:$0.0000" in content
         assert "cwd:" in content
         assert "session:" in content
         assert "DevSynapse AI" in str(header.content)
         assert "/theme" in str(footer.content)
+        assert "Tab" in str(footer.content)
         assert "^k/^j" in str(footer.content)
         assert "PgUp/PgDn" in str(footer.content)
 
@@ -209,7 +251,7 @@ async def test_tui_mounts_with_configured_theme_and_dense_layout(tmp_path, monke
     _configure_runtime(monkeypatch, runtime_root)
     config_file = runtime_root / "config" / "ui.json"
     monkeypatch.setenv("DEVSYNAPSE_TUI_CONFIG_FILE", str(config_file))
-    config_file.parent.mkdir(parents=True)
+    config_file.parent.mkdir(parents=True, exist_ok=True)
     config_file.write_text(
         (
             '{"theme": "dracula", "layout": "dense", '
@@ -572,6 +614,31 @@ async def test_tui_enter_submits_chat_message(tmp_path, monkeypatch):
 
         assert input_widget.value == ""
         assert input_widget._history[-1] == "hello from enter"
+
+
+@pytest.mark.asyncio
+async def test_tui_tab_on_empty_input_toggles_agent_mode(tmp_path, monkeypatch):
+    _configure_runtime(monkeypatch, tmp_path / "runtime")
+
+    import config.settings as app_settings
+    from devsynapse.tui import DevSynapseTUI
+
+    app_settings.get_settings.cache_clear()
+
+    app = DevSynapseTUI()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+
+        input_widget = app.query_one("#input", EnhancedInput)
+        assert app.agent_mode == "build"
+        assert input_widget.value == ""
+
+        await pilot.press("tab")
+        await pilot.pause()
+
+        assert app.agent_mode == "plan"
+        assert input_widget.value == ""
+        assert "mode:plan" in str(app.query_one("#status-bar", Static).content)
 
 
 @pytest.mark.asyncio

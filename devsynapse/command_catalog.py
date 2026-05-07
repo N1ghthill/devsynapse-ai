@@ -39,9 +39,10 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
     CommandSpec("models", "/models <provider>", "model catalog", "Model", 21, accepts_args=True),
     CommandSpec("discover", "/discover", "refresh catalog", "Model", 22),
     CommandSpec("status", "/status", "runtime status", "Session", 30),
-    CommandSpec("projects", "/projects", "registered projects", "Project", 40),
+    CommandSpec("mode", "/mode <build|plan>", "switch agent mode", "Session", 31, accepts_args=True),
+    CommandSpec("projects", "/projects", "registered workspaces", "Workspace", 40),
     CommandSpec(
-        "project", "/project <name>", "set active project", "Project", 41, accepts_args=True
+        "project", "/project <path|name>", "set workspace", "Workspace", 41, accepts_args=True
     ),
     CommandSpec("usage", "/usage", "token and cost telemetry", "Ops", 50),
     CommandSpec(
@@ -69,7 +70,7 @@ CATEGORY_ORDER = {
     "Setup": 10,
     "Model": 20,
     "Session": 30,
-    "Project": 40,
+    "Workspace": 40,
     "Ops": 50,
     "View": 60,
     "Chat": 70,
@@ -113,6 +114,11 @@ MAX_LINE_VALUES: tuple[tuple[str, str], ...] = (
     ("2000", "default chat log"),
     ("5000", "long chat log"),
     ("10000", "very long chat log"),
+)
+
+MODE_VALUES: tuple[tuple[str, str], ...] = (
+    ("build", "implementation mode"),
+    ("plan", "read-only planning mode"),
 )
 
 SLASH_COMMANDS: tuple[str, ...] = tuple(f"/{spec.name}" for spec in COMMAND_SPECS)
@@ -182,6 +188,9 @@ def build_command_suggestions(
     if spec.name == "budget" and arg_index <= 1:
         return _value_suggestions(f"/{spec.name}", arg_prefix, BUDGET_TARGETS, limit)
 
+    if spec.name == "mode" and arg_index <= 1:
+        return _value_suggestions(f"/{spec.name}", arg_prefix, MODE_VALUES, limit)
+
     if spec.name == "theme":
         if arg_index <= 1:
             return _value_suggestions(f"/{spec.name}", arg_prefix, THEME_VALUES, limit)
@@ -199,8 +208,8 @@ def build_command_suggestions(
             )
 
     if spec.name == "project" and arg_index <= 1:
-        projects = tuple((name, "registered project") for name in sorted(project_names))
-        clear = (("clear", "clear active project"),)
+        projects = tuple((name, "registered workspace") for name in sorted(project_names))
+        clear = (("clear", "clear workspace"),)
         return _value_suggestions(f"/{spec.name}", arg_prefix, (*clear, *projects), limit)
 
     return []

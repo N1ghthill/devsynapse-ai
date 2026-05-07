@@ -51,7 +51,7 @@ Use slash commands inside the TUI:
 
 ```text
 /connect
-/connect deepseek <api-key>
+/connect <provider> <api-key>
 /providers
 /status
 /model

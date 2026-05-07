@@ -83,9 +83,16 @@ class EnhancedInput(Input):
         self.cursor_position = len(self.value)
 
     def action_autocomplete(self) -> None:
-        """Autocomplete slash commands."""
+        """Autocomplete slash commands, paths, and bash commands."""
+        if not self.value.strip():
+            app = self.app
+            if hasattr(app, "cycle_agent_mode"):
+                app.cycle_agent_mode()
+            return
+
         if self._command_menu_accept():
             return
+
         if self.value.startswith("/"):
             partial = self.value.lower()
             matches = [cmd for cmd in SLASH_COMMANDS if cmd.startswith(partial)]
@@ -100,6 +107,8 @@ class EnhancedInput(Input):
                 if common_prefix != self.value:
                     self.value = common_prefix
                     self.cursor_position = len(self.value)
+        elif self.value.startswith("!"):
+            self._autocomplete_bash()
 
     def action_show_command_menu(self) -> None:
         """Open the contextual slash command menu."""
@@ -139,6 +148,21 @@ class EnhancedInput(Input):
         if hasattr(app, "move_command_suggestion"):
             return bool(app.move_command_suggestion(-1))
         return False
+
+    def _autocomplete_bash(self) -> None:
+        """Autocomplete common bash commands."""
+        bash_commands = [
+            "git", "ls", "cd", "pwd", "cat", "grep", "find",
+            "npm", "node", "python", "python3", "make", "curl",
+            "echo", "touch", "mkdir", "rm", "cp", "mv",
+        ]
+        partial = self.value[1:].strip().lower()
+        if not partial:
+            return
+        matches = [cmd for cmd in bash_commands if cmd.startswith(partial)]
+        if len(matches) == 1:
+            self.value = f"!{matches[0]}"
+            self.cursor_position = len(self.value)
 
 
 def preview_autocomplete(value: str) -> str:

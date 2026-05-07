@@ -14,7 +14,10 @@ Screen {
 #status-bar,
 #app-footer,
 DynamicSidebar .sidebar-panel,
-ToastNotification {
+ToastNotification,
+#connect-dialog,
+#model-dialog,
+#help-container {
     background: #212331;
 }
 
@@ -25,22 +28,43 @@ ToastNotification {
 
 #command-suggestions,
 #input,
+#provider-select,
+#provider-api-key,
+#provider-model,
+#model-search,
+#model-select,
 DynamicSidebar .sidebar-panel {
     border: tall #5b5f78;
 }
 
-#input {
+#connect-dialog,
+#model-dialog,
+#help-container {
+    border: round #5b5f78;
+}
+
+#input,
+#provider-select,
+#provider-api-key,
+#provider-model,
+#model-search,
+#model-select {
     background: #1b1d29;
 }
 
-#input:focus {
+#input:focus,
+#provider-select:focus,
+#provider-api-key:focus,
+#provider-model:focus,
+#model-search:focus {
     border: solid #ff79c6;
     background: #1b1d29;
 }
 
 #chat:focus,
 #command-suggestions:focus,
-#palette-results:focus {
+#palette-results:focus,
+#model-select:focus {
     border: solid #ff79c6;
 }
 
@@ -51,6 +75,12 @@ DynamicSidebar .sidebar-panel {
 #status-bar,
 #app-footer,
 #typing-indicator,
+#connect-help,
+#connect-hints,
+#model-help,
+#model-hints,
+#help-shortcuts,
+#help-footer,
 DynamicSidebar .metric,
 DynamicSidebar .sidebar-toggle {
     color: #c7c7e5;
@@ -60,12 +90,66 @@ DynamicSidebar .sidebar-toggle {
     background: #1b1d29;
 }
 
+#help-header,
+#help-shortcuts,
+#help-footer {
+    background: #1b1d29;
+}
+
+#help-header,
+#help-shortcuts {
+    border-bottom: solid #5b5f78;
+}
+
+#help-footer {
+    border-top: solid #5b5f78;
+}
+
+#help-categories {
+    border-right: solid #5b5f78;
+}
+
+.category-button {
+    background: #2a2d3d;
+    color: #f8f8f2;
+}
+
+.category-button:focus {
+    background: #44475a;
+}
+
+.category-button.active {
+    background: #bd93f9;
+    color: #151620;
+}
+
 .panel-title,
+#connect-title,
+#model-title,
+#help-title,
 DynamicSidebar .sidebar-title,
 DynamicSidebar .metric-value,
 .spinner,
 .pulse {
     color: #ff79c6;
+}
+
+#connect-error {
+    color: #ff5555;
+}
+
+#connect-actions Button,
+#model-actions Button,
+#help-footer Button {
+    background: #2a2d3d;
+    color: #f8f8f2;
+    border: tall #5b5f78;
+}
+
+#connect-actions Button:focus,
+#model-actions Button:focus,
+#help-footer Button:focus {
+    border: solid #ff79c6;
 }
 
 DynamicSidebar {
@@ -92,6 +176,30 @@ RichLog {
 
 ToastNotification {
     border: round #bd93f9;
+}
+
+ToastNotification.toast-success {
+    background: #1f3a2a;
+    border: round #50fa7b;
+    color: #50fa7b;
+}
+
+ToastNotification.toast-error {
+    background: #3a1f28;
+    border: round #ff5555;
+    color: #ff5555;
+}
+
+ToastNotification.toast-info {
+    background: #1d3540;
+    border: round #8be9fd;
+    color: #8be9fd;
+}
+
+ToastNotification.toast-warning {
+    background: #3a3320;
+    border: round #ffb86c;
+    color: #ffb86c;
 }
 
 #palette-title,

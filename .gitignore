@@ -28,6 +28,7 @@ frontend/src-tauri/binaries/devsynapse-backend-*
 
 build/
 dist/
+artifacts/
 
 .DS_Store
 Thumbs.db
