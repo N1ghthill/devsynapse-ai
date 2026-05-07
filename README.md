@@ -145,6 +145,12 @@ Inside the TUI, DevSynapse exposes operational slash commands:
 !<command>                       run a shell command as a tool result
 ```
 
+Workspace resolution is discovery-first. An explicit user path wins; an
+existing Git repository root is treated as the project boundary even when it is
+outside the preferred repositories directory; registered workspaces and the
+current cwd provide additional context. The configured repositories root is only
+the default location for new standalone projects when no stronger signal exists.
+
 The TUI keeps the conversation log, input line, session state, provider status,
 budget state and common commands visible in one terminal screen. The status bar
 shows the active agent mode, session token/cost totals, effective cwd,

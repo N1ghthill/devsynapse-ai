@@ -33,6 +33,8 @@ class ProjectResolver:
         """Resolve a project name from a repos root path reference."""
         if not text or not self._looks_like_path_reference(text):
             return None
+        if not str(text).strip().startswith(("/", "~", ".", "$HOME")):
+            return None
 
         try:
             path = Path(text).expanduser().resolve()
@@ -49,6 +51,47 @@ class ProjectResolver:
             return None
         project_name = relative_path.parts[0]
         return project_name if project_name and not project_name.startswith(".") else None
+
+    @staticmethod
+    def find_git_root(path: Path) -> Optional[Path]:
+        """Return the nearest Git root for an existing path or nearest existing parent."""
+        try:
+            candidate = path.expanduser()
+            if not candidate.exists():
+                existing_parent = next(
+                    (parent for parent in [candidate.parent, *candidate.parents] if parent.exists()),
+                    None,
+                )
+                if existing_parent is None:
+                    return None
+                candidate = existing_parent
+            candidate = candidate.resolve()
+            if candidate.is_file():
+                candidate = candidate.parent
+        except OSError:
+            return None
+
+        for current in [candidate, *candidate.parents]:
+            if (current / ".git").exists():
+                return current
+        return None
+
+    def resolve_git_project_path(self, text: str) -> Optional[tuple[str, Path]]:
+        """Resolve a project from an explicit Git repository path reference."""
+        if not text or not self._looks_like_path_reference(text):
+            return None
+        if not str(text).strip().startswith(("/", "~", ".", "$HOME")):
+            return None
+
+        try:
+            path = Path(text).expanduser()
+        except (OSError, ValueError):
+            return None
+
+        git_root = self.find_git_root(path)
+        if git_root is None:
+            return None
+        return git_root.name, git_root
 
     @staticmethod
     def extract_path_references(text: str) -> List[str]:
@@ -101,7 +144,12 @@ class ProjectResolver:
         best_score: int = -1
 
         text_lower = text.lower()
-        path_candidates = [text] if self._looks_like_path_reference(text) else []
+        stripped_text = str(text).strip()
+        path_candidates = (
+            [stripped_text]
+            if stripped_text.startswith(("/", "~", ".", "$HOME"))
+            else []
+        )
         for candidate in self.extract_path_references(text):
             if candidate not in path_candidates:
                 path_candidates.append(candidate)
@@ -130,6 +178,10 @@ class ProjectResolver:
             repos_project = self.resolve_from_repos_path(path_candidate)
             if repos_project:
                 return repos_project
+
+            git_project = self.resolve_git_project_path(path_candidate)
+            if git_project:
+                return git_project[0]
 
         for project_name, project_info in self.known_projects.items():
             project_path = str(Path(project_info["path"]).resolve())
@@ -180,6 +232,9 @@ class ProjectResolver:
             repos_project = self.resolve_from_repos_path(candidate)
             if repos_project:
                 return repos_project
+            git_project = self.resolve_git_project_path(candidate)
+            if git_project:
+                return git_project[0]
 
         if explicit_project_name and explicit_project_name in self.known_projects:
             return explicit_project_name

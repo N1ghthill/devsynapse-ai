@@ -21,6 +21,7 @@ def build_system_prompt(
     default_cwd: str,
     agent_mode: str = "build",
     target_path: Optional[Dict] = None,
+    current_git_project: Optional[Dict] = None,
 ) -> str:
     assistant_user_name = assistant_user_name.strip() or "the user"
     normalized_mode = "plan" if str(agent_mode).strip().lower() == "plan" else "build"
@@ -61,6 +62,17 @@ def build_system_prompt(
             "- Create all project files inside this path.\n"
         )
 
+    current_git_section = ""
+    if current_git_project and not target_path:
+        current_git_section = (
+            "\n## DISCOVERED CURRENT GIT PROJECT\n"
+            f"- Git root from current cwd: {current_git_project.get('display_path', 'N/A')}\n"
+            f"- Absolute path: {current_git_project.get('path', 'N/A')}\n"
+            f"- Project name: {current_git_project.get('project_name', 'N/A')}\n"
+            "- Use this as project context for requests about this/current codebase.\n"
+            "- Do not force new unrelated projects into this Git repository.\n"
+        )
+
     return f"""You are DevSynapse (Development Synapse),
 an intelligent development assistant for {assistant_user_name}.
 
@@ -88,16 +100,22 @@ Blend deep technical skills with natural conversational communication.
 {projects_info}
 {active_project_section}
 {target_path_section}
+{current_git_section}
 {stuck_context}
 {mode_section}
 ## LOCAL WORKSPACE PATHS
 - Workspace root: {workspace_root}
 - Repositories root: {repos_root}
 - Default command cwd: {default_cwd}
-- New standalone projects should be created inside the repositories root or the explicit
-  local path provided by the user.
-- If no workspace is active, infer the target from the user's explicit local path before
-  planning tool calls. Ask for clarification only when no target path can be inferred.
+- Resolve project scope by discovery first: explicit user path, detected Git root,
+  active/registered workspace, then current cwd context.
+- The repositories root is only the default location for new standalone projects when
+  the user did not provide another path and no existing project context applies.
+- Do not assume the repositories root contains all user projects. Existing projects may
+  live elsewhere when the user opens, registers, or explicitly names that location.
+- If no workspace is active, infer the target from the user's explicit local path or Git
+  context before planning tool calls. Ask for clarification only when no target can be
+  inferred.
 - Do not use placeholder paths such as `/home/user`, `/workspace`, `~/projects`, or `/tmp`
   for durable project files unless the user explicitly asks for that exact location.
 - The current workspace is the working directory boundary for this chat unless the user

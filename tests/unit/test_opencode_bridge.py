@@ -713,6 +713,29 @@ class TestOpenCodeBridge:
         assert project_name == "devsynapse-ai"
 
     @pytest.mark.asyncio
+    async def test_execute_command_registers_explicit_git_project_outside_repos(self, tmp_path):
+        external_repo = tmp_path / "external" / "client-app"
+        (external_repo / ".git").mkdir(parents=True)
+        bridge = OpenCodeBridge(known_projects={}, allowed_directories=[str(PROJECT_ROOT)])
+
+        with patch.object(bridge._executor, "execute_bash", new_callable=AsyncMock) as mock_bash:
+            mock_bash.return_value = (True, "ran", "ok")
+
+            result = await bridge.execute_command(
+                f'bash "git -C {external_repo} status"',
+                user_role="admin",
+            )
+
+        assert result.success is True
+        assert result.project_name == "client-app"
+        assert bridge.get_project_context("client-app")["path"] == str(external_repo.resolve())
+        mock_bash.assert_awaited_once_with(
+            [f"git -C {external_repo} status", ""],
+            str(external_repo.resolve()),
+            trusted_shell=True,
+        )
+
+    @pytest.mark.asyncio
     async def test_execute_command_admin_can_read_outside_allowed_directories(self):
         bridge = _bridge()
 

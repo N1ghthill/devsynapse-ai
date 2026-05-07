@@ -60,6 +60,29 @@ class TestPathResolution:
         assert result.is_valid is False
         assert "fora dos diretórios permitidos" in result.error_message
 
+    def test_existing_git_repo_outside_allowed_dirs_is_valid(self, tmp_path):
+        """Explicit Git repos should be valid even outside preferred roots."""
+        repos_root = tmp_path / "repos"
+        repos_root.mkdir()
+        workspace_root = tmp_path / "workspace"
+        workspace_root.mkdir()
+        external_repo = tmp_path / "external" / "client-app"
+        (external_repo / ".git").mkdir(parents=True)
+        (external_repo / "src").mkdir()
+
+        resolver = ProjectPathResolver(
+            repos_root=repos_root,
+            workspace_root=workspace_root,
+            allowed_directories=[repos_root, workspace_root],
+        )
+
+        result = resolver.resolve_path(str(external_repo / "src"))
+
+        assert result.is_valid is True
+        assert result.absolute_path == external_repo.resolve()
+        assert result.project_name == "client-app"
+        assert result.source == "git_discovery"
+
     def test_resolve_path_in_etc_blocked(self, tmp_path):
         """System directories should be blocked."""
         repos_root = tmp_path / "repos"
@@ -227,6 +250,28 @@ class TestPathExtraction:
 
         result = resolver.resolve_from_message("Crie uma calculadora")
         assert result.is_valid is False
+
+    def test_current_git_project_is_discovered_without_forcing_message_resolution(self, tmp_path):
+        """Current cwd Git context is available without hijacking pathless requests."""
+        repos_root = tmp_path / "repos"
+        repos_root.mkdir()
+        workspace_root = tmp_path / "workspace"
+        workspace_root.mkdir()
+        current_repo = tmp_path / "elsewhere" / "active-repo"
+        (current_repo / ".git").mkdir(parents=True)
+
+        resolver = ProjectPathResolver(
+            repos_root=repos_root,
+            workspace_root=workspace_root,
+            allowed_directories=[repos_root, workspace_root],
+            default_cwd=current_repo,
+        )
+
+        assert resolver.resolve_from_message("Crie uma calculadora").is_valid is False
+        current = resolver.resolve_current_git_project()
+        assert current.is_valid is True
+        assert current.absolute_path == current_repo.resolve()
+        assert current.source == "current_git"
 
     def test_extract_project_name_only(self, tmp_path):
         """Extract project name when no path specified."""

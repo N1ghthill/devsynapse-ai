@@ -221,6 +221,7 @@ class OpenCodeBridge:
             )
 
         resolved_project_name = self._infer_project_name(command_type, args, project_name)
+        self._register_git_project_if_needed(command_type, args, resolved_project_name)
         self._register_repos_project_if_needed(resolved_project_name)
         if (
             project_name
@@ -473,6 +474,30 @@ class OpenCodeBridge:
 
     def _register_repos_project_if_needed(self, project_name: Optional[str]) -> None:
         self._resolver.register_repos_project_if_needed(project_name, self.register_project)
+
+    def _register_git_project_if_needed(
+        self,
+        command_type: Optional[str],
+        args: Optional[List[str]],
+        project_name: Optional[str],
+    ) -> None:
+        if not project_name or project_name in self.known_projects or not args:
+            return
+
+        candidates: list[str] = [str(args[0])]
+        if command_type == "bash":
+            try:
+                candidates = shlex.split(str(args[0]))
+            except ValueError:
+                candidates = [str(args[0])]
+        elif len(args) > 1:
+            candidates.append(str(args[1]))
+
+        for candidate in candidates:
+            git_project = self._resolver.resolve_git_project_path(candidate)
+            if git_project and git_project[0] == project_name:
+                self.register_project(project_name, str(git_project[1]), "project", "medium")
+                return
 
     def _resolve_project_from_text(self, text: str) -> Optional[str]:
         return self._resolver.resolve_from_text(text)

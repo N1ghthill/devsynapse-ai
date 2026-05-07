@@ -2,6 +2,7 @@
 
 import logging
 from decimal import Decimal
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple
 
 import config.settings as app_settings
@@ -127,7 +128,8 @@ class DevSynapseBrain:
         self.path_resolver = ProjectPathResolver(
             repos_root=settings.dev_repos_root,
             workspace_root=settings.dev_workspace_root,
-            allowed_directories=[settings.dev_repos_root, settings.dev_workspace_root],
+            allowed_directories=[Path(path) for path in settings.build_allowed_directories()],
+            default_cwd=settings.default_execution_cwd,
         )
 
         # Intent detector for 3-spectra system (Chat, Planning, Build)
@@ -166,6 +168,7 @@ class DevSynapseBrain:
 
         # Extract target path from user message for exact path resolution
         target_path_info = self._extract_target_path_from_message(current_request)
+        current_git_info = self._current_git_project_info()
 
         return build_system_prompt(
             assistant_user_name=settings.assistant_user_name,
@@ -183,6 +186,7 @@ class DevSynapseBrain:
             default_cwd=str(settings.default_execution_cwd),
             agent_mode=str(context.get("agent_mode") or "build"),
             target_path=target_path_info,
+            current_git_project=current_git_info,
         )
 
     def _extract_target_path_from_message(self, message: str) -> Optional[Dict]:
@@ -205,6 +209,17 @@ class DevSynapseBrain:
             }
 
         return None
+
+    def _current_git_project_info(self) -> Optional[Dict]:
+        """Return Git project context discovered from the configured default cwd."""
+        resolution = self.path_resolver.resolve_current_git_project()
+        if not resolution.is_valid:
+            return None
+        return {
+            "path": str(resolution.absolute_path),
+            "display_path": resolution.display_path,
+            "project_name": resolution.project_name,
+        }
 
     async def process_message(
         self,
@@ -772,29 +787,28 @@ class DevSynapseBrain:
             logger.debug("Could not persist generated project %s", project_name, exc_info=True)
 
     def _infer_and_register_project_from_text(self, text: str) -> Optional[str]:
-        """Infer a repos project from user text before the LLM plans filesystem work.
+        """Infer a project from user text before the LLM plans filesystem work.
 
-        Uses ProjectPathResolver to extract exact path from user message.
+        Uses ProjectPathResolver to extract exact paths and discover Git roots.
         Example: "Crie calculadora em ~/ruas/repositorios/calc_py"
-        -> Resolves to exact path and registers project
+        -> Resolves to exact path and registers project.
         """
         # Try new path resolver first (extracts exact path from message)
         resolution = self.path_resolver.resolve_from_message(text)
         if resolution.is_valid and resolution.project_name:
-            # Register the project with exact path
             self.opencode.register_project(
                 name=resolution.project_name,
                 path=str(resolution.absolute_path),
                 project_type="project",
                 priority="medium",
             )
-            # Also call old method for backward compatibility
-            register = getattr(self.opencode, "_register_repos_project_if_needed", None)
-            if callable(register):
-                register(resolution.project_name)
-            self._persist_repos_project_if_needed(resolution.project_name)
+            self._persist_project_if_needed(
+                resolution.project_name,
+                resolution.absolute_path,
+            )
             logger.info(
-                "Project resolved from text: %s -> %s",
+                "Project resolved from text via %s: %s -> %s",
+                resolution.source,
                 resolution.project_name,
                 resolution.absolute_path,
             )
@@ -814,6 +828,27 @@ class DevSynapseBrain:
             register(project_name)
         self._persist_repos_project_if_needed(project_name)
         return project_name
+
+    def _persist_project_if_needed(self, project_name: str, project_root: Path) -> None:
+        """Persist a discovered project path without assuming it lives under repos_root."""
+        try:
+            resolved_root = project_root.expanduser().resolve()
+        except (OSError, ValueError):
+            return
+        if not resolved_root.exists():
+            return
+        try:
+            if self.memory_optional.get_project(project_name):
+                return
+            self.memory_optional.add_project(
+                project_name,
+                str(resolved_root),
+                project_type="project",
+                priority="medium",
+                replace=False,
+            )
+        except (OSError, ValueError):
+            logger.debug("Could not persist discovered project %s", project_name, exc_info=True)
 
     @staticmethod
     def _normalize_agent_mode(agent_mode: str) -> str:

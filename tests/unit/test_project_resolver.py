@@ -102,6 +102,18 @@ class TestResolveFromText:
 
         assert result == "calc_py"
 
+    def test_git_path_outside_repos_in_free_form_text(self, tmp_path):
+        repos_root = tmp_path / "repos"
+        repos_root.mkdir()
+        external_repo = tmp_path / "external" / "client-app"
+        (external_repo / ".git").mkdir(parents=True)
+        (external_repo / "src").mkdir()
+        r = _resolver(known_projects={}, tmp_path=repos_root)
+
+        result = r.resolve_from_text(f"Trabalhe em {external_repo}/src agora")
+
+        assert result == "client-app"
+
     def test_empty_text(self):
         r = _resolver()
         result = r.resolve_from_text("")
@@ -147,3 +159,14 @@ class TestInferProjectName:
         r = _resolver()
         result = r.infer_project_name("bash", [], None)
         assert result is None
+
+    def test_infers_git_project_outside_repos(self, tmp_path):
+        repos_root = tmp_path / "repos"
+        repos_root.mkdir()
+        external_repo = tmp_path / "external" / "client-app"
+        (external_repo / ".git").mkdir(parents=True)
+        r = _resolver(known_projects={}, tmp_path=repos_root)
+
+        result = r.infer_project_name("bash", [f"git -C {external_repo} status"], None)
+
+        assert result == "client-app"

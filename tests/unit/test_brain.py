@@ -409,8 +409,10 @@ class TestDevSynapseBrain:
 
     @pytest.mark.asyncio
     async def test_process_message_infers_project_from_user_path_before_tool(
-        self, mock_memory, mock_bridge
+        self, tmp_path, mock_memory, mock_bridge
     ):
+        project_root = tmp_path / "calc_py"
+        (project_root / ".git").mkdir(parents=True)
         brain = DevSynapseBrain(mock_memory, mock_bridge)
         brain.api_key = "test-key"
         mock_bridge._resolve_project_from_text.return_value = "calc_py"
@@ -444,7 +446,7 @@ class TestDevSynapseBrain:
             ]
 
             response, cmd, usage = await brain.process_message(
-                "Trabalhe em /home/irving/ruas/repositorios/calc_py/ e crie uma calculadora",
+                f"Trabalhe em {project_root} e crie uma calculadora",
                 "test_session",
                 user_id="irving",
                 user_role="admin",
@@ -453,13 +455,20 @@ class TestDevSynapseBrain:
         assert response == "Criado em calc_py."
         assert cmd is None
         assert usage is None
-        mock_bridge._register_repos_project_if_needed.assert_called_once_with("calc_py")
+        mock_bridge.register_project.assert_called_with(
+            name="calc_py",
+            path=str(project_root.resolve()),
+            project_type="project",
+            priority="medium",
+        )
         assert mock_bridge.execute_command.await_args.kwargs["project_name"] == "calc_py"
 
     @pytest.mark.asyncio
     async def test_process_message_user_path_overrides_persisted_project(
-        self, mock_memory, mock_bridge
+        self, tmp_path, mock_memory, mock_bridge
     ):
+        project_root = tmp_path / "calc_py"
+        (project_root / ".git").mkdir(parents=True)
         mock_memory.get_conversation_context.return_value = {
             "conversation_history": [],
             "user_preferences": "Python",
@@ -500,13 +509,41 @@ class TestDevSynapseBrain:
             ]
 
             await brain.process_message(
-                "Agora use /home/irving/ruas/repositorios/calc_py/ e crie o app",
+                f"Agora use {project_root} e crie o app",
                 "test_session",
                 user_id="irving",
                 user_role="admin",
             )
 
         assert mock_bridge.execute_command.await_args.kwargs["project_name"] == "calc_py"
+
+    def test_infer_project_registers_explicit_git_repo_outside_repos(
+        self, tmp_path, mock_memory, mock_bridge
+    ):
+        external_repo = tmp_path / "client-app"
+        (external_repo / ".git").mkdir(parents=True)
+        mock_memory.get_project.return_value = None
+
+        brain = DevSynapseBrain(mock_memory, mock_bridge)
+
+        project_name = brain._infer_and_register_project_from_text(
+            f"Trabalhe em {external_repo} e revise a arquitetura"
+        )
+
+        assert project_name == "client-app"
+        mock_bridge.register_project.assert_called_once_with(
+            name="client-app",
+            path=str(external_repo.resolve()),
+            project_type="project",
+            priority="medium",
+        )
+        mock_memory.add_project.assert_called_once_with(
+            "client-app",
+            str(external_repo.resolve()),
+            project_type="project",
+            priority="medium",
+            replace=False,
+        )
 
     @pytest.mark.asyncio
     async def test_plan_mode_executes_tools_as_user(self, mock_memory, mock_bridge):

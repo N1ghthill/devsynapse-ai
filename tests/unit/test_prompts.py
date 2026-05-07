@@ -155,3 +155,31 @@ class TestBuildSystemPrompt:
         assert "/custom/workspace" in result
         assert "/custom/repos" in result
         assert "/custom/cwd" in result
+        assert "repositories root is only the default location" in result
+        assert "Do not assume the repositories root contains all user projects" in result
+
+    def test_current_git_project_context_included_without_target_path(self):
+        result = build_system_prompt(
+            assistant_user_name="dev",
+            user_prefs="",
+            projects_info="",
+            agent_learning="",
+            procedural_memory="",
+            skills_context="",
+            agent_run_context="",
+            stuck_context="",
+            active_project_name=None,
+            active_project_path=None,
+            workspace_root="/workspace",
+            repos_root="/repos",
+            default_cwd="/elsewhere/client-app",
+            current_git_project={
+                "display_path": "/elsewhere/client-app",
+                "path": "/elsewhere/client-app",
+                "project_name": "client-app",
+            },
+        )
+
+        assert "DISCOVERED CURRENT GIT PROJECT" in result
+        assert "/elsewhere/client-app" in result
+        assert "Do not force new unrelated projects into this Git repository" in result

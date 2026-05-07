@@ -24,8 +24,12 @@ Plan for read-only analysis. `Tab` on an empty input toggles the mode; `/mode
 build|plan` sets it explicitly.
 
 `/project <name>` selects a registered workspace. `/project <path>` registers
-and selects an existing directory inside the configured workspace or
-repositories root, including directories that are not Git repositories.
+and selects a trusted local directory. Project resolution is discovery-first:
+explicit paths win, detected Git roots define project boundaries, registered
+workspaces and current cwd provide context, and the configured repositories root
+is only the fallback for new standalone projects. Scratch directories that are
+not Git repositories are allowed inside the configured workspace or repositories
+root.
 
 Official TUI commands:
 

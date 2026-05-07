@@ -163,9 +163,13 @@ or `progress: pct%` also show a deterministic progress bar.
 When an active workspace is selected, the sidebar Files panel summarizes git
 worktree changes and links the next inspection path to `!git diff`.
 
-Use `/project /absolute/path/to/project` to register and select an existing
-directory inside the configured workspace or repositories root. This works for
-scratch directories that are not Git repositories.
+Workspace resolution is discovery-first. Explicit paths win, existing Git roots
+define project boundaries even outside the preferred repositories directory, and
+registered workspaces or the current cwd provide context. The configured
+repositories root is only the default for new standalone projects when no
+stronger signal exists. Use `/project /absolute/path/to/project` to register and
+select a trusted local directory; scratch directories are still allowed inside
+the configured workspace or repositories root.
 
 ## Keyboard Shortcuts
 
