@@ -9,6 +9,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
+from config.settings import get_settings
 from core.async_utils import run_blocking
 from core.db import connect_db
 from core.llm_optimization import cache_hit_rate_pct
@@ -78,8 +79,13 @@ class ConversationStore:
         }
 
         # Obter histórico recente da conversa
+        # Use configured limit instead of hardcoded value
+        settings = get_settings()
+        history_limit = settings.conversation_history_limit
+
         if conversation_id:
-            cursor.execute('''
+            cursor.execute(
+                '''
                 SELECT id, conversation_id, timestamp, user_message, ai_response,
                        opencode_command, command_executed, execution_result,
                        execution_output, execution_status, execution_reason_code,
@@ -89,10 +95,13 @@ class ConversationStore:
                 FROM conversations 
                 WHERE conversation_id = ? 
                 ORDER BY timestamp DESC 
-                LIMIT 5
-            ''', (conversation_id,))
+                LIMIT ?
+                ''',
+                (conversation_id, history_limit),
+            )
         else:
-            cursor.execute('''
+            cursor.execute(
+                '''
                 SELECT id, conversation_id, timestamp, user_message, ai_response,
                        opencode_command, command_executed, execution_result,
                        execution_output, execution_status, execution_reason_code,
@@ -101,8 +110,10 @@ class ConversationStore:
                        reasoning_tokens, estimated_cost_usd, conversation_project_name
                 FROM conversations 
                 ORDER BY timestamp DESC 
-                LIMIT 5
-            ''')
+                LIMIT ?
+                ''',
+                (history_limit,),
+            )
 
         rows = cursor.fetchall()
         for row in reversed(rows):  # Ordem cronológica
@@ -606,38 +617,45 @@ class ConversationStore:
             opencode_command,
         )
 
-        cursor.execute('''
-            INSERT INTO conversations 
-            (
-                conversation_id, timestamp, user_message, ai_response, opencode_command,
-                conversation_title, llm_provider, llm_model, prompt_tokens,
-                completion_tokens, total_tokens, prompt_cache_hit_tokens,
-                prompt_cache_miss_tokens, reasoning_tokens, estimated_cost_usd,
-                conversation_project_name
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            conversation_id,
-            timestamp,
-            user_message,
-            ai_response,
-            opencode_command,
-            conversation_title,
-            llm_usage.get("provider") if llm_usage else None,
-            llm_usage.get("model") if llm_usage else None,
-            llm_usage.get("prompt_tokens") if llm_usage else None,
-            llm_usage.get("completion_tokens") if llm_usage else None,
-            llm_usage.get("total_tokens") if llm_usage else None,
-            llm_usage.get("prompt_cache_hit_tokens") if llm_usage else None,
-            llm_usage.get("prompt_cache_miss_tokens") if llm_usage else None,
-            llm_usage.get("reasoning_tokens") if llm_usage else None,
-            llm_usage.get("estimated_cost_usd") if llm_usage else None,
-            inferred_project_name,
-        ))
+        try:
+            # Write to conversations table (primary source for budget/cost stats)
+            cursor.execute('''
+                INSERT INTO conversations
+                (
+                    conversation_id, timestamp, user_message, ai_response, opencode_command,
+                    conversation_title, llm_provider, llm_model, prompt_tokens,
+                    completion_tokens, total_tokens, prompt_cache_hit_tokens,
+                    prompt_cache_miss_tokens, reasoning_tokens, estimated_cost_usd,
+                    conversation_project_name
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                conversation_id,
+                timestamp,
+                user_message,
+                ai_response,
+                opencode_command,
+                conversation_title,
+                llm_usage.get("provider") if llm_usage else None,
+                llm_usage.get("model") if llm_usage else None,
+                llm_usage.get("prompt_tokens") if llm_usage else None,
+                llm_usage.get("completion_tokens") if llm_usage else None,
+                llm_usage.get("total_tokens") if llm_usage else None,
+                llm_usage.get("prompt_cache_hit_tokens") if llm_usage else None,
+                llm_usage.get("prompt_cache_miss_tokens") if llm_usage else None,
+                llm_usage.get("reasoning_tokens") if llm_usage else None,
+                llm_usage.get("estimated_cost_usd") if llm_usage else None,
+                inferred_project_name,
+            ))
 
-        conn.commit()
-        if owns_conn:
-            conn.close()
+            conn.commit()
+        except Exception:
+            if owns_conn:
+                conn.rollback()
+            raise
+        finally:
+            if owns_conn:
+                conn.close()
 
         logger.debug("Interaction saved: %s...", user_message[:50])
         return inferred_project_name
@@ -783,3 +801,65 @@ class ConversationStore:
 
         conn.commit()
         conn.close()
+
+    def prune_old_data(
+        self,
+        conversations_days: int = 90,
+        telemetry_days: int = 60,
+        agent_runs_days: int = 30,
+    ) -> Dict[str, int]:
+        """Prune old data based on retention policy.
+
+        Returns dict with counts of deleted rows per table.
+        """
+        conn = connect_db(self.db_path)
+        cursor = conn.cursor()
+        deleted = {}
+
+        try:
+            # Prune old conversations
+            conv_cutoff = (datetime.now() - timedelta(days=conversations_days)).isoformat()
+            cursor.execute(
+                "DELETE FROM conversations WHERE timestamp < ?",
+                (conv_cutoff,),
+            )
+            deleted["conversations"] = cursor.rowcount
+
+            # Prune old telemetry
+            telem_cutoff = (datetime.now() - timedelta(days=telemetry_days)).isoformat()
+            cursor.execute(
+                "DELETE FROM llm_request_telemetry WHERE timestamp < ?",
+                (telem_cutoff,),
+            )
+            deleted["llm_request_telemetry"] = cursor.rowcount
+
+            # Prune old agent runs
+            agent_cutoff = (datetime.now() - timedelta(days=agent_runs_days)).isoformat()
+            cursor.execute(
+                "DELETE FROM agent_run_events WHERE created_at < ?",
+                (agent_cutoff,),
+            )
+            deleted["agent_run_events"] = cursor.rowcount
+
+            cursor.execute(
+                "DELETE FROM agent_route_decisions WHERE timestamp < ?",
+                (agent_cutoff,),
+            )
+            deleted["agent_route_decisions"] = cursor.rowcount
+
+            conn.commit()
+
+            # Vacuum to reclaim space
+            cursor.execute("VACUUM")
+
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+        logger.info(
+            "Pruned old data: %s",
+            {k: v for k, v in deleted.items() if v > 0},
+        )
+        return deleted

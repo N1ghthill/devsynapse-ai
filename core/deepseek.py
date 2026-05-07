@@ -423,20 +423,30 @@ class DeepSeekClient:
         prompt_cache_miss_tokens: int,
         completion_tokens: int,
     ) -> Optional[float]:
-        if provider != "deepseek":
-            return None
+        """Calculate usage cost for ANY provider/model.
 
-        pricing = self._get_model_pricing(model)
-        if pricing is None:
-            return None
+        Supports:
+        - DeepSeek (hardcoded pricing)
+        - OpenRouter (catalog pricing)
+        - OpenCode Zen/Go (catalog pricing)
+        - Any other provider with catalog pricing
+        """
+        # Try DeepSeek hardcoded pricing first
+        if provider == "deepseek":
+            pricing = self._get_model_pricing(model)
+            if pricing is not None:
+                per_million = Decimal("1000000")
+                total = (
+                    Decimal(prompt_cache_hit_tokens) * pricing["cache_hit"] / per_million
+                    + Decimal(prompt_cache_miss_tokens) * pricing["cache_miss"] / per_million
+                    + Decimal(completion_tokens) * pricing["output"] / per_million
+                )
+                return float(total.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP))
 
-        per_million = Decimal("1000000")
-        total = (
-            Decimal(prompt_cache_hit_tokens) * pricing["cache_hit"] / per_million
-            + Decimal(prompt_cache_miss_tokens) * pricing["cache_miss"] / per_million
-            + Decimal(completion_tokens) * pricing["output"] / per_million
-        )
-        return float(total.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP))
+        # For all other providers, pricing comes from catalog
+        # This is handled by UsageTracker.enrich_usage_cost()
+        # Return None here to let catalog pricing take over
+        return None
 
     def _get_model_pricing(self, model: str) -> Optional[Dict[str, Decimal]]:
         normalized = model.lower()

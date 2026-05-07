@@ -681,3 +681,20 @@ class MemorySystem:
             "daily": daily_status,
             "monthly": monthly_status,
         }
+
+    def prune_old_data(
+        self,
+        conversations_days: Optional[int] = None,
+        telemetry_days: Optional[int] = None,
+        agent_runs_days: Optional[int] = None,
+    ) -> Dict[str, int]:
+        """Prune old data based on retention policy.
+
+        Uses configured defaults if not specified.
+        """
+        settings = get_settings()
+        return self.conversations.prune_old_data(
+            conversations_days=conversations_days or settings.data_retention_conversations_days,
+            telemetry_days=telemetry_days or settings.data_retention_telemetry_days,
+            agent_runs_days=agent_runs_days or settings.data_retention_agent_runs_days,
+        )

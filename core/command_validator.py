@@ -41,7 +41,7 @@ class CommandValidator:
             return False, "Invalid command type for authorization"
 
         if user_role == "admin":
-            return True, "Authorized as trusted administrator"
+            return self._authorize_admin_command(command_type, args, project_name)
 
         if command_type in self.read_only_commands:
             return True, "Authorized"
@@ -64,6 +64,39 @@ class CommandValidator:
             )
 
         return False, f"Command '{command_type}' not authorized for current role"
+
+    def _authorize_admin_command(
+        self,
+        command_type: str,
+        args: Optional[List],
+        project_name: Optional[str],
+    ) -> Tuple[bool, str]:
+        """Authorize trusted admin commands while keeping durable writes project-bound."""
+        if command_type in self.read_only_commands:
+            return True, "Authorized as trusted administrator"
+
+        if command_type in self.admin_only_commands:
+            return self._authorize_project_mutation(command_type, args, "admin", project_name, [])
+
+        if command_type == "bash":
+            try:
+                parts = shlex.split(args[0] if args else "")
+            except ValueError:
+                return False, "Invalid bash command syntax"
+            if not parts:
+                return False, "Empty bash command"
+            first_cmd = parts[0].lower()
+            if first_cmd in self.admin_only_bash_commands:
+                return self._authorize_project_mutation(
+                    f"bash:{first_cmd}",
+                    args,
+                    "admin",
+                    project_name,
+                    [],
+                )
+            return True, "Authorized as trusted administrator"
+
+        return True, "Authorized as trusted administrator"
 
     def _authorize_bash_command(
         self,

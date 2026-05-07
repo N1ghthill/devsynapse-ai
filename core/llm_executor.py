@@ -5,6 +5,8 @@ import random
 import time
 from typing import Callable, Dict, List, Optional
 
+import requests
+
 from config.settings import AppSettings
 from core.async_utils import run_blocking
 from core.deepseek import DeepSeekClient, LLMResult
@@ -13,6 +15,16 @@ from core.tools.openai_tool_defs import OPENCODE_TOOLS
 from core.usage_tracker import UsageTracker
 
 logger = logging.getLogger(__name__)
+
+# Operational errors that should trigger fallback mode
+OPERATIONAL_ERRORS = (
+    requests.ConnectionError,
+    requests.Timeout,
+    requests.HTTPError,
+    TimeoutError,
+    OSError,
+    RuntimeError,
+)
 
 
 class LLMExecutor:
@@ -39,7 +51,7 @@ class LLMExecutor:
     ) -> LLMResult:
         """Call the LLM API with model fallback and degraded mode."""
         if not self._client.configured:
-            return LLMResult(content=self._get_fallback_response())
+            return LLMResult(content=self._get_fallback_response("not_configured"))
 
         model = route.model if route else self._client.model
         start_time = time.perf_counter()
@@ -48,21 +60,21 @@ class LLMExecutor:
                 messages, model, tool_choice, route, user_id, conversation_id, start_time,
                 on_token,
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             fallback_model = route.fallback_model if route else None
             if fallback_model and fallback_model != model:
                 try:
                     logger.warning(
-                        "DeepSeek %s call failed (%s); retrying with %s",
+                        "LLM model %s call failed (%s); retrying with %s",
                         model, e, fallback_model,
                     )
                     return await self._complete_and_record(
                         messages, fallback_model, tool_choice, route, user_id,
                         conversation_id, start_time, on_token,
                     )
-                except Exception as fallback_error:
+                except OPERATIONAL_ERRORS as fallback_error:
                     logger.warning(
-                        "DeepSeek fallback model %s failed: %s (original error: %s)",
+                        "LLM fallback model %s failed: %s (original error: %s)",
                         fallback_model, fallback_error, e,
                     )
                     self._usage.record_llm_telemetry(
@@ -72,8 +84,8 @@ class LLMExecutor:
                         total_latency_ms=(time.perf_counter() - start_time) * 1000,
                         error_message=f"Primary: {e}; Fallback: {fallback_error}",
                     )
-                    logger.warning("DeepSeek API falhou: %s. Usando resposta degradada.", e)
-                    return LLMResult(content=self._get_fallback_response())
+                    logger.warning("LLM provider failed: %s. Using degraded response.", e)
+                    return LLMResult(content=self._get_fallback_response("unavailable"))
 
             self._usage.record_llm_telemetry(
                 user_id=user_id, conversation_id=conversation_id,
@@ -82,8 +94,8 @@ class LLMExecutor:
                 total_latency_ms=(time.perf_counter() - start_time) * 1000,
                 error_message=str(e),
             )
-            logger.warning("DeepSeek API falhou: %s. Usando resposta degradada.", e)
-            return LLMResult(content=self._get_fallback_response())
+            logger.warning("LLM provider failed: %s. Using degraded response.", e)
+            return LLMResult(content=self._get_fallback_response("unavailable"))
 
     async def _complete_and_record(
         self,
@@ -135,14 +147,19 @@ class LLMExecutor:
         )
 
     @staticmethod
-    def _get_fallback_response() -> str:
+    def _get_fallback_response(reason: str = "unavailable") -> str:
         """Return a random degraded-mode response when the API is unavailable."""
+        if reason == "not_configured":
+            return (
+                "No LLM provider is configured yet. Use /connect to add a provider key, "
+                "or ask me to run specific local commands like 'bash ls' or 'read file'."
+            )
         fallback_responses = [
-            "The DeepSeek API timed out and I switched to degraded mode. "
-            "I can still help with basic tasks if you specify what you need.",
-            "DeepSeek is temporarily unavailable. "
+            "The selected LLM provider timed out and I switched to degraded mode. "
+            "I can still help with basic local tasks if you specify what you need.",
+            "The selected LLM provider is temporarily unavailable. "
             "You can ask me to run specific commands like 'bash ls' or 'read file'.",
-            "Sorry, I'm having technical difficulties. "
-            "In the meantime, I can help with tasks that don't require complex AI analysis."
+            "The active model is not responding right now. "
+            "I can still help with tasks that do not require remote model analysis.",
         ]
         return random.choice(fallback_responses)

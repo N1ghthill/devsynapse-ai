@@ -26,7 +26,7 @@ class RouteSelector:
         deepseek_model: str,
         provider_configs: Dict[str, Dict[str, Optional[str]]],
         deepseek_api_key: Optional[str],
-        default_provider: str = "deepseek",
+        default_provider: str = "openrouter",
         provider_model_defaults: Optional[Dict[str, Optional[str]]] = None,
     ):
         self._memory = memory
@@ -42,19 +42,17 @@ class RouteSelector:
 
     def select_route(self, user_message: str, context: Dict) -> ModelRoute:
         profile = build_task_profile(user_message, context=context)
-        provider = (
-            self._default_provider
-            if self._provider_configured(self._default_provider)
-            else self._first_configured_provider()
-        )
+        providers = self._configured_providers_in_order()
+        provider = providers[0] if providers else None
         model = self._selected_model(provider) if provider else self._deepseek_model
+        fallback_model = self._selected_model(providers[1]) if len(providers) > 1 else None
         route = ModelRoute(
             model=model,
             complexity="manual",
             reason="manual_model_selection",
             task_type=profile.task_type,
             task_signature=profile.signature,
-            fallback_model=None,
+            fallback_model=fallback_model,
             budget_mode="manual",
         )
         logger.info(
@@ -96,12 +94,26 @@ class RouteSelector:
             return self._qualify_model(provider, catalog_model)
         return self._qualify_model(provider, "")
 
-    def _first_configured_provider(self) -> Optional[str]:
-        for provider in ["deepseek", *sorted(self._provider_configs)]:
+    def _configured_providers_in_order(self) -> list[str]:
+        providers: list[str] = []
+
+        def add(provider: Optional[str]) -> None:
             normalized = self._normalize_provider(provider)
             if self._provider_configured(normalized):
-                return normalized
-        return None
+                providers.append(normalized)
+
+        add(self._default_provider)
+        for provider in [*self._provider_configs.keys(), "deepseek", *self._provider_model_defaults.keys()]:
+            add(provider)
+
+        deduplicated: list[str] = []
+        seen: set[str] = set()
+        for provider in providers:
+            if provider in seen:
+                continue
+            seen.add(provider)
+            deduplicated.append(provider)
+        return deduplicated
 
     def _first_catalog_model(self, provider: str) -> Optional[str]:
         catalog = getattr(self._memory, "list_llm_models", lambda **kwargs: [])(
@@ -123,7 +135,7 @@ class RouteSelector:
 
     @staticmethod
     def _normalize_provider(provider: Optional[str]) -> str:
-        normalized = (provider or "deepseek").strip().lower()
+        normalized = (provider or "openrouter").strip().lower()
         aliases = {
             "zen": "opencode-zen",
             "opencode": "opencode-zen",

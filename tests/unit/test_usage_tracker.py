@@ -71,8 +71,12 @@ class TestEnrichUsageCost:
         t = _tracker(model_pricing={})
         usage = {"prompt_tokens": 100, "completion_tokens": 50}
         result = t.enrich_usage_cost("unknown", "model", usage)
-        assert result is usage
-        assert "estimated_cost_usd" not in result
+        # Now returns enriched dict with cost=0.0 instead of unchanged usage
+        assert result is not usage
+        assert result["estimated_cost_usd"] == 0.0
+        assert result["pricing_source"] == "unknown"
+        assert result["prompt_tokens"] == 100
+        assert result["completion_tokens"] == 50
 
     def test_already_has_cost(self):
         t = _tracker()

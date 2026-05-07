@@ -121,3 +121,42 @@ def test_select_route_falls_back_to_configured_provider_catalog():
 
     assert route.model == "opencode-go:deepseek-v4-flash"
     assert route.reason == "manual_model_selection"
+
+
+def test_select_route_sets_cross_provider_fallback_model():
+    selector = RouteSelector(
+        memory=FakeMemory(),
+        deepseek_model="deepseek-v4-pro",
+        provider_configs={"openrouter": {"api_key": "sk-test"}},
+        deepseek_api_key="sk-deepseek",
+        default_provider="deepseek",
+        provider_model_defaults={
+            "deepseek": "deepseek-v4-pro",
+            "openrouter": "openrouter/free",
+        },
+    )
+
+    route = selector.select_route("Explique este trecho", {})
+
+    assert route.model == "deepseek-v4-pro"
+    assert route.fallback_model == "openrouter:openrouter/free"
+
+
+def test_select_route_does_not_prefer_deepseek_when_default_is_unconfigured():
+    selector = RouteSelector(
+        memory=FakeMemory(),
+        deepseek_model="deepseek-v4-pro",
+        provider_configs={"openrouter": {"api_key": "sk-test"}},
+        deepseek_api_key="sk-deepseek",
+        default_provider="opencode-go",
+        provider_model_defaults={
+            "deepseek": "deepseek-v4-pro",
+            "openrouter": "openrouter/free",
+            "opencode-go": "deepseek-v4-pro",
+        },
+    )
+
+    route = selector.select_route("Explique este trecho", {})
+
+    assert route.model == "openrouter:openrouter/free"
+    assert route.fallback_model == "deepseek-v4-pro"

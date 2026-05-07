@@ -236,7 +236,7 @@ class PluginManager:
                     break
 
             except Exception as e:
-                logger.error("Error in handler for %s: %s", event_name, e)
+                logger.error("Error in handler for %s: %s", event_name, e, exc_info=True)
 
         return event
 

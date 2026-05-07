@@ -403,6 +403,24 @@ MEMORY_MIGRATIONS = (
             """,
         ),
     ),
+    Migration(
+        version=13,
+        description="Add indexes on conversations table for performance",
+        statements=(
+            """
+            CREATE INDEX IF NOT EXISTS idx_conversations_conversation_id_timestamp
+            ON conversations(conversation_id, timestamp DESC)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_conversations_timestamp
+            ON conversations(timestamp DESC)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_conversations_project_name
+            ON conversations(conversation_project_name)
+            """,
+        ),
+    ),
 )
 
 

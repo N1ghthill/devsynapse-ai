@@ -51,6 +51,14 @@ class TestResolveFromReposPath:
         assert result is None
 
 
+class TestExtractPathReferences:
+    def test_extract_absolute_path_from_sentence(self):
+        result = ProjectResolver.extract_path_references(
+            "Use o diretório /home/irving/ruas/repositorios/calc_py/ agora"
+        )
+        assert result == ["/home/irving/ruas/repositorios/calc_py/"]
+
+
 class TestLooksLikePathReference:
     def test_absolute_path(self):
         assert ProjectResolver._looks_like_path_reference("/foo/bar") is True
@@ -83,6 +91,16 @@ class TestResolveFromText:
         r = _resolver()
         result = r.resolve_from_text("something completely unrelated")
         assert result is None
+
+    def test_repos_path_in_free_form_text(self, tmp_path):
+        repos_root = tmp_path / "repos"
+        project_root = repos_root / "calc_py"
+        project_root.mkdir(parents=True)
+        r = _resolver(known_projects={}, tmp_path=repos_root)
+
+        result = r.resolve_from_text(f"Trabalhe em {project_root}/ e crie uma calculadora")
+
+        assert result == "calc_py"
 
     def test_empty_text(self):
         r = _resolver()

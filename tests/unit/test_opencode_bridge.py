@@ -425,7 +425,7 @@ class TestOpenCodeBridge:
         assert authorized is False
         assert "outside project" in message
 
-    def test_authorize_admin_mutation_allows_paths_outside_registered_project(self):
+    def test_authorize_admin_mutation_denies_paths_outside_registered_project(self):
         bridge = _bridge()
 
         authorized, message = bridge._authorize_command(
@@ -436,8 +436,8 @@ class TestOpenCodeBridge:
             [],
         )
 
-        assert authorized is True
-        assert "trusted administrator" in message
+        assert authorized is False
+        assert "outside project" in message
 
     def test_authorize_mutating_bash_denies_paths_outside_project(self):
         bridge = _bridge()
@@ -613,6 +613,25 @@ class TestOpenCodeBridge:
         assert status == "blocked"
         assert reason_code == "authorization_failed"
         assert project_name is None
+
+    @pytest.mark.asyncio
+    async def test_execute_command_admin_write_without_project_is_blocked(self):
+        bridge = _bridge()
+        bridge._executor.execute_write = AsyncMock(return_value=(True, "created", "ok"))
+
+        result = await bridge.execute_command(
+            'write "/tmp/admin.txt" --content="hello"',
+            user_role="admin",
+        )
+        success, message, output, status, reason_code, project_name = result.to_tuple()
+
+        assert success is False
+        assert "requires explicit project context" in message
+        assert output is None
+        assert status == "blocked"
+        assert reason_code == "authorization_failed"
+        assert project_name is None
+        bridge._executor.execute_write.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_execute_command_project_mutation_allowed_for_allowlisted_project(self):

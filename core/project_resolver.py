@@ -1,8 +1,13 @@
 """Project resolution and registration logic."""
 
+import re
 import shlex
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
+
+PATH_REFERENCE_PATTERN = re.compile(
+    r"(?P<path>(?:~|\$HOME|/|\./|\../)[^\s\"'`<>{}\[\]]+)"
+)
 
 
 class ProjectResolver:
@@ -46,6 +51,16 @@ class ProjectResolver:
         return project_name if project_name and not project_name.startswith(".") else None
 
     @staticmethod
+    def extract_path_references(text: str) -> List[str]:
+        """Extract path-like fragments from free-form user text."""
+        paths: List[str] = []
+        for match in PATH_REFERENCE_PATTERN.finditer(str(text)):
+            candidate = match.group("path").strip().rstrip(".,;:)")
+            if candidate and candidate not in paths:
+                paths.append(candidate)
+        return paths
+
+    @staticmethod
     def _looks_like_path_reference(text: str) -> bool:
         stripped = str(text).strip()
         if not stripped:
@@ -86,11 +101,14 @@ class ProjectResolver:
         best_score: int = -1
 
         text_lower = text.lower()
-        looks_like_path = self._looks_like_path_reference(text)
+        path_candidates = [text] if self._looks_like_path_reference(text) else []
+        for candidate in self.extract_path_references(text):
+            if candidate not in path_candidates:
+                path_candidates.append(candidate)
 
-        if looks_like_path:
+        for path_candidate in path_candidates:
             try:
-                path = Path(text).resolve()
+                path = Path(path_candidate).expanduser().resolve()
             except (OSError, ValueError):
                 path = None
 
@@ -108,6 +126,10 @@ class ProjectResolver:
 
             if best_match:
                 return best_match
+
+            repos_project = self.resolve_from_repos_path(path_candidate)
+            if repos_project:
+                return repos_project
 
         for project_name, project_info in self.known_projects.items():
             project_path = str(Path(project_info["path"]).resolve())

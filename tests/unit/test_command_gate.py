@@ -208,23 +208,27 @@ class TestCommandGateProperties:
         assert result.allowed is False
         assert result.reason_code in {"authorization_failed", "validation_failed"}
 
-    @given(
-        command_type=st.sampled_from(["bash", "read", "glob", "grep", "edit", "write"]),
-        args=st.lists(SAFE_TEXT.filter(lambda s: not s.startswith("/")), max_size=3),
-        project_mutation_allowlist=st.lists(st.text(min_size=1, max_size=50), max_size=5),
-    )
+    @given(command_type=st.sampled_from(["bash", "read", "glob", "grep", "edit", "write"]))
     @settings(max_examples=100)
-    def test_admin_bypasses_all_checks(self, command_type, args, project_mutation_allowlist):
-        """Property: Admin role bypasses all authorization checks."""
+    def test_admin_allows_valid_project_scoped_commands(self, command_type):
+        """Property: Admin role allows valid commands inside the active project."""
         bridge = _bridge()
         gate = CommandGate(bridge)
+        args_by_type = {
+            "bash": ["python3 --version", ""],
+            "read": ["README.md", ""],
+            "glob": ["*.py", ""],
+            "grep": ["DevSynapse", ""],
+            "edit": ["README.md", '--old="DevSynapse" --new="DevSynapse"'],
+            "write": ["notes.txt", '--content="hello"'],
+        }
 
         result = gate.check(
             command_type=command_type,
-            args=args,
+            args=args_by_type[command_type],
             user_role="admin",
             project_name=PROJECT_NAME,
-            project_mutation_allowlist=project_mutation_allowlist,
+            project_mutation_allowlist=[],
             effective_project=PROJECT_NAME,
         )
 

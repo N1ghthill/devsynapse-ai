@@ -43,6 +43,23 @@ class TestAuthorizeCommand:
         allowed, _ = v.authorize_command("edit", ["file.py"], "admin", PROJECT_NAME, [])
         assert allowed is True
 
+    def test_admin_write_without_project_denied(self):
+        v = _validator()
+        allowed, message = v.authorize_command("write", ["file.py"], "admin", None, [])
+        assert allowed is False
+        assert "requires explicit project context" in message
+
+    def test_admin_mutating_bash_without_project_denied(self):
+        v = _validator()
+        allowed, message = v.authorize_command("bash", ["mkdir scratch"], "admin", None, [])
+        assert allowed is False
+        assert "requires explicit project context" in message
+
+    def test_admin_read_only_bash_without_project_allowed(self):
+        v = _validator()
+        allowed, _ = v.authorize_command("bash", ["python3 --version"], "admin", None, [])
+        assert allowed is True
+
     def test_user_read_allowed(self):
         v = _validator()
         allowed, _ = v.authorize_command("read", ["file.py"], "user", PROJECT_NAME, [])

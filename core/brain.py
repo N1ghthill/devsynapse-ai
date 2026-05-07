@@ -1,6 +1,4 @@
-"""
-Core of DevSynapse - DeepSeek API Integration
-"""
+"""Core of DevSynapse - provider orchestration and agent loop."""
 
 import logging
 from decimal import Decimal
@@ -23,10 +21,12 @@ from core.command_messages import (
 )
 from core.correlation import generate_tool_run_id
 from core.deepseek import DeepSeekClient
+from core.intent_detector import IntentDetector
 from core.llm_executor import LLMExecutor
 from core.llm_optimization import ModelRoute
 from core.memory.protocol import BrainMemoryAdapter, BrainMemoryProtocol
 from core.plugin_system import PluginManager, plugin_manager
+from core.project_path_resolver import ProjectPathResolver
 from core.prompts import build_system_prompt
 from core.routing import RouteSelector
 from core.tool_repair import coerce_llm_result, sanitize_unconfirmed_execution_claims
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 class DevSynapseBrain:
-    """Manages DevSynapse intelligence via DeepSeek API."""
+    """Manages DevSynapse intelligence through the configured LLM providers."""
 
     def __init__(
         self,
@@ -123,8 +123,18 @@ class DevSynapseBrain:
             get_settings=app_settings.get_settings,
         )
 
+        # Path resolver for exact project location
+        self.path_resolver = ProjectPathResolver(
+            repos_root=settings.dev_repos_root,
+            workspace_root=settings.dev_workspace_root,
+            allowed_directories=[settings.dev_repos_root, settings.dev_workspace_root],
+        )
+
+        # Intent detector for 3-spectra system (Chat, Planning, Build)
+        self.intent_detector = IntentDetector()
+
         if not self.deepseek.configured:
-            logger.warning("DeepSeek API key not configured")
+            logger.warning("No LLM provider key configured")
 
     @property
     def api_key(self) -> Optional[str]:
@@ -154,6 +164,9 @@ class DevSynapseBrain:
             active_project = self.memory_optional.get_project(active_project_name)
             active_project_path = active_project.get("path") if active_project else None
 
+        # Extract target path from user message for exact path resolution
+        target_path_info = self._extract_target_path_from_message(current_request)
+
         return build_system_prompt(
             assistant_user_name=settings.assistant_user_name,
             user_prefs=user_prefs,
@@ -168,7 +181,30 @@ class DevSynapseBrain:
             workspace_root=str(settings.dev_workspace_root),
             repos_root=str(settings.dev_repos_root),
             default_cwd=str(settings.default_execution_cwd),
+            agent_mode=str(context.get("agent_mode") or "build"),
+            target_path=target_path_info,
         )
+
+    def _extract_target_path_from_message(self, message: str) -> Optional[Dict]:
+        """Extract target path from user message.
+
+        Returns dict with:
+        - path: absolute path
+        - display_path: shortened path for display
+        - project_name: extracted project name
+        """
+        if not message:
+            return None
+
+        resolution = self.path_resolver.resolve_from_message(message)
+        if resolution.is_valid:
+            return {
+                "path": str(resolution.absolute_path),
+                "display_path": resolution.display_path,
+                "project_name": resolution.project_name,
+            }
+
+        return None
 
     async def process_message(
         self,
@@ -179,6 +215,7 @@ class DevSynapseBrain:
         user_role: Optional[str] = None,
         project_mutation_allowlist: Optional[List[str]] = None,
         auto_execute: bool = False,
+        agent_mode: str = "build",
         on_token: Optional[Callable[[str], None]] = None,
     ) -> Tuple[str, Optional[str], Optional[Dict]]:
         """Process a user message and return response + OpenCode command.
@@ -204,7 +241,26 @@ class DevSynapseBrain:
 
         # Get conversation context
         context = await self.memory.get_conversation_context(conversation_id)
-        effective_project_name = project_name or context.get("project_name")
+        context["agent_mode"] = self._normalize_agent_mode(agent_mode)
+
+        # Detect user intent for 3-spectra system
+        intent = self.intent_detector.detect(
+            user_message,
+            conversation_history=context.get("conversation_history", []),
+        )
+        context["intent_mode"] = intent.mode.value
+        context["intent_confidence"] = intent.confidence
+        logger.info(
+            "Intent detected: mode=%s confidence=%.2f reasoning=%s",
+            intent.mode.value,
+            intent.confidence,
+            intent.reasoning,
+        )
+
+        inferred_project_name = self._infer_and_register_project_from_text(user_message)
+        effective_project_name = inferred_project_name or project_name or context.get("project_name")
+        if not effective_project_name:
+            effective_project_name = None
         if effective_project_name:
             context["project_name"] = effective_project_name
         agent_run = self._start_agent_run_if_needed(
@@ -230,6 +286,21 @@ class DevSynapseBrain:
 
         route = self._select_llm_route(user_message, context)
 
+        # Check budget before making LLM call
+        budget_status = self.memory.get_llm_budget_status()
+        daily_level = budget_status.get("daily", {}).get("level", "healthy")
+        monthly_level = budget_status.get("monthly", {}).get("level", "healthy")
+
+        if daily_level == "critical" or monthly_level == "critical":
+            budget_msg = (
+                f"⚠️ Budget exceeded! "
+                f"Daily: {budget_status['daily']['usage_pct']:.0f}% of ${budget_status['daily']['budget_usd']:.2f}, "
+                f"Monthly: {budget_status['monthly']['usage_pct']:.0f}% of ${budget_status['monthly']['budget_usd']:.2f}. "
+                f"LLM calls are blocked until budget is reset or increased. "
+                f"Use /budget to adjust."
+            )
+            return budget_msg, None, None
+
         # Run LLM call with auto-execution loop
         response_text, opencode_command, aggregated_usage, autoexecuted_command = (
             await self._run_autoexec_loop(
@@ -243,16 +314,18 @@ class DevSynapseBrain:
                 effective_project_name=effective_project_name,
                 project_mutation_allowlist=project_mutation_allowlist or [],
                 auto_execute=auto_execute,
+                agent_mode=context["agent_mode"],
                 on_token=on_token,
             )
         )
 
         await self.plugin_manager.emit_event("brain:after_llm_call", {"response": response_text})
 
-        response_text = sanitize_unconfirmed_execution_claims(
-            response_text,
-            opencode_command,
-        )
+        if not (autoexecuted_command is not None and autoexecuted_command["success"]):
+            response_text = sanitize_unconfirmed_execution_claims(
+                response_text,
+                opencode_command,
+            )
         if autoexecuted_command is not None and (
             not response_text.strip() or response_promises_pending_action(response_text)
         ):
@@ -342,10 +415,41 @@ class DevSynapseBrain:
         effective_project_name: Optional[str],
         project_mutation_allowlist: List[str],
         auto_execute: bool,
+        agent_mode: str,
         on_token: Optional[Callable[[str], None]],
     ) -> Tuple[str, Optional[str], Optional[Dict], Optional[Dict]]:
-        """Run LLM call with auto-execution loop for read-only commands."""
-        max_rounds = max_autoexec_rounds(auto_execute, user_role)
+        """Run LLM call with auto-execution loop for read-only commands.
+
+        Respects 3-spectra intent mode:
+        - CHAT: Skip tool calls, conversational only
+        - PLANNING: Read-only commands only, no mutations
+        - BUILD: Full auto-execution (default behavior)
+        """
+        intent_mode = context.get("intent_mode", "build")
+        execution_role = "user" if self._normalize_agent_mode(agent_mode) == "plan" else user_role
+
+        # CHAT mode: skip tool calls entirely, conversational only
+        if intent_mode == "chat":
+            llm_result = coerce_llm_result(
+                await self.executor.call_api(
+                    messages,
+                    route=route,
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    on_token=on_token,
+                )
+            )
+            response_text = llm_result.content
+            aggregated_usage = self.usage.merge_usage(None, llm_result.usage)
+            return response_text, None, aggregated_usage, None
+
+        # PLANNING mode: read-only commands only, no mutations
+        if intent_mode == "planning":
+            execution_role = "user"  # Force read-only
+            max_rounds = min(max_autoexec_rounds(auto_execute, execution_role), 5)
+        else:
+            max_rounds = max_autoexec_rounds(auto_execute, execution_role)
+
         round_count = 0
         aggregated_usage = None
         opencode_command = None
@@ -387,7 +491,7 @@ class DevSynapseBrain:
             if not (
                 autoexec_enabled
                 and opencode_command
-                and can_autoexecute_command(opencode_command, user_role)
+                and can_autoexecute_command(opencode_command, execution_role)
             ):
                 break
 
@@ -396,7 +500,7 @@ class DevSynapseBrain:
                 opencode_command,
                 user_id=user_id,
                 project_name=effective_project_name,
-                user_role=user_role,
+                user_role=execution_role,
                 project_mutation_allowlist=project_mutation_allowlist,
                 conversation_id=conversation_id,
                 tool_run_id=tool_run_id,
@@ -487,8 +591,11 @@ class DevSynapseBrain:
         ]
 
         # Add conversation history if exists
+        # Use configured limit instead of hardcoded value
+        settings = app_settings.get_settings()
+        history_limit = settings.conversation_history_limit
         if context.get("conversation_history"):
-            for msg in context["conversation_history"][-6:]:  # Last 6 messages
+            for msg in context["conversation_history"][-history_limit:]:
                 messages.append(msg)
 
         messages.append({"role": "user", "content": user_message})
@@ -663,6 +770,54 @@ class DevSynapseBrain:
             )
         except (OSError, ValueError):
             logger.debug("Could not persist generated project %s", project_name, exc_info=True)
+
+    def _infer_and_register_project_from_text(self, text: str) -> Optional[str]:
+        """Infer a repos project from user text before the LLM plans filesystem work.
+
+        Uses ProjectPathResolver to extract exact path from user message.
+        Example: "Crie calculadora em ~/ruas/repositorios/calc_py"
+        -> Resolves to exact path and registers project
+        """
+        # Try new path resolver first (extracts exact path from message)
+        resolution = self.path_resolver.resolve_from_message(text)
+        if resolution.is_valid and resolution.project_name:
+            # Register the project with exact path
+            self.opencode.register_project(
+                name=resolution.project_name,
+                path=str(resolution.absolute_path),
+                project_type="project",
+                priority="medium",
+            )
+            # Also call old method for backward compatibility
+            register = getattr(self.opencode, "_register_repos_project_if_needed", None)
+            if callable(register):
+                register(resolution.project_name)
+            self._persist_repos_project_if_needed(resolution.project_name)
+            logger.info(
+                "Project resolved from text: %s -> %s",
+                resolution.project_name,
+                resolution.absolute_path,
+            )
+            return resolution.project_name
+
+        # Fallback to old resolver
+        resolver = getattr(self.opencode, "_resolve_project_from_text", None)
+        if not callable(resolver):
+            return None
+
+        project_name = resolver(text)
+        if not isinstance(project_name, str) or not project_name.strip():
+            return None
+
+        register = getattr(self.opencode, "_register_repos_project_if_needed", None)
+        if callable(register):
+            register(project_name)
+        self._persist_repos_project_if_needed(project_name)
+        return project_name
+
+    @staticmethod
+    def _normalize_agent_mode(agent_mode: str) -> str:
+        return "plan" if str(agent_mode).strip().lower() == "plan" else "build"
 
     def _build_tool_repair_messages(
         self,

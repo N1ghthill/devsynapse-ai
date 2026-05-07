@@ -153,6 +153,9 @@ class TestMemorySystem:
         assert len(context["conversation_history"]) > 0
         assert context["project_name"] is None
         assert context["conversation_history"][0]["role"] == "user"
+
+        telemetry = memory.get_llm_telemetry_stats(hours=24)
+        assert telemetry["by_user_model"] == []
         assert context["conversation_history"][0]["content"] == "Hello!"
         assert context["conversation_messages"][1]["tokenUsage"]["total_tokens"] == 15
         assert context["conversation_messages"][1]["tokenUsage"]["estimated_cost_usd"] == pytest.approx(

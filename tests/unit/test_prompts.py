@@ -50,10 +50,10 @@ class TestBuildSystemPrompt:
             default_cwd="/workspace",
         )
 
-        assert "PROJETO ATIVO" in result
+        assert "CURRENT WORKSPACE" in result
         assert "my-project" in result
         assert "/repos/my-project" in result
-        assert "travada neste projeto" in result
+        assert "default working boundary" in result
 
     def test_active_project_section_missing_when_no_project(self):
         result = build_system_prompt(
@@ -72,7 +72,29 @@ class TestBuildSystemPrompt:
             default_cwd="/workspace",
         )
 
-        assert "PROJETO ATIVO" not in result
+        assert "CURRENT WORKSPACE" not in result
+
+    def test_plan_mode_is_read_only(self):
+        result = build_system_prompt(
+            assistant_user_name="dev",
+            user_prefs="",
+            projects_info="",
+            agent_learning="",
+            procedural_memory="",
+            skills_context="",
+            agent_run_context="",
+            stuck_context="",
+            active_project_name=None,
+            active_project_path=None,
+            workspace_root="/workspace",
+            repos_root="/repos",
+            default_cwd="/workspace",
+            agent_mode="plan",
+        )
+
+        assert "Mode: Plan" in result
+        assert "Read-only analysis mode" in result
+        assert "Build mode is required" in result
 
     def test_stuck_context_included(self):
         stuck = "\n## STUCK AWARENESS\n- As últimas 2 tentativas falharam."

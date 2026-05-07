@@ -15,7 +15,6 @@ T = TypeVar("T")
 _EXECUTOR_LOCK = Lock()
 _BLOCKING_EXECUTOR: ThreadPoolExecutor | None = None
 _MAX_BLOCKING_WORKERS = 4
-_POLL_INTERVAL_SECONDS = 0.01
 
 
 def _get_blocking_executor() -> ThreadPoolExecutor:
@@ -30,17 +29,16 @@ def _get_blocking_executor() -> ThreadPoolExecutor:
 
 
 async def run_blocking(func: Callable[..., T], /, *args: Any, **kwargs: Any) -> T:
-    """Run blocking work without using asyncio's default executor."""
+    """Run blocking work without using asyncio's default executor.
+
+    Uses asyncio.wrap_future() for proper event loop integration instead of
+    busy-wait polling. This eliminates unnecessary CPU wakeups.
+    """
 
     call = partial(func, *args, **kwargs)
     future: ThreadFuture[T] = _get_blocking_executor().submit(call)
-    try:
-        while not future.done():
-            await asyncio.sleep(_POLL_INTERVAL_SECONDS)
-    except asyncio.CancelledError:
-        future.cancel()
-        raise
-    return future.result()
+    # wrap_future integrates the thread future with the event loop properly
+    return await asyncio.wrap_future(future)
 
 
 def shutdown_blocking_executor(*, wait: bool = False) -> None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, Optional
 
 
 def build_system_prompt(
@@ -19,17 +19,48 @@ def build_system_prompt(
     workspace_root: str,
     repos_root: str,
     default_cwd: str,
+    agent_mode: str = "build",
+    target_path: Optional[Dict] = None,
 ) -> str:
     assistant_user_name = assistant_user_name.strip() or "the user"
+    normalized_mode = "plan" if str(agent_mode).strip().lower() == "plan" else "build"
+    mode_section = (
+        "## AGENT MODE\n"
+        "- Mode: Plan\n"
+        "- Read-only analysis mode. Inspect, explain, and propose concrete steps.\n"
+        "- Do not create, edit, delete, install, or otherwise mutate project files.\n"
+        "- If implementation is needed, say that Build mode is required and provide the next "
+        "concrete build action.\n"
+        if normalized_mode == "plan"
+        else
+        "## AGENT MODE\n"
+        "- Mode: Build\n"
+        "- Implementation mode. Inspect, edit, run focused checks, and finish the requested "
+        "development work when the target path is clear.\n"
+    )
     active_project_section = (
-        f"\n## PROJETO ATIVO\n- Nome: {active_project_name}\n"
-        f"- Diretório: {active_project_path or 'registrado no backend'}\n"
-        "- Esta conversa está travada neste projeto. Use caminhos relativos ao projeto ou "
-        "caminhos dentro desse diretório.\n"
-        "- Não escreva, edite, remova, instale ou gere arquivos fora do projeto ativo.\n"
+        f"\n## CURRENT WORKSPACE\n- Name: {active_project_name}\n"
+        f"- Directory: {active_project_path or 'resolved by the local workspace registry'}\n"
+        "- Treat this directory as the default working boundary for relative paths.\n"
+        "- If the user explicitly provides another local path under the workspace or repos "
+        "root, use that path as the new target instead of asking them to switch screens.\n"
         if active_project_name
         else ""
     )
+
+    # Target path section - CRITICAL for exact path resolution
+    target_path_section = ""
+    if target_path:
+        target_path_section = (
+            f"\n## TARGET PATH (EXPLICIT USER REQUEST)\n"
+            f"- User explicitly requested this path: {target_path.get('display_path', 'N/A')}\n"
+            f"- Absolute path: {target_path.get('path', 'N/A')}\n"
+            f"- Project name: {target_path.get('project_name', 'N/A')}\n"
+            "- USE THIS EXACT PATH for all file operations.\n"
+            "- Do NOT use placeholder paths or different directories.\n"
+            "- Create all project files inside this path.\n"
+        )
+
     return f"""You are DevSynapse (Development Synapse),
 an intelligent development assistant for {assistant_user_name}.
 
@@ -56,17 +87,21 @@ Blend deep technical skills with natural conversational communication.
 ## CURRENT PROJECTS
 {projects_info}
 {active_project_section}
+{target_path_section}
 {stuck_context}
+{mode_section}
 ## LOCAL WORKSPACE PATHS
 - Workspace root: {workspace_root}
 - Repositories root: {repos_root}
 - Default command cwd: {default_cwd}
-- New standalone projects should be created through the project UI/registration flow first.
-- If no project is active, avoid durable filesystem writes unless the user explicitly asks
-  for a global workspace action and provides/chooses the target project.
+- New standalone projects should be created inside the repositories root or the explicit
+  local path provided by the user.
+- If no workspace is active, infer the target from the user's explicit local path before
+  planning tool calls. Ask for clarification only when no target path can be inferred.
 - Do not use placeholder paths such as `/home/user`, `/workspace`, `~/projects`, or `/tmp`
   for durable project files unless the user explicitly asks for that exact location.
-- The active project is the working directory boundary for this chat.
+- The current workspace is the working directory boundary for this chat unless the user
+  explicitly names another valid local workspace path.
 
 ## CAPABILITIES
 1. **Technical conversation** - Discuss architecture, design patterns, trade-offs
@@ -102,8 +137,8 @@ Blend deep technical skills with natural conversational communication.
   the whole task. Continue with the parts that are still possible, such as creating the
   project files, documenting the missing prerequisite, or choosing a supported fallback
   that stays inside the active project.
-- If a command is blocked by permission or project scope, choose the next allowed action
-  inside the active project, or clearly state the exact permission/project selection needed.
+- If a command is blocked by mode or workspace scope, choose the next allowed action inside
+  the target workspace, or state the exact path or mode change needed.
 
 ## EXAMPLES
 User: "Show me the sample app files"

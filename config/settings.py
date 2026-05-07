@@ -75,7 +75,7 @@ _mkdir_best_effort(LOGS_DIR)
 
 
 DEFAULT_RUNTIME_CONFIG_TEMPLATE = """# DevSynapse AI runtime config
-LLM_DEFAULT_PROVIDER=deepseek
+LLM_DEFAULT_PROVIDER=openrouter
 DEEPSEEK_API_KEY=
 OPENROUTER_API_KEY=
 OPENCODE_ZEN_API_KEY=
@@ -182,7 +182,7 @@ class AppSettings(BaseSettings):
     openrouter_api_key: Optional[str] = None
     opencode_zen_api_key: Optional[str] = None
     opencode_go_api_key: Optional[str] = None
-    llm_default_provider: str = "deepseek"
+    llm_default_provider: str = "openrouter"
     deepseek_model: str = "deepseek-v4-pro"
     openrouter_model: str = "openrouter/free"
     opencode_zen_model: str = "qwen3-coder"
@@ -223,6 +223,11 @@ class AppSettings(BaseSettings):
 
     memory_db_path: Path = Field(default_factory=lambda: DATA_DIR / "devsynapse_memory.db")
     conversation_history_limit: int = 20
+
+    # Data retention policy (days)
+    data_retention_conversations_days: int = 90
+    data_retention_telemetry_days: int = 60
+    data_retention_agent_runs_days: int = 30
 
     opencode_timeout: int = 30
     opencode_max_output: int = 10000

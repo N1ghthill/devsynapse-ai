@@ -67,7 +67,7 @@ class TestCallAPI:
         route.model = "gpt-4"
         route.fallback_model = "gpt-3.5"
         client.chat_completion.side_effect = [
-            Exception("primary failed"),
+            RuntimeError("primary failed"),
             LLMResult(content="fallback response", provider="openai", model="gpt-3.5"),
         ]
         exec = _executor(deepseek=client, streaming=False)
@@ -82,8 +82,8 @@ class TestCallAPI:
         route.model = "gpt-4"
         route.fallback_model = "gpt-3.5"
         client.chat_completion.side_effect = [
-            Exception("primary failed"),
-            Exception("fallback also failed"),
+            RuntimeError("primary failed"),
+            RuntimeError("fallback also failed"),
         ]
         usage = _mock_usage_tracker()
         exec = _executor(deepseek=client, usage=usage, streaming=False)
@@ -156,9 +156,15 @@ class TestGetFallbackResponse:
 
     def test_returns_one_of_known_responses(self):
         known = [
-            "The DeepSeek API timed out",
-            "DeepSeek is temporarily unavailable",
-            "Sorry, I'm having technical difficulties",
+            "The selected LLM provider timed out",
+            "The selected LLM provider is temporarily unavailable",
+            "The active model is not responding",
         ]
         response = LLMExecutor._get_fallback_response()
         assert any(phrase in response for phrase in known)
+        assert "DeepSeek" not in response
+
+    def test_not_configured_response_is_provider_neutral(self):
+        response = LLMExecutor._get_fallback_response("not_configured")
+        assert "No LLM provider is configured" in response
+        assert "DeepSeek" not in response

@@ -27,7 +27,7 @@ class TestCommandCompletionFallback:
         }
         result = command_completion_fallback(executed_command)
         assert "Execution completed" in result
-        assert "Project: my-project" in result
+        assert "Workspace: my-project" in result
 
     def test_blocked_project_scope(self):
         executed_command = {
@@ -37,7 +37,7 @@ class TestCommandCompletionFallback:
         }
         result = command_completion_fallback(executed_command)
         assert "blocked" in result
-        assert "project scope" in result
+        assert "workspace scope" in result
 
     def test_blocked_security_rule(self):
         executed_command = {
@@ -47,7 +47,7 @@ class TestCommandCompletionFallback:
         }
         result = command_completion_fallback(executed_command)
         assert "blocked" in result
-        assert "security rule" in result
+        assert "mode or workspace safety rules" in result
 
     def test_interactive_sudo_required(self):
         executed_command = {
@@ -74,10 +74,14 @@ class TestCommandCompletionFallback:
             "status": "failed",
             "reason_code": "execution_failed",
             "project_name": None,
+            "command": 'bash "missing-tool"',
+            "result": "command not found",
         }
         result = command_completion_fallback(executed_command)
-        assert "failure" in result
-        assert "needs review" in result
+        assert "could not complete the local check" in result
+        assert 'bash "missing-tool"' in result
+        assert "command not found" in result
+        assert "completed plan" in result
 
     def test_unknown_status_defaults_to_failure(self):
         executed_command = {
@@ -86,7 +90,7 @@ class TestCommandCompletionFallback:
             "project_name": None,
         }
         result = command_completion_fallback(executed_command)
-        assert "failure" in result
+        assert "could not complete" in result
 
     def test_blocked_with_project(self):
         executed_command = {
@@ -95,7 +99,7 @@ class TestCommandCompletionFallback:
             "project_name": "test-project",
         }
         result = command_completion_fallback(executed_command)
-        assert "Project: test-project" in result
+        assert "Workspace: test-project" in result
 
 
 class TestCommandFailureMessage:
@@ -126,7 +130,7 @@ class TestCommandFailureMessage:
             "rm file.txt", "not allowed", "validation_failed", "my-project"
         )
         assert "rm file.txt" in result
-        assert "Project: my-project" in result
+        assert "Workspace: my-project" in result
 
 
 class TestBuildCommandResultReplayMessages:
