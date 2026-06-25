@@ -38,6 +38,7 @@ class SkillStore:
         self.db_path = db_path
         self.base_dir = Path(base_dir)
         self.project_lookup_fn = project_lookup_fn or (lambda: {})
+        self._sync_signatures: dict[tuple[Optional[str], str, str], tuple[tuple[str, int, int], ...]] = {}
 
     def get_db_connection(self) -> sqlite3.Connection:
         conn = connect_db(self.db_path)
@@ -322,7 +323,13 @@ class SkillStore:
         for root_project, scope, root in roots:
             if not root.exists():
                 continue
-            for skill_path in root.glob("*/*/SKILL.md"):
+            skill_paths = list(root.glob("*/*/SKILL.md"))
+            signature = self._skill_root_signature(skill_paths)
+            signature_key = (root_project, scope, str(root.resolve()))
+            if self._sync_signatures.get(signature_key) == signature:
+                continue
+
+            for skill_path in skill_paths:
                 try:
                     content = skill_path.read_text(encoding="utf-8")
                     parsed = self.parse_skill_document(content)
@@ -344,6 +351,18 @@ class SkillStore:
                 except Exception as e:
                     logger.debug("Failed to load skill from %s: %s", skill_path, e)
                     continue
+            self._sync_signatures[signature_key] = signature
+
+    def _skill_root_signature(self, skill_paths: list[Path]) -> tuple[tuple[str, int, int], ...]:
+        """Return a cheap change signature for a skill root."""
+        entries = []
+        for skill_path in skill_paths:
+            try:
+                stat = skill_path.stat()
+            except OSError:
+                continue
+            entries.append((str(skill_path), stat.st_mtime_ns, stat.st_size))
+        return tuple(sorted(entries))
 
     def get_stats(self) -> Dict[str, Any]:
         self.sync_from_disk()
