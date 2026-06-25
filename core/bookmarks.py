@@ -39,18 +39,20 @@ class BookmarkStore:
         description: str = "",
     ) -> dict[str, Any]:
         conn = connect_db(self.db_path)
-        cursor = conn.cursor()
-        now = datetime.now().isoformat()
-        cursor.execute(
-            """
-            INSERT INTO bookmarks (name, command, description, created_at)
-            VALUES (?, ?, ?, ?)
-            """,
-            (name, command, description, now),
-        )
-        conn.commit()
-        bookmark_id = cursor.lastrowid
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            now = datetime.now().isoformat()
+            cursor.execute(
+                """
+                INSERT INTO bookmarks (name, command, description, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (name, command, description, now),
+            )
+            conn.commit()
+            bookmark_id = cursor.lastrowid
+        finally:
+            conn.close()
         return {
             "id": bookmark_id,
             "name": name,
