@@ -59,6 +59,29 @@ class TestPathResolution:
         result = resolver.resolve_path(str(other_dir / "some-project"))
         assert result.is_valid is False
         assert "fora dos diretórios permitidos" in result.error_message
+        assert result.project_name == "some-project"
+
+    def test_relative_dot_path_uses_configured_default_cwd(self, tmp_path):
+        """Dot-relative paths should resolve from default_cwd."""
+        repos_root = tmp_path / "repos"
+        repos_root.mkdir()
+        workspace_root = tmp_path / "workspace"
+        workspace_root.mkdir()
+        default_cwd = workspace_root / "current"
+        default_cwd.mkdir()
+
+        resolver = ProjectPathResolver(
+            repos_root=repos_root,
+            workspace_root=workspace_root,
+            allowed_directories=[repos_root, workspace_root],
+            default_cwd=default_cwd,
+        )
+
+        result = resolver.resolve_path("./my-project")
+
+        assert result.is_valid is True
+        assert result.absolute_path == (default_cwd / "my-project").resolve()
+        assert result.project_name == "my-project"
 
     def test_existing_git_repo_outside_allowed_dirs_is_valid(self, tmp_path):
         """Explicit Git repos should be valid even outside preferred roots."""

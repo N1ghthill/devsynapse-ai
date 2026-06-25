@@ -128,8 +128,9 @@ class ProjectPathResolver:
                 # Expand ~
                 path = path.expanduser()
             elif path_str.startswith("./") or path_str.startswith("../"):
-                # Relative to current working directory
-                path = Path.cwd() / path
+                # Relative to the configured execution cwd, not necessarily
+                # the Python process cwd used by tests or CI.
+                path = self.default_cwd / path
                 path = path.resolve()
             else:
                 # Relative to repos root
@@ -157,6 +158,8 @@ class ProjectPathResolver:
                     f"Use um caminho explícito em um repositório Git existente, "
                     f"{self.repos_root} ou {self.workspace_root}."
                 ),
+                project_name=self._extract_project_name_from_path(path),
+                source=source,
             )
 
         return self._valid_resolution(path, source=source)
