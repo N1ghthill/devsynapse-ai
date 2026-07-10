@@ -1,12 +1,127 @@
 # Product Contract
 
-DevSynapse AI is a local-first terminal coding agent. The product is the TUI
-opened by `devsynapse`; everything else exists to install, update, remove,
-test or support that TUI.
+## Identity
 
-## Official Surface
+DevSynapse AI is a packaged, conversational desktop copilot for GitHub, GitHub
+Actions and repository work.
 
-User-facing shell commands:
+Its product value is GitHub expertise delivered through natural dialogue,
+visual evidence and safely executed operations. It is not a terminal product or
+a general coding agent.
+
+## Target Product Surface
+
+The target user installs and launches one desktop application. That application
+owns:
+
+- first-run orientation;
+- GitHub account connection;
+- local project selection;
+- conversation;
+- project and repository context;
+- pull request and GitHub Actions evidence;
+- operation previews and confirmations;
+- progress, results and recovery;
+- conversation and privacy preferences;
+- application updates.
+
+Normal operation must not require a terminal, development runtime, source
+checkout, `gh` CLI, slash commands or manual environment files.
+
+## Conversation Contract
+
+DevSynapse:
+
+- responds conversationally rather than as a command dispatcher;
+- adjusts terminology, depth and pace to explicit user preferences;
+- can infer preferences conservatively from repeated evidence;
+- lets the user inspect, change and reset learned preferences;
+- asks focused questions when repository, target or risk is ambiguous;
+- separates observed state, interpretation and recommendation;
+- embeds evidence and action previews in the conversation;
+- confirms local and remote mutations in plain language;
+- does not claim an action completed until the backend verifies it.
+
+The initial preference profile includes:
+
+```text
+experience_level
+detail_level
+communication_tone
+proactive_guidance
+confirmation_explanation
+```
+
+Explicit settings override inferred values. Security policy never adapts to
+conversation style.
+
+## GitHub Contract
+
+GitHub is a core service boundary. DevSynapse must:
+
+- authenticate through a guided desktop flow;
+- show the active account;
+- identify owner and repository before remote operations;
+- use least-privilege credentials and protected storage;
+- support rate-limit, offline and permission-aware errors;
+- keep tokens and secret values out of prompts, logs and memory;
+- model repositories, branches, pull requests, checks, workflows, runs, jobs,
+  annotations, environments and releases as domain objects;
+- normalize GitHub API responses before they reach conversation or UI code.
+
+GitHub Actions support includes understanding, authoring, validation,
+monitoring, diagnosis and approved operation. It must not be reduced to showing
+a run status.
+
+## Operation Contract
+
+All normal Git and GitHub work uses registered typed operations.
+
+- Observe operations may run automatically.
+- Prepare operations may generate drafts and previews without mutation.
+- Local mutations require a current project preview and confirmation.
+- Remote mutations require account, owner, repository, target, preview and
+  confirmation.
+- Destructive operations are unavailable by default.
+
+Approvals bind to immutable previews and current state. A changed repository,
+branch, remote or workflow invalidates the approval.
+
+## Scope Reduction
+
+The target end-user application does not expose:
+
+- the Textual TUI;
+- slash commands;
+- generic shell execution;
+- provider selection or token-cost dashboards as primary product navigation;
+- multi-user login, admin roles or permission-management screens;
+- plugin, skill or multi-agent configuration;
+- autonomous coding, merging or deployment.
+
+Provider routing, telemetry, memory and extension code may remain internal when
+they directly support conversation quality, reliability or GitHub operations.
+
+## Packaging Contract
+
+Release artifacts must:
+
+- install through normal operating-system flows;
+- include the required application runtime;
+- launch from the desktop/application menu;
+- create user-scoped config, data and log locations automatically;
+- guide GitHub and provider setup visually;
+- update without requiring Git commands or a source checkout;
+- uninstall without leaving executable processes;
+- preserve user data only through an explicit, documented choice.
+
+The initial desktop stack is Tauri 2, React and TypeScript with the Python core
+bundled as a sidecar. Supported release targets and signing requirements are
+defined by the desktop-foundation roadmap phase.
+
+## Current v1 Transitional Surface
+
+The repository currently ships a Python/Textual TUI:
 
 ```bash
 devsynapse
@@ -15,137 +130,62 @@ update-devsynapse
 uninstall-devsynapse
 ```
 
-`devsynapse` opens the Textual TUI. It does not expose operational subcommands.
-Provider setup, status, budgets, usage, model selection, workspaces and local
-tool execution happen inside the TUI through slash commands.
+It contains slash commands and a generic command bridge. These remain available
+only while the desktop application and typed operations are implemented.
 
-DevSynapse exposes two agent modes in the TUI: Build for implementation work and
-Plan for read-only analysis. `Tab` on an empty input toggles the mode; `/mode
-build|plan` sets it explicitly.
+Current v1 behavior must be documented as transitional. New end-user workflows
+must not be added exclusively to the TUI or generic shell bridge.
 
-`/project <name>` selects a registered workspace. `/project <path>` registers
-and selects a trusted local directory. Project resolution is discovery-first:
-explicit paths win, detected Git roots define project boundaries, registered
-workspaces and current cwd provide context, and the configured repositories root
-is only the fallback for new standalone projects. Scratch directories that are
-not Git repositories are allowed inside the configured workspace or repositories
-root.
+## Historical Desktop Assets
 
-Official TUI commands:
+Git history before commit `1363777` contains a Tauri 2/React/TypeScript
+frontend, bundled Python backend support, icons and Windows/Linux release work.
 
-```text
-/connect
-/providers
-/status
-/mode
-/projects
-/project
-/discover
-/model
-/models
-/copy
-/budget
-/router
-/usage
-/details
-/theme
-/new
-/clear
-/help
-!<command>
-```
+These assets should be recovered selectively. The former login, admin,
+monitoring and generic dashboard surfaces are not automatically restored
+because they conflict with the simplified single-user product.
 
-## Install Contract
+## Project Identity
 
-Canonical install:
+Every local project and GitHub repository association has a stable identity.
+A mutation scoped to one project cannot affect another without an explicit
+context switch and new preview.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/N1ghthill/devsynapse-ai/main/scripts/install.sh | bash
-```
-
-Then reload the shell path and start the TUI:
-
-```bash
-source ~/.bashrc
-devsynapse
-```
-
-The installer:
-
-- bootstraps or refreshes the source checkout;
-- creates `venv/` inside the checkout;
-- installs runtime dependencies;
-- creates runtime config, data and logs directories;
-- applies SQLite migrations;
-- writes executable wrappers to `~/.local/bin`;
-- removes previous DevSynapse shell aliases from shell rc files;
-- adds `~/.local/bin` to PATH when needed.
-
-For `curl | bash`, installer prompts use default setup values automatically.
-Provider keys are configured later inside the TUI with `/connect`. For scripted
-local installs, `DEVSYNAPSE_ASSUME_DEFAULTS=1` skips prompts explicitly.
-
-Installed wrappers:
+Remote identity includes:
 
 ```text
-~/.local/bin/devsynapse
-~/.local/bin/update-devsynapse
-~/.local/bin/uninstall-devsynapse
+github_account
+owner
+repository
+remote_name
+default_branch
 ```
 
-The wrappers point at the installed checkout and export the selected runtime
-config file. They are the only supported installed command mechanism.
+The UI presents these fields in user-friendly language and makes their
+technical details available through progressive disclosure.
 
-## Runtime Contract
+## Runtime Data
 
-Default paths:
+Runtime data remains user-scoped and local by default:
 
-```text
-~/.config/devsynapse-ai/.env
-~/.config/devsynapse-ai/ui.json
-~/.local/share/devsynapse-ai/data/devsynapse_memory.db
-~/.local/state/devsynapse-ai/logs/devsynapse.log
-~/.local/share/devsynapse-ai/source
-```
+- application preferences;
+- encrypted or OS-protected credential references;
+- project registry and GitHub associations;
+- conversations;
+- explicit and learned user preferences;
+- operation proposals, approvals and audit records;
+- cached remote evidence with capture times.
 
-`DEVSYNAPSE_HOME` relocates config, data and logs together. Specific path
-overrides are supported through `DEVSYNAPSE_CONFIG_FILE`,
-`DEVSYNAPSE_DATA_DIR`, `DEVSYNAPSE_LOGS_DIR`, `DEVSYNAPSE_BIN_DIR` and
-`DEVSYNAPSE_INSTALL_DIR`. The TUI loads `ui.json` for theme/layout preferences
-and accepts temporary overrides via `DEVSYNAPSE_TUI_THEME`,
-`DEVSYNAPSE_TUI_LAYOUT` and `DEVSYNAPSE_TUI_CONFIG_FILE`.
+Every persisted schema change requires a migration. Conversation retention and
+learned preference controls must be visible in the desktop settings.
 
-## Version Contract
+## Documentation Discipline
 
-The product version is `1.0.0` and must stay aligned in:
+Capabilities are labeled:
 
-```text
-pyproject.toml
-config/settings.py
-```
+- current: available in the present v1 TUI;
+- transitional: retained only during migration;
+- target: required by a roadmap phase but not yet shipped.
 
-`devsynapse --version` is the operator check that the installed command points
-at the expected build.
-
-## Out Of Product
-
-These are intentionally not product surfaces:
-
-- external operator subcommands such as `devsynapse providers` or
-  `devsynapse connect`;
-- separate web, API server or desktop entry points;
-- shell aliases as the installed command mechanism;
-- generated runtime artifacts committed to source control;
-- disconnected UI prototypes, unused screens, theme files or tool-display
-  experiments.
-
-## Cleanup Standard
-
-A product-ready checkout should have:
-
-- no unreferenced UI prototype files;
-- no `__pycache__`, `.pytest_cache`, `.ruff_cache`, `.coverage` or `htmlcov/`
-  in source control;
-- no duplicated install paths in docs;
-- no undocumented operator command;
-- tests covering install, update, uninstall, CLI version/help and TUI smoke.
+No desktop, GitHub or GitHub Actions capability may be advertised as shipped
+before its packaging, security, accessibility and acceptance tests pass.

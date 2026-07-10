@@ -1,141 +1,163 @@
 # Architecture Overview
 
-## Purpose
+## Product Direction
 
-DevSynapse AI is a TUI-first local coding agent. Its main concerns are:
+DevSynapse is a packaged conversational desktop copilot for GitHub, GitHub
+Actions and repository work.
 
-- LLM orchestration and manual model selection;
-- persistent local memory and project registry state;
-- constrained command execution against local projects;
-- plugin hooks around lifecycle and command events.
+The target end-user system is:
 
-The supported operator surface is the Textual TUI.
+```text
+Tauri desktop shell
+    + React conversation interface
+    + bundled Python backend
+    + typed Git/GitHub operations
+    + local SQLite memory and audit
+```
 
-## High-Level Flow
+The current Textual TUI is a transitional implementation and developer aid. It
+is not the target product surface.
+
+## Current System
 
 ```text
 Textual TUI
-        |
-        v
-DevSynapseBrain
-  - prompt construction
-  - route selection
-  - tool-call loop
-  - usage telemetry
-        |
-        +--> DeepSeekClient / compatible providers
-        |
-        +--> OpenCodeBridge constrained local tools
-        |
-        v
-SQLite memory stores + runtime config
+    -> DevSynapseBrain
+    -> LLM providers
+    -> generic command bridge
+    -> SQLite memory
 ```
 
-## Entry Points
+Useful current components:
 
-Operator entry points:
+- provider transport and routing;
+- conversation persistence;
+- project registry and resolution;
+- explicit and learned user preferences;
+- procedural project memory;
+- telemetry and operation-like run records;
+- Git-aware project context;
+- tests and migrations.
 
-- `~/.local/bin/devsynapse`
-- `~/.local/bin/update-devsynapse`
-- `~/.local/bin/uninstall-devsynapse`
+Transitional components:
 
-Main source files:
+- Textual UI and slash commands;
+- shell installer and command wrappers;
+- broad Build-mode autoexecution;
+- generic command extraction and bridge;
+- coding-oriented builder/planner behavior.
 
-- [devsynapse/cli.py](../../devsynapse/cli.py)
-- [devsynapse/tui.py](../../devsynapse/tui.py)
-- [devsynapse.sh](../../devsynapse.sh)
+## Target System
 
-`devsynapse.cli:main` is the package script entry point and launches the TUI.
-`devsynapse.sh` is an internal checkout launcher used by the installed wrapper.
-Operator actions are exposed as slash commands inside the TUI, not as external
-subcommands.
-
-## Canonical Operator Flow
-
-The canonical user-facing command is:
-
-```bash
-devsynapse
+```text
+Desktop application
+        |
+        v
+Conversation and visual evidence
+        |
+        v
+Typed IPC to bundled backend
+        |
+        v
+Conversation orchestration
+        |
+        v
+Operation registry and policy
+   +---------+----------+
+   |         |          |
+ local Git  GitHub API  memory/audit
 ```
 
-The command opens the Textual TUI. Provider setup, status, usage, budget,
-model selection, project selection and shell-tool execution are handled by slash
-commands inside the TUI. External operator subcommands are rejected by design to
-avoid competing flows.
+GitHub is a core boundary, not an optional plugin. The application directly
+models pull requests, checks, workflows, Actions runs, jobs, logs,
+environments and releases.
 
-## Core Services
+## Desktop Responsibilities
 
-Main files:
+Tauri:
 
-- [core/brain.py](../../core/brain.py)
-- [core/deepseek.py](../../core/deepseek.py)
-- [core/routing.py](../../core/routing.py)
-- [core/prompts.py](../../core/prompts.py)
-- [core/opencode_bridge.py](../../core/opencode_bridge.py)
-- [core/plugin_system.py](../../core/plugin_system.py)
-- [core/correlation.py](../../core/correlation.py)
-- [core/memory/system.py](../../core/memory/system.py)
+- lifecycle, packaging and updates;
+- bundled backend management;
+- secure local IPC;
+- OS credential and file-picker integration;
+- notifications and platform capabilities.
 
-Responsibilities:
+React:
 
-- `brain.py`: agent-run context, tool-call orchestration, auto-execution loop,
-  output sanitization and telemetry recording.
-- `command_extraction.py`: conversion of structured tool calls and fallback
-  text command extraction into OpenCode command strings.
-- `autoexec_policy.py`: auto-execution round limits, low-risk command checks
-  and retry/replay decisions.
-- `checklist.py`: objective checklist helpers for implementation tasks.
-- `deepseek.py`: provider transport, streaming/non-streaming payload
-  construction, pricing and `LLMResult` response contract.
-- `routing.py`: manual provider/model selection with configured-provider
-  fallback when the selected provider has no API key.
-- `prompts.py`: system prompt template construction.
-- `opencode_bridge.py`: command parsing, validation, authorization, path
-  scoping and execution for `bash`, `read`, `glob`, `grep`, `edit` and `write`.
-- `core/memory/`: SQLite-backed stores for conversations, projects, settings,
-  learning, procedural memories, skills and agent runs.
-- `core/memory/protocol.py`: brain-facing memory protocol plus optional
-  capability adapter.
-- `plugin_system.py`: lifecycle and command extension points.
-  `DevSynapseBrain` accepts an injected plugin manager for isolated tests and
-  runtime composition; the module-level singleton remains the default.
-- `correlation.py`: conversation and tool-run ID generation.
-- `db.py`: SQLite migration utilities and the shared connection helper used by
-  memory stores.
-- `async_utils.py`: shared offload helper for blocking provider and SQLite work;
-  it avoids `asyncio.to_thread` so shutdown and SQLite callbacks stay testable
-  on the supported Python runtime.
+- conversational interaction;
+- onboarding and GitHub connection;
+- projects and activity;
+- visual evidence, previews and confirmations;
+- progressive disclosure and accessibility.
 
-## Runtime Configuration
+Python core:
 
-Runtime paths are resolved in [config/settings.py](../../config/settings.py).
-Defaults follow XDG-style user directories:
+- LLM conversation orchestration;
+- adaptive preference context;
+- Git and GitHub domain services;
+- typed operations, policy and approval;
+- persistence, migrations and audit;
+- credential-safe external adapters.
 
-- config: `~/.config/devsynapse-ai/.env`
-- TUI preferences: `~/.config/devsynapse-ai/ui.json`
-- data: `~/.local/share/devsynapse-ai/data`
-- logs: `~/.local/state/devsynapse-ai/logs`
+## Interface Boundary
 
-`DEVSYNAPSE_HOME` relocates all three under one directory. Individual
-`DEVSYNAPSE_CONFIG_FILE`, `DEVSYNAPSE_DATA_DIR` and `DEVSYNAPSE_LOGS_DIR`
-overrides are also supported.
+The target product has four primary destinations:
 
-TUI styles are loaded from `.tcss` files under `devsynapse/styles/`. The runtime
-`ui.json` selects a supported theme (`dark`, `light`, `dracula`) and layout
-(`default`, `dense`) without changing Python code.
+```text
+Conversation
+Projects
+Activity
+Settings
+```
 
-Settings import is intentionally tolerant of read-only config files so basic TUI
-commands such as `--help` do not fail before argument parsing. Agent runs that
-use memory still require a writable data directory.
+Conversation is the home surface. Pull requests, Actions and releases appear
+as project context and conversation cards rather than additional permanent
+navigation.
 
-## Runtime Principles
+Internal provider routing, token telemetry, plugins, skills and agent
+components do not become primary end-user interfaces.
 
-- Keep transport, orchestration, persistence and command execution separate.
-- Treat SQLite migrations as the data contract for local state.
-- Keep mutating command execution project-aware and auditable.
-- Persist command failures and policy blocks so later turns can continue with
-  the original task context.
-- Prefer explicit provider configuration through the TUI setup form and local
-  runtime files over hardcoded credentials or repository-local secrets.
-- Keep model selection manual and provider-aware: use the provider/model chosen
-  in the TUI and only fall back when that provider is not configured.
+## Conversation Adaptation
+
+The existing preference and memory stores provide a starting point, but target
+adaptation is explicit:
+
+- experience level;
+- detail level;
+- tone;
+- proactive guidance;
+- explanation before confirmation.
+
+Users can inspect, edit and reset these preferences. Adaptation changes
+communication only; operation risk and authorization remain deterministic.
+
+## Migration Strategy
+
+1. Recover the historical Tauri/React packaging foundation selectively.
+2. Bundle the current Python backend behind private typed IPC.
+3. Establish conversation, project and activity desktop shells.
+4. Add guided GitHub authentication and repository association.
+5. Replace generic shell tools with typed Git and GitHub operations.
+6. Deliver Actions understanding, diagnosis and operation.
+7. Retire TUI, slash-command and shell-install user flows.
+
+## Architecture Rules
+
+- No target user workflow requires a terminal.
+- Frontend code does not parse Git or GitHub responses.
+- The model proposes operations but cannot authorize them.
+- GitHub credentials never enter prompts or frontend state.
+- Consequential operations use current visual previews.
+- Explicit user conversation preferences override inferred preferences.
+- The application remains responsive during LLM, Git and GitHub work.
+- Every persisted schema change uses a migration.
+- Packaged clean-machine behavior is a product acceptance criterion.
+
+## Documentation Map
+
+- [Product vision](../product-vision.md)
+- [Product contract](../product-contract.md)
+- [Desktop operations architecture](repository-operations.md)
+- [Desktop foundation plan](../development/desktop-foundation.md)
+- [Roadmap](../roadmap.md)
+- [Security model](../security/local-security-model.md)

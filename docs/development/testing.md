@@ -1,5 +1,9 @@
 # Testing Guide
 
+The existing suite validates the current Python core and transitional TUI.
+Desktop work extends this baseline with TypeScript, Rust, IPC, accessibility,
+desktop smoke and clean-machine packaging tests.
+
 ## Current Verification Baseline
 
 At the latest documentation refresh on `2026-05-05`, local verification produced:

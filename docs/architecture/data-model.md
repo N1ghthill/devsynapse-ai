@@ -55,6 +55,10 @@ Stores:
 
 These values supplement environment defaults and runtime config files.
 
+This is transitional. The packaged desktop target stores credential references
+through platform secure storage and exposes only non-secret account metadata to
+the frontend.
+
 ### Project and preference context
 
 Stores:
@@ -161,10 +165,9 @@ Stores:
 - project name
 - permission type
 
-This is retained as the project-scoped mutation policy table used by the command
-bridge. TUI operator sessions use the trusted local-operator role, while the
-bridge still keeps lower-trust role checks available for tests and future
-restricted execution modes.
+This is currently retained as the project-scoped mutation policy table used by
+the transitional command bridge. The target operation policy will replace
+broad trusted-role checks with deterministic operation risk and approval.
 
 ### Audit logs
 
@@ -185,9 +188,47 @@ Stores:
 - next action
 - event timeline for command results, policy blocks, failures and final responses
 
-This is the durable task state used by the coding agent to continue after missing
-dependencies, blocked commands or resumed conversations without losing the
+This is the durable task state used by the assistant to continue after missing
+dependencies, blocked operations or resumed conversations without losing the
 original objective.
+
+### Target repository operation records
+
+The repository operations roadmap will add persisted proposals, previews,
+approvals, operation runs and project conventions. Their target fields and
+relationships are defined in
+[repository-operations.md](repository-operations.md).
+
+These tables do not exist yet. Each must be introduced through an explicit
+migration in the phase that consumes it. The desktop foundation does not create
+unused operation tables upfront.
+
+### Target GitHub identity and evidence
+
+Desktop roadmap phases will add:
+
+- GitHub account identity and granted capabilities, without tokens;
+- local-project to owner/repository associations;
+- cached pull request, check, workflow and Actions-run evidence with capture
+  times;
+- normalized operation targets and external object identifiers.
+
+Remote cache is replaceable evidence, not the source of truth. Credential
+material must never be persisted in these tables.
+
+### Target conversation preferences
+
+Existing generic user preferences provide the migration source for:
+
+- experience level;
+- detail level;
+- communication tone;
+- proactive guidance;
+- explanation before confirmation.
+
+Target records distinguish explicit, confirmed-inference and session-only
+values. Users must be able to inspect, edit and delete durable preferences.
+Preference adaptation cannot change operation policy.
 
 ## Migration Discipline
 
@@ -213,10 +254,10 @@ Contributors should add a new migration when:
 - agent learning is advisory and does not override the manually selected model
 - model catalog pricing is used for display and cost telemetry; it does not
   automatically change the selected model
-- skill activation is advisory prompt context; shell/file effects still go through
-  the existing command execution and authorization flow
-- agent runs are advisory execution state; command authorization and project
-  scope enforcement remain in the command bridge
+- skill activation is advisory prompt context; effects currently go through
+  the transitional command flow and will move to registered operations
+- agent runs are advisory execution state; authorization remains in the
+  transitional bridge until the operation policy service replaces it
 
 ## Current Tradeoff
 

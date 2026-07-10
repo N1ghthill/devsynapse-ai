@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Product direction
+
+- Repositioned DevSynapse as a packaged conversational desktop copilot for
+  GitHub, GitHub Actions and repository work.
+- Made GitHub expertise and adaptive dialogue core product capabilities.
+- Defined Tauri 2 + React/TypeScript with a bundled Python backend as the
+  desktop transition architecture.
+- Marked the Textual TUI, slash commands, shell installer and generic command
+  bridge as transitional developer surfaces.
+- Documented the target typed-operation, preview, approval and audit model.
+- Added an incremental roadmap from packaged desktop foundation through
+  GitHub connection, Actions diagnosis and confirmed operations.
+- Marked the v1 generic command bridge and broad Build-mode execution as
+  transitional.
+- Documented selective recovery of the historical Tauri frontend without its
+  former login, admin and generic dashboard surfaces.
+
 ## 1.0.0 - 2026-05-05
 
 DevSynapse is now documented and packaged as a single TUI-first local coding

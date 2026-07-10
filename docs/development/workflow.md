@@ -1,5 +1,10 @@
 # Development Workflow
 
+This workflow covers the current Python core and transitional TUI. Desktop
+changes must also follow
+[the desktop foundation implementation plan](desktop-foundation.md) and add the
+frontend, Rust, IPC and package checks required by their roadmap phase.
+
 ## Local Loop
 
 ```bash
@@ -76,7 +81,7 @@ DEVSYNAPSE_HOME=/tmp/devsynapse-dev ./venv/bin/python -m devsynapse.cli --help
 The settings loader tolerates read-only config files for non-runtime commands,
 but memory-backed agent work requires a writable data directory.
 
-## Agent Completion Guard
+## Legacy Agent Completion Guard
 
 Automatic execution keeps a lightweight checklist for implementation requests.
 When the prompt explicitly names files such as `pyproject.toml`, `README.md` or
@@ -84,3 +89,8 @@ When the prompt explicitly names files such as `pyproject.toml`, `README.md` or
 and passing pytest output before accepting a final response. If the model emits
 completion prose before the checklist is complete, the brain feeds back the
 missing items and asks for one next tool call.
+
+This guard belongs to the transitional generic command loop. Do not extend it
+to implement new repository workflows. New work should use registered typed
+operations and phase-specific acceptance criteria from
+[the repository operations roadmap](../roadmap.md).

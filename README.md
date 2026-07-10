@@ -1,282 +1,170 @@
 # DevSynapse AI
 
-DevSynapse AI is a local-first terminal UI coding agent for DeepSeek-compatible
-LLM providers. It runs as a Textual TUI, keeps project memory in SQLite, uses
-the manually selected model, and executes constrained local commands through a
-project-aware bridge.
+DevSynapse AI is a conversational desktop copilot for GitHub, GitHub Actions
+and repository work.
 
-The product is intentionally narrow: one installed app command, one TUI, one
-runtime store, one install/update/uninstall path. See
-[docs/product-contract.md](docs/product-contract.md) for the source of truth.
+It helps new and experienced developers understand projects, diagnose
+automation, prepare commits and pull requests and safely operate GitHub through
+natural dialogue and visual, reviewable actions.
 
-## Product Surface
+## Product Direction
 
-- opens from `devsynapse`;
-- reports the installed build with `devsynapse --version`;
-- updates from `update-devsynapse`;
-- removes local artifacts from `uninstall-devsynapse`;
-- opens a single terminal UI for chat, setup, status and command execution;
-- calls DeepSeek, OpenRouter, OpenCode Zen or OpenCode Go when a matching API key
-  is configured;
-- persists conversations, project registry data, task runs, model selection
-  telemetry, procedural memories and skills in SQLite;
-- executes local tool calls through `bash`, `read`, `glob`, `grep`, `edit` and
-  `write` with command validation and project scoping;
-- tracks token usage and estimated LLM cost from provider responses;
-- keeps setup and operations in slash commands inside the TUI.
+The target product is an installed desktop application:
 
-Not product surface:
+- no terminal required for normal use;
+- guided GitHub connection;
+- conversation as the primary interface;
+- project and repository context;
+- deep GitHub Actions understanding and diagnosis;
+- visual previews before local or remote mutations;
+- adaptive explanations for beginner through expert users;
+- packaged runtime and application updates.
 
-- `devsynapse providers`, `devsynapse connect`, `devsynapse tui` or other
-  external operator subcommands;
-- shell aliases as the command installation mechanism;
-- web or desktop entry points;
-- disconnected prototype screens or generated runtime files.
+GitHub is a core product capability, not an optional integration. The assistant
+models pull requests, checks, workflows, runs, jobs, logs, environments and
+releases rather than forwarding raw CLI output.
 
-## Requirements
+Read:
 
-- Python 3.10 or newer; CI/development currently uses Python 3.13.
-- Linux or another Unix-like shell environment for the installer scripts.
-- At least one provider API key:
-  `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `OPENCODE_ZEN_API_KEY` or
-  `OPENCODE_GO_API_KEY`.
+- [product vision](docs/product-vision.md);
+- [product contract](docs/product-contract.md);
+- [desktop architecture](docs/architecture/repository-operations.md);
+- [roadmap](docs/roadmap.md);
+- [desktop foundation plan](docs/development/desktop-foundation.md).
 
-## Quick Start
+## Current Status
 
-Install or refresh the local app:
+The current `main` branch contains the Python core and a transitional Textual
+TUI. It does not yet ship the new desktop product or complete GitHub
+integration.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/N1ghthill/devsynapse-ai/main/scripts/install.sh | bash
+The repository history contains a previous Tauri 2/React/TypeScript desktop
+application with bundled backend and Windows/Linux packaging. The roadmap
+recovers that foundation selectively without restoring its former admin,
+multi-user and generic dashboard surfaces.
+
+New product work should target the packaged desktop architecture. Do not add
+new end-user workflows exclusively to the TUI, slash-command catalog or generic
+command bridge.
+
+## Focus
+
+DevSynapse will:
+
+- connect GitHub accounts through a guided desktop flow;
+- organize local and GitHub projects;
+- explain Git state and propose coherent commits;
+- prepare and create approved pull requests;
+- explain and validate GitHub Actions workflows;
+- diagnose failed runs using jobs, annotations and logs;
+- safely dispatch, rerun and cancel approved workflows;
+- prepare releases and reusable repository procedures;
+- adapt tone, detail and terminology under user control.
+
+DevSynapse is not:
+
+- a general coding agent or IDE;
+- a terminal frontend or shell assistant;
+- an analytics dashboard;
+- a provider/model control panel;
+- a multi-user administration system;
+- an autonomous merge or deployment authority;
+- a plugin or multi-agent construction kit.
+
+## Product Architecture
+
+```text
+Tauri desktop application
+  React conversation and project interface
+                    |
+             private typed IPC
+                    |
+        bundled Python backend
+                    |
+      conversation + operation policy
+          |                    |
+      local Git            GitHub API
+          +---------+----------+
+                    |
+          SQLite memory and audit
 ```
 
-Then reload your shell path and start the TUI:
+The model interprets intent and maintains dialogue. Deterministic backend
+services own GitHub identity, operation risk, previews, approvals and
+execution.
 
-```bash
-source ~/.bashrc
-devsynapse
-```
+## Conversation Adaptation
 
-The installer bootstraps the source checkout when needed, creates `venv/`,
-installs dependencies, applies migrations and writes real commands to
-`~/.local/bin`: `devsynapse`, `update-devsynapse` and `uninstall-devsynapse`.
-It also removes previous DevSynapse aliases from shell rc files. Piped installs
-use default setup values automatically; configure provider keys later with
-`/connect` inside the TUI. For scripted local installs, set
-`DEVSYNAPSE_ASSUME_DEFAULTS=1` to skip prompts explicitly.
+The current backend already stores user preferences and supplies preferences,
+project memory and learned signals to the model. The target desktop product
+makes this capability explicit and user-controlled:
 
-From an existing checkout, the same contract is:
+- experience level;
+- detail level;
+- communication tone;
+- proactive guidance;
+- explanation before confirmation.
 
-```bash
-bash scripts/install.sh
-devsynapse
-```
+Users can inspect, edit and reset learned preferences. Adaptation never changes
+security or confirmation requirements.
 
-Verify the installed build:
+## Development
 
-```bash
-devsynapse --version
-```
+Current backend prerequisites:
 
-Update or remove:
+- Python 3.10 or newer;
+- Linux or another Unix-like development environment;
+- Git.
 
-```bash
-update-devsynapse
-uninstall-devsynapse
-```
-
-For development:
+Set up the current core:
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 make install-dev
+make verify
 ```
 
-Configure a provider key inside the TUI:
+Run the transitional TUI for current-core development:
 
 ```bash
-devsynapse
+make run
 ```
 
-Then run `/connect` and choose DeepSeek, OpenRouter, OpenCode Zen or OpenCode Go.
-The setup form saves the API key, the provider's default model, and the default
-provider route in the per-user runtime config. Manual config editing is still
-available for scripted setups:
+This is a contributor workflow, not the target end-user installation.
 
-```bash
-mkdir -p ~/.config/devsynapse-ai
-cp .env.example ~/.config/devsynapse-ai/.env
-$EDITOR ~/.config/devsynapse-ai/.env
-```
-
-Start DevSynapse:
-
-```bash
-devsynapse
-```
-
-## Canonical Flow
-
-`devsynapse` opens the terminal UI. That is the only supported operator flow.
-Provider setup, status, usage, budget, model selection, workspace selection and shell-tool
-commands are slash commands inside the TUI. External subcommands such as
-`devsynapse providers`, `devsynapse connect ...` or `devsynapse tui` are
-intentionally rejected so the product has one clear entry point.
-
-Inside the TUI, DevSynapse exposes operational slash commands:
+## Repository Structure
 
 ```text
-/connect                         open provider setup
-/connect <provider>              open setup with provider selected
-/connect <provider> <api-key>    save provider keys
-/providers                       show configured provider status
-/mode build|plan                 switch Build or read-only Plan mode
-/discover                        refresh the model catalog
-/model                           search and select active model
-/models [provider]               list known models and pricing
-/copy                            copy last assistant answer
-/budget                          show daily/monthly plan usage
-/budget daily|monthly <usd>      set budget limits
-/router                          show manual model status
-/usage                           show recent model/cost telemetry
-/theme [theme] [layout] [lines]  show or change TUI appearance
-/projects                        list registered workspaces
-/project <path|name>             set workspace from a local path or known name
-!<command>                       run a shell command as a tool result
-```
-
-Workspace resolution is discovery-first. An explicit user path wins; an
-existing Git repository root is treated as the project boundary even when it is
-outside the preferred repositories directory; registered workspaces and the
-current cwd provide additional context. The configured repositories root is only
-the default location for new standalone projects when no stronger signal exists.
-
-The TUI keeps the conversation log, input line, session state, provider status,
-budget state and common commands visible in one terminal screen. The status bar
-shows the active agent mode, session token/cost totals, effective cwd,
-workspace, session ID and budget health; long-running agent and shell work also
-shows an elapsed progress ticker. The right panel summarizes the active session,
-selected model, 24h request/token/cost telemetry, cache rate, error rate,
-latency, budget usage, active workspace file changes and the top recent model. The
-sidebar panels (Model, Telemetry) are collapsible for a cleaner view.
-Focused chat, command suggestion and command palette regions use high-contrast
-theme borders so keyboard location is visible while navigating.
-Shell outputs that look like unified diffs, git patches, JSON, YAML, CSV or TSV
-are rendered with richer formatting. JSON objects and arrays use a tree view,
-CSV/TSV uses a table view, and diffs include a compact file/hunk/add/remove
-summary. Output lines that explicitly report `progress: current/total` or
-`progress: pct%` also show a deterministic progress bar.
-
-Typing `/` opens contextual command suggestions; `Up` and `Down` move through
-suggestions, and `Tab` or `Enter` completes the highlighted command or
-argument. With an empty input, `Tab` toggles between Build mode and read-only
-Plan mode. `Ctrl+P` opens the command palette for fuzzy command search.
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+H` | Show help overlay |
-| `F2` | Open model picker |
-| `F3` | Copy last assistant answer |
-| `F4` | Toggle model sidebar panel |
-| `F5` | Toggle telemetry sidebar panel |
-| `Ctrl+N` | New conversation |
-| `Ctrl+L` | Clear chat |
-| `Ctrl+P` | Open command palette |
-| `Ctrl+R` | Refresh status |
-| `Ctrl+Space` | Command menu |
-| `PageUp/PageDown` | Scroll chat log |
-| `Ctrl+Home/Ctrl+End` | Jump to top/bottom of chat log |
-| `Shift+Enter` | New line in input |
-| `Up/Down`, `Ctrl+K/J` | Navigate command history or menu suggestions |
-| `Tab` | Autocomplete |
-| `Esc` | Close command suggestions/dialogs |
-
-Mouse support is available in supported terminals: wheel scrolls chat, sidebars
-and lists; clicking suggestions or command palette rows selects them; clicking
-the input returns focus to message entry.
-
-## Runtime State
-
-By default DevSynapse stores user runtime files outside the source checkout:
-
-- config: `~/.config/devsynapse-ai/.env`
-- TUI preferences: `~/.config/devsynapse-ai/ui.json`
-- SQLite data: `~/.local/share/devsynapse-ai/data/devsynapse_memory.db`
-- logs: `~/.local/state/devsynapse-ai/logs/devsynapse.log`
-- default source checkout for curl installs:
-  `~/.local/share/devsynapse-ai/source`
-
-Set `DEVSYNAPSE_HOME=/path/to/runtime` to keep config, data and logs together
-under one directory. The more specific `DEVSYNAPSE_CONFIG_FILE`,
-`DEVSYNAPSE_DATA_DIR` and `DEVSYNAPSE_LOGS_DIR` variables can override each path.
-Set `ASSISTANT_USER_NAME` in the runtime config or environment to personalize
-the system prompt; the default prompt is generic for distributed installs.
-Set `LLM_STREAMING_ENABLED=false` to force non-streaming provider responses.
-Set `LLM_DEFAULT_PROVIDER` to `deepseek`, `openrouter`, `opencode-zen` or
-`opencode-go` to choose the active provider. If that provider is not configured
-or its request fails, DevSynapse tries the next configured provider before
-falling back to degraded local-only help. Provider model defaults can be set with
-`DEEPSEEK_MODEL`, `OPENROUTER_MODEL`, `OPENCODE_ZEN_MODEL` and
-`OPENCODE_GO_MODEL`. OpenRouter defaults to `openrouter/free` so normal chat can
-use the free model router; `/model` lets operators switch to a specific free or
-paid model with search.
-
-TUI appearance is loaded from `ui.json`. Supported values are
-`"theme": "dark" | "light" | "dracula"` and
-`"layout": "default" | "dense"`, plus chat log `max_lines` and persisted sidebar
-panel collapse state. `DEVSYNAPSE_TUI_THEME`, `DEVSYNAPSE_TUI_LAYOUT`,
-`DEVSYNAPSE_TUI_MAX_LINES` and `DEVSYNAPSE_TUI_CONFIG_FILE` can override the JSON
-file for temporary sessions. Inside the TUI, `/theme dracula dense 5000` updates
-the same preference file.
-
-Runtime loaders create these files on a best-effort basis. Read-only runtime
-config should not break commands such as `devsynapse --help`; commands that need
-persistent memory still require a writable SQLite data directory.
-
-## Common Commands
-
-```bash
-make install-dev        # install runtime and test dependencies
-make run                # start the TUI
-make tui-smoke          # check TUI launcher help
-make lint               # run Ruff
-make test               # run pytest
-make script-check       # check shell and operational scripts
-make verify             # lint, tests, script checks and TUI smoke checks
-make migrate            # apply SQLite migrations
-make migration-status   # inspect migration state
-```
-
-The Python package entry point is also declared as:
-
-```bash
-devsynapse = "devsynapse.cli:main"
-```
-
-For day-to-day operation, see [docs/operator.md](docs/operator.md).
-
-## Project Structure
-
-```text
-devsynapse/        TUI launcher and Textual application
-config/            runtime settings and command policy constants
-core/              LLM orchestration, model selection, memory, plugins and tools
-core/memory/       SQLite-backed stores
-plugins/           local plugin examples
-scripts/           install, update, migration and evaluation utilities
+config/            current runtime settings
+core/              conversation, memory, policy and transitional tools
+devsynapse/        transitional Textual interface
+docs/              product, architecture, security and implementation plans
+plugins/           existing extension example; not target product UI
+scripts/           current installation, migration and evaluation utilities
 tests/             unit and integration tests
-docs/              contributor and architecture documentation
 ```
+
+The roadmap will restore a minimal `frontend/` Tauri/React workspace.
 
 ## Verification
 
-Product-critical checks:
+Current baseline:
 
 ```bash
-make script-check
-make tui-smoke
-./venv/bin/pytest -q tests/integration/test_install_uninstall_scripts.py
-./venv/bin/pytest -q tests/unit/test_cli.py tests/unit/test_cli_entry.py tests/unit/test_tui_smoke.py
+make verify
 ```
+
+Desktop work will add frontend lint/typecheck, Rust tests, IPC contracts,
+desktop smoke tests and clean-machine package installation checks.
+
+## Contribution Contract
+
+Before implementation, read [AGENTS.md](AGENTS.md). Changes must:
+
+- preserve the distinction between current and target behavior;
+- use typed Git/GitHub operations instead of model-generated shell;
+- keep GitHub credentials out of prompts, logs, memory and frontend state;
+- include migrations for persisted schema changes;
+- update the nearest product or architecture document;
+- pass the relevant current and desktop verification surfaces.

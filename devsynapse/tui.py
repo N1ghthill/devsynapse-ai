@@ -62,7 +62,7 @@ class DevSynapseTUI(App):
     """Enhanced Textual TUI for DevSynapse AI."""
 
     TITLE = "DevSynapse AI"
-    SUB_TITLE = "terminal coding agent"
+    SUB_TITLE = "repository operations copilot"
     ENABLE_COMMAND_PALETTE = False
 
     BINDINGS = [
@@ -630,7 +630,7 @@ class DevSynapseTUI(App):
         layout = self.ui_preferences.layout
         self._header().update(
             f"[bold {self._state_color('title')}]DevSynapse AI[/] "
-            f"[{self._state_color('muted')}]terminal coding agent[/] "
+            f"[{self._state_color('muted')}]repository operations copilot[/] "
             f"[{self._state_color('streaming')}]{self.agent_mode.title()}[/] "
             f"[{self._state_color('streaming')}]{theme}/{layout}[/] "
             f"[{self._state_color('muted')}]{now}[/]"

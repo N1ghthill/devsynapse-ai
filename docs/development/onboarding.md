@@ -1,6 +1,8 @@
 # Contributor Onboarding
 
-This guide describes the current TUI-first checkout.
+This guide describes the current transitional Python/TUI checkout for
+contributors. The target end-user product is the packaged desktop application
+defined in [the desktop foundation plan](desktop-foundation.md).
 
 ## Prerequisites
 
