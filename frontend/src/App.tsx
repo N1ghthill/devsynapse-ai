@@ -8,11 +8,14 @@ import {
   HeartPulse,
   MessageSquareText,
   RotateCw,
+  Send,
+  Square,
   Settings,
   ShieldCheck,
 } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { AppHealth, ConversationEvent, ConversationResponse } from './contracts/ipc'
 
 type SectionId = 'conversation' | 'projects' | 'activity' | 'settings'
 
@@ -36,20 +39,6 @@ const readinessItems = [
   'Backend sidecar lifecycle connected through private health checks',
 ]
 
-type BackendHealth = {
-  status: string
-  port?: number | null
-  pid?: number | null
-  dataDir?: string | null
-  message?: string | null
-}
-
-type AppHealth = {
-  status: string
-  version: string
-  backend: BackendHealth
-}
-
 const browserPreviewHealth: AppHealth = {
   status: 'preview',
   version: __APP_VERSION__,
@@ -57,6 +46,19 @@ const browserPreviewHealth: AppHealth = {
     status: 'browser_preview',
     message: 'Tauri IPC is available only in the desktop shell.',
   },
+}
+
+type ConversationMessage = {
+  id: string
+  role: 'assistant' | 'user' | 'system'
+  text: string
+}
+
+function requestId(prefix: string) {
+  if (globalThis.crypto?.randomUUID) {
+    return `${prefix}-${globalThis.crypto.randomUUID()}`
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
 function App() {
@@ -161,27 +163,162 @@ function App() {
 }
 
 function ConversationPanel({ health }: { health: AppHealth }) {
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<ConversationMessage[]>([
+    {
+      id: 'intro',
+      role: 'assistant',
+      text:
+        'I can help inspect projects, explain GitHub state and prepare safe actions. ' +
+        'Repository-changing workflows will appear only after typed operations, previews and approvals are connected.',
+    },
+  ])
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const appendEvents = useCallback((events: ConversationEvent[]) => {
+    for (const event of events) {
+      if (event.type === 'response.delta' && event.delta) {
+        setMessages((current) => [
+          ...current,
+          {
+            id: event.requestId,
+            role: 'assistant',
+            text: event.delta ?? '',
+          },
+        ])
+      }
+      if (event.type === 'response.failed') {
+        setMessages((current) => [
+          ...current,
+          {
+            id: event.requestId,
+            role: 'system',
+            text: event.error ?? 'Request failed',
+          },
+        ])
+      }
+    }
+  }, [])
+
+  const ensureConversation = useCallback(async () => {
+    if (conversationId) {
+      return conversationId
+    }
+    const response = await invoke<ConversationResponse>('conversation_start', {
+      args: { requestId: requestId('start') },
+    })
+    setConversationId(response.conversationId)
+    appendEvents(response.events)
+    return response.conversationId
+  }, [appendEvents, conversationId])
+
+  const sendMessage = useCallback(async () => {
+    const message = draft.trim()
+    if (!message || busy) {
+      return
+    }
+    setBusy(true)
+    setDraft('')
+    const userMessageId = requestId('user')
+    setMessages((current) => [...current, { id: userMessageId, role: 'user', text: message }])
+
+    try {
+      const activeConversationId = await ensureConversation()
+      const response = await invoke<ConversationResponse>('conversation_send', {
+        args: {
+          requestId: requestId('send'),
+          conversationId: activeConversationId,
+          message,
+        },
+      })
+      appendEvents(response.events)
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        {
+          id: requestId('error'),
+          role: 'system',
+          text: error instanceof Error ? error.message : String(error),
+        },
+      ])
+    } finally {
+      setBusy(false)
+    }
+  }, [appendEvents, busy, draft, ensureConversation])
+
+  const cancelConversation = useCallback(async () => {
+    if (!conversationId) {
+      return
+    }
+    setBusy(false)
+    try {
+      const response = await invoke<ConversationResponse>('conversation_cancel', {
+        args: {
+          requestId: requestId('cancel'),
+          conversationId,
+        },
+      })
+      appendEvents(response.events)
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        {
+          id: requestId('cancel-error'),
+          role: 'system',
+          text: error instanceof Error ? error.message : String(error),
+        },
+      ])
+    }
+  }, [appendEvents, conversationId])
+
   return (
     <div className="content-grid">
       <section className="conversation-surface" aria-label="Conversation preview">
-        <article className="message assistant">
-          <div className="avatar">
-            <Bot size={18} aria-hidden="true" />
-          </div>
-          <div>
-            <span className="message-author">DevSynapse</span>
-            <p>
-              I can help inspect projects, explain GitHub state and prepare safe actions.
-              Repository-changing workflows will appear only after typed operations,
-              previews and approvals are connected.
-            </p>
-          </div>
-        </article>
-
-        <div className="composer" aria-label="Composer placeholder">
-          <MessageSquareText size={18} aria-hidden="true" />
-          <span>Conversation IPC connects in the streaming milestone.</span>
+        <div className="message-list">
+          {messages.map((message) => (
+            <article className={`message ${message.role}`} key={message.id}>
+              <div className="avatar">
+                {message.role === 'user' ? (
+                  <MessageSquareText size={18} aria-hidden="true" />
+                ) : (
+                  <Bot size={18} aria-hidden="true" />
+                )}
+              </div>
+              <div>
+                <span className="message-author">
+                  {message.role === 'user' ? 'You' : message.role === 'system' ? 'System' : 'DevSynapse'}
+                </span>
+                <p>{message.text}</p>
+              </div>
+            </article>
+          ))}
         </div>
+
+        <form
+          className="composer"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void sendMessage()
+          }}
+        >
+          <input
+            aria-label="Message"
+            disabled={busy}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="Ask about this desktop foundation"
+            value={draft}
+          />
+          {busy ? (
+            <button className="icon-button" onClick={cancelConversation} title="Cancel" type="button">
+              <Square size={16} aria-hidden="true" />
+            </button>
+          ) : (
+            <button className="icon-button" disabled={!draft.trim()} title="Send" type="submit">
+              <Send size={16} aria-hidden="true" />
+            </button>
+          )}
+        </form>
       </section>
 
       <aside className="side-panel" aria-label="Readiness">

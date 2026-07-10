@@ -12,6 +12,7 @@ import json
 import os
 import signal
 import sys
+import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -32,6 +33,7 @@ class BackendState:
         self.data_dir = data_dir
         self.version = version
         self.auth_token = auth_token
+        self.conversations: set[str] = set()
 
 
 class SidecarHandler(BaseHTTPRequestHandler):
@@ -67,9 +69,91 @@ class SidecarHandler(BaseHTTPRequestHandler):
 
         self._json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
 
+    def do_POST(self) -> None:
+        if not self._authorized():
+            self._json_response(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            return
+
+        try:
+            payload = self._read_json_body()
+        except ValueError as exc:
+            self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            return
+
+        if self.path == "/conversation/start":
+            request_id = _required_string(payload, "requestId")
+            if request_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "missing_request_id"})
+                return
+            conversation_id = f"conv-{uuid.uuid4().hex}"
+            self.backend_state.conversations.add(conversation_id)
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "conversationId": conversation_id,
+                    "events": conversation_started_events(request_id, conversation_id),
+                },
+            )
+            return
+
+        if self.path == "/conversation/send":
+            request_id = _required_string(payload, "requestId")
+            conversation_id = _required_string(payload, "conversationId")
+            message = _required_string(payload, "message")
+            if request_id is None or conversation_id is None or message is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "missing_conversation_input"})
+                return
+            if conversation_id not in self.backend_state.conversations:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "conversation_not_found"})
+                return
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "conversationId": conversation_id,
+                    "events": conversation_send_events(request_id, conversation_id, message),
+                },
+            )
+            return
+
+        if self.path == "/conversation/cancel":
+            request_id = _required_string(payload, "requestId")
+            conversation_id = _required_string(payload, "conversationId")
+            if request_id is None or conversation_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "missing_conversation_input"})
+                return
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "conversationId": conversation_id,
+                    "events": conversation_cancel_events(request_id, conversation_id),
+                },
+            )
+            return
+
+        self._json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+
     def _authorized(self) -> bool:
         expected = f"Bearer {self.backend_state.auth_token}"
         return self.headers.get("authorization") == expected
+
+    def _read_json_body(self) -> dict[str, Any]:
+        length_header = self.headers.get("content-length")
+        try:
+            length = int(length_header or "0")
+        except ValueError as exc:
+            raise ValueError("invalid_content_length") from exc
+        if length <= 0:
+            return {}
+        if length > 64 * 1024:
+            raise ValueError("request_too_large")
+        raw_body = self.rfile.read(length)
+        try:
+            payload = json.loads(raw_body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("invalid_json") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("invalid_json_object")
+        return payload
 
     def _json_response(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -84,6 +168,69 @@ class SidecarServer(ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], state: BackendState) -> None:
         super().__init__(address, SidecarHandler)
         self.backend_state = state
+
+
+def _required_string(payload: dict[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value or None
+
+
+def conversation_started_events(request_id: str, conversation_id: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "response.started",
+            "requestId": request_id,
+            "conversationId": conversation_id,
+        },
+        {
+            "type": "response.completed",
+            "requestId": request_id,
+            "conversationId": conversation_id,
+        },
+    ]
+
+
+def conversation_send_events(
+    request_id: str,
+    conversation_id: str,
+    message: str,
+) -> list[dict[str, Any]]:
+    del message
+    return [
+        {
+            "type": "response.started",
+            "requestId": request_id,
+            "conversationId": conversation_id,
+        },
+        {
+            "type": "response.delta",
+            "requestId": request_id,
+            "conversationId": conversation_id,
+            "delta": (
+                "Desktop IPC is connected. The next milestone will route this "
+                "message through the conversation core and registered operations."
+            ),
+        },
+        {
+            "type": "response.completed",
+            "requestId": request_id,
+            "conversationId": conversation_id,
+        },
+    ]
+
+
+def conversation_cancel_events(request_id: str, conversation_id: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "response.failed",
+            "requestId": request_id,
+            "conversationId": conversation_id,
+            "error": "cancelled",
+        }
+    ]
 
 
 def _configure_runtime(data_dir: Path) -> None:

@@ -25,6 +25,10 @@ button {
   font: inherit;
 }
 
+input {
+  font: inherit;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: 272px minmax(0, 1fr);
@@ -194,11 +198,31 @@ h2 {
   padding: 20px;
 }
 
+.message-list {
+  display: grid;
+  gap: 16px;
+  padding-bottom: 18px;
+}
+
 .message {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
   gap: 12px;
   max-width: 760px;
+}
+
+.message.user {
+  margin-left: auto;
+}
+
+.message.user .avatar {
+  color: #ffffff;
+  background: #315b73;
+}
+
+.message.system .avatar {
+  color: #ffffff;
+  background: #a16916;
 }
 
 .avatar {
@@ -238,6 +262,30 @@ h2 {
   background: #f3f5f2;
   border: 1px solid #d9ded9;
   border-radius: 8px;
+}
+
+.composer input {
+  width: 100%;
+  min-width: 0;
+  color: #172027;
+  background: transparent;
+  border: 0;
+  outline: 0;
+}
+
+.composer input::placeholder {
+  color: #72837a;
+}
+
+.composer .icon-button {
+  background: #172027;
+  border-color: #172027;
+  color: #ffffff;
+}
+
+.composer .icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .side-panel {

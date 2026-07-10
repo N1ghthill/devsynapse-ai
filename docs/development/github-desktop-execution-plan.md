@@ -134,6 +134,16 @@ Acceptance checks:
 - Cancellation leaves an auditable terminal event.
 - Contract tests cover request and event schema compatibility.
 
+Current implementation notes:
+
+- Tauri exposes typed `conversation.start`, `conversation.send` and
+  `conversation.cancel` commands to the React shell.
+- The Python sidecar accepts authenticated conversation lifecycle requests and
+  returns structured response events.
+- The current event stream is deterministic placeholder behavior; it proves the
+  contract path before connecting the conversation core and operation registry.
+- No Git, GitHub, LLM or shell operation is exposed through this contract yet.
+
 ### Increment 4: Read-Only Operation Kernel
 
 Goal: introduce the registered operation model without mutation.
