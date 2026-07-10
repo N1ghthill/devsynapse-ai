@@ -65,6 +65,14 @@ pub struct ConversationCancelArgs {
     conversation_id: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationRunArgs {
+    request_id: String,
+    operation_name: String,
+    input: serde_json::Value,
+}
+
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationEvent {
@@ -81,6 +89,30 @@ pub struct ConversationEvent {
 pub struct ConversationResponse {
     pub conversation_id: String,
     pub events: Vec<ConversationEvent>,
+}
+
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationDefinition {
+    pub name: String,
+    pub risk_class: String,
+    pub description: String,
+}
+
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationListResponse {
+    pub operations: Vec<OperationDefinition>,
+}
+
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationRunResponse {
+    pub request_id: String,
+    pub operation_name: String,
+    pub risk_class: String,
+    pub status: String,
+    pub result: serde_json::Value,
 }
 
 fn find_free_port() -> Result<u16, String> {
@@ -321,6 +353,30 @@ fn conversation_request(
     serde_json::from_value(response).map_err(|error| error.to_string())
 }
 
+fn operation_list_request(state: &BackendState) -> Result<OperationListResponse, String> {
+    let (port, token) = backend_connection(state)?;
+    let response = post_backend_json(port, &token, "/operations/list", serde_json::json!({}))?;
+    serde_json::from_value(response).map_err(|error| error.to_string())
+}
+
+fn operation_run_request(
+    state: &BackendState,
+    args: OperationRunArgs,
+) -> Result<OperationRunResponse, String> {
+    let (port, token) = backend_connection(state)?;
+    let response = post_backend_json(
+        port,
+        &token,
+        "/operations/run",
+        serde_json::json!({
+            "requestId": args.request_id,
+            "operationName": args.operation_name,
+            "input": args.input,
+        }),
+    )?;
+    serde_json::from_value(response).map_err(|error| error.to_string())
+}
+
 fn backend_health(backend: &mut ManagedBackend) -> BackendHealth {
     let data_dir = backend
         .data_dir
@@ -474,6 +530,21 @@ fn conversation_cancel(
     )
 }
 
+#[tauri::command]
+fn operation_list(
+    state: tauri::State<'_, BackendState>,
+) -> Result<OperationListResponse, String> {
+    operation_list_request(state.inner())
+}
+
+#[tauri::command]
+fn operation_run(
+    args: OperationRunArgs,
+    state: tauri::State<'_, BackendState>,
+) -> Result<OperationRunResponse, String> {
+    operation_run_request(state.inner(), args)
+}
+
 pub fn run() {
     let backend_state: BackendState = Arc::new(Mutex::new(ManagedBackend::default()));
     let setup_state = backend_state.clone();
@@ -486,7 +557,9 @@ pub fn run() {
             restart_backend,
             conversation_start,
             conversation_send,
-            conversation_cancel
+            conversation_cancel,
+            operation_list,
+            operation_run
         ])
         .setup(move |app| {
             let mut backend = setup_state.lock().expect("backend state lock poisoned");

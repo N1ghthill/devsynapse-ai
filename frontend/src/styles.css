@@ -184,6 +184,8 @@ h2 {
 .conversation-surface,
 .side-panel,
 .empty-state,
+.project-list,
+.evidence-panel,
 .timeline,
 .settings-list {
   border: 1px solid #d9ded9;
@@ -326,6 +328,108 @@ h2 {
   margin-bottom: 14px;
 }
 
+.projects-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.project-list,
+.evidence-panel {
+  padding: 18px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.panel-header h2 {
+  margin-bottom: 0;
+}
+
+.project-row {
+  display: grid;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid #e6e9e6;
+}
+
+.project-row[data-selected="true"] {
+  background: #f6faf7;
+}
+
+.project-row strong {
+  display: block;
+  line-height: 1.35;
+}
+
+.project-row span {
+  display: block;
+  margin-top: 4px;
+  color: #557067;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.project-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.text-button {
+  min-height: 32px;
+  padding: 0 10px;
+  color: #244638;
+  background: #f3f5f2;
+  border: 1px solid #d9ded9;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.text-button:hover {
+  background: #dcefe6;
+  border-color: #b9decd;
+}
+
+.evidence-panel pre {
+  min-height: 260px;
+  max-height: 520px;
+  padding: 14px;
+  margin: 0;
+  overflow: auto;
+  color: #172027;
+  background: #f3f5f2;
+  border: 1px solid #d9ded9;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.inline-error {
+  padding: 10px 12px;
+  color: #7b3415;
+  background: #fff3e2;
+  border: 1px solid #efc38a;
+  border-radius: 8px;
+}
+
+.empty-inline {
+  display: grid;
+  gap: 8px;
+  place-items: center;
+  min-height: 180px;
+  color: #557067;
+  text-align: center;
+}
+
 .activity-stack,
 .timeline,
 .settings-list {
@@ -464,7 +568,8 @@ h2 {
   }
 
   .workspace-header,
-  .content-grid {
+  .content-grid,
+  .projects-layout {
     grid-template-columns: 1fr;
   }
 

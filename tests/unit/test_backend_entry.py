@@ -14,6 +14,9 @@ SidecarHandler = backend_entry.SidecarHandler
 conversation_cancel_events = backend_entry.conversation_cancel_events
 conversation_send_events = backend_entry.conversation_send_events
 conversation_started_events = backend_entry.conversation_started_events
+git_status_counts = backend_entry.git_status_counts
+operation_definitions = backend_entry.operation_definitions
+project_list = backend_entry.project_list
 
 
 def _handler(token: str, header: str | None) -> SidecarHandler:
@@ -68,3 +71,48 @@ def test_conversation_cancel_event_is_terminal_failure():
             "error": "cancelled",
         }
     ]
+
+
+def test_operation_definitions_are_read_only():
+    definitions = operation_definitions()
+
+    assert [definition["name"] for definition in definitions] == [
+        "project.list",
+        "repository.snapshot",
+        "git.status",
+    ]
+    assert {definition["riskClass"] for definition in definitions} == {"observe"}
+
+
+def test_project_list_normalizes_known_projects(tmp_path):
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+
+    result = project_list(
+        {
+            "repo": {
+                "path": str(repo),
+                "type": "project",
+                "priority": "high",
+            }
+        }
+    )
+
+    assert result["projects"] == [
+        {
+            "name": "repo",
+            "path": str(repo),
+            "type": "project",
+            "priority": "high",
+            "exists": True,
+            "isGitRepository": True,
+        }
+    ]
+
+
+def test_git_status_counts_parses_porcelain():
+    assert git_status_counts(" M changed.py\nA  staged.py\n?? new.py\nMM both.py\n") == {
+        "staged": 2,
+        "unstaged": 2,
+        "untracked": 1,
+    }

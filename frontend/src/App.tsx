@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   CircleAlert,
   FolderGit2,
+  GitBranch,
   GitPullRequestArrow,
   HeartPulse,
   MessageSquareText,
@@ -15,7 +16,15 @@ import {
 } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { AppHealth, ConversationEvent, ConversationResponse } from './contracts/ipc'
+import type {
+  AppHealth,
+  ConversationEvent,
+  ConversationResponse,
+  OperationListResponse,
+  OperationRunResponse,
+  ProjectListResult,
+  ProjectSummary,
+} from './contracts/ipc'
 
 type SectionId = 'conversation' | 'projects' | 'activity' | 'settings'
 
@@ -338,14 +347,106 @@ function ConversationPanel({ health }: { health: AppHealth }) {
 }
 
 function ProjectsPanel() {
+  const [projects, setProjects] = useState<ProjectSummary[]>([])
+  const [selectedProject, setSelectedProject] = useState<string | null>(null)
+  const [projectEvidence, setProjectEvidence] = useState<string>('No project evidence loaded.')
+  const [error, setError] = useState<string | null>(null)
+
+  const loadProjects = useCallback(async () => {
+    try {
+      setError(null)
+      const response = await invoke<OperationRunResponse<ProjectListResult>>('operation_run', {
+        args: {
+          requestId: requestId('project-list'),
+          operationName: 'project.list',
+          input: {},
+        },
+      })
+      setProjects(response.result.projects)
+      if (!selectedProject && response.result.projects[0]) {
+        setSelectedProject(response.result.projects[0].name)
+      }
+    } catch (operationError) {
+      setError(operationError instanceof Error ? operationError.message : String(operationError))
+    }
+  }, [selectedProject])
+
+  const inspectProject = useCallback(async (projectName: string, operationName: string) => {
+    try {
+      setError(null)
+      const response = await invoke<OperationRunResponse<Record<string, unknown>>>('operation_run', {
+        args: {
+          requestId: requestId(operationName),
+          operationName,
+          input: { projectName },
+        },
+      })
+      setSelectedProject(projectName)
+      setProjectEvidence(JSON.stringify(response.result, null, 2))
+    } catch (operationError) {
+      setError(operationError instanceof Error ? operationError.message : String(operationError))
+    }
+  }, [])
+
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => {
+      void loadProjects()
+    }, 0)
+    return () => window.clearTimeout(initialLoad)
+  }, [loadProjects])
+
   return (
-    <section className="empty-state">
-      <FolderGit2 size={34} aria-hidden="true" />
-      <h2>Project selection comes next</h2>
-      <p>
-        The first project workflow will use native folder selection and typed
-        repository identity. The frontend will not parse Git output directly.
-      </p>
+    <section className="projects-layout" aria-label="Projects">
+      <div className="project-list">
+        <div className="panel-header">
+          <h2>Local projects</h2>
+          <button className="icon-button" onClick={loadProjects} title="Refresh projects" type="button">
+            <RotateCw size={16} aria-hidden="true" />
+          </button>
+        </div>
+
+        {error && <p className="inline-error">{error}</p>}
+
+        {projects.length === 0 ? (
+          <div className="empty-inline">
+            <FolderGit2 size={28} aria-hidden="true" />
+            <span>No configured Git projects were found.</span>
+          </div>
+        ) : (
+          projects.map((project) => (
+            <article className="project-row" data-selected={project.name === selectedProject} key={project.name}>
+              <div>
+                <strong>{project.name}</strong>
+                <span>{project.path}</span>
+              </div>
+              <div className="project-actions">
+                <button
+                  className="text-button"
+                  onClick={() => void inspectProject(project.name, 'repository.snapshot')}
+                  type="button"
+                >
+                  Snapshot
+                </button>
+                <button
+                  className="text-button"
+                  onClick={() => void inspectProject(project.name, 'git.status')}
+                  type="button"
+                >
+                  Status
+                </button>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+
+      <div className="evidence-panel">
+        <div className="panel-header">
+          <h2>Read-only evidence</h2>
+          <GitBranch size={18} aria-hidden="true" />
+        </div>
+        <pre>{projectEvidence}</pre>
+      </div>
     </section>
   )
 }
@@ -357,6 +458,20 @@ function ActivityPanel({
   health: AppHealth
   onRestartBackend: () => void
 }) {
+  const [operations, setOperations] = useState<string[]>([])
+
+  useEffect(() => {
+    invoke<OperationListResponse>('operation_list')
+      .then((response) =>
+        setOperations(
+          response.operations.map(
+            (operation) => `${operation.name} (${operation.riskClass})`,
+          ),
+        ),
+      )
+      .catch(() => setOperations([]))
+  }, [])
+
   return (
     <section className="activity-stack" aria-label="Activity">
       <div className="backend-panel">
@@ -367,6 +482,15 @@ function ActivityPanel({
       </div>
 
       <div className="timeline">
+        {operations.length > 0 && (
+          <div className="timeline-row">
+            <ShieldCheck size={18} aria-hidden="true" />
+            <div>
+              <strong>Registered read-only operations</strong>
+              <span>{operations.join(', ')}</span>
+            </div>
+          </div>
+        )}
         <div className="timeline-row">
           <Activity size={18} aria-hidden="true" />
           <div>

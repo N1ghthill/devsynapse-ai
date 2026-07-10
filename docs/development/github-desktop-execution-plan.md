@@ -165,6 +165,15 @@ Acceptance checks:
 - The model cannot emit raw shell as a product operation.
 - Cross-project state is explicit in every operation input and result.
 
+Current implementation notes:
+
+- The sidecar registers the initial observe operations:
+  `project.list`, `repository.snapshot` and `git.status`.
+- Operation execution returns normalized JSON through authenticated Tauri IPC.
+- Git evidence is collected with fixed subprocess argument lists, not shell
+  text supplied by the model or frontend.
+- The Projects view consumes these operations for read-only local evidence.
+
 ### Increment 5: GitHub Account and Portfolio
 
 Goal: connect GitHub and associate local projects with remote repositories.
