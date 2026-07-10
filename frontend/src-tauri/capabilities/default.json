@@ -1,0 +1,7 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicholasio/tauri-docs/v2/src/capabilities/default.json",
+  "identifier": "default",
+  "description": "Default capabilities for DevSynapse AI",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

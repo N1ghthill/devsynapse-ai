@@ -2,6 +2,7 @@
 
 import re
 import shlex
+import tempfile
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
@@ -91,7 +92,21 @@ class ProjectResolver:
         git_root = self.find_git_root(path)
         if git_root is None:
             return None
+        if self._is_ambient_temp_git_root(git_root):
+            return None
         return git_root.name, git_root
+
+    @staticmethod
+    def _is_ambient_temp_git_root(path: Path) -> bool:
+        """Ignore accidental system temp roots such as /tmp/.git."""
+
+        try:
+            resolved = path.expanduser().resolve()
+        except OSError:
+            return False
+
+        temp_roots = {Path(tempfile.gettempdir()).resolve(), Path("/tmp"), Path("/var/tmp")}
+        return resolved in temp_roots
 
     @staticmethod
     def extract_path_references(text: str) -> List[str]:

@@ -31,14 +31,21 @@ def _get_blocking_executor() -> ThreadPoolExecutor:
 async def run_blocking(func: Callable[..., T], /, *args: Any, **kwargs: Any) -> T:
     """Run blocking work without using asyncio's default executor.
 
-    Uses asyncio.wrap_future() for proper event loop integration instead of
-    busy-wait polling. This eliminates unnecessary CPU wakeups.
+    The dedicated executor keeps database and filesystem work out of asyncio's
+    default executor. Some Python/runtime combinations fail to wake the event
+    loop reliably for thread futures that complete from SQLite work, so this
+    uses a small async polling interval instead of ``asyncio.wrap_future()``.
     """
 
     call = partial(func, *args, **kwargs)
     future: ThreadFuture[T] = _get_blocking_executor().submit(call)
-    # wrap_future integrates the thread future with the event loop properly
-    return await asyncio.wrap_future(future)
+    try:
+        while not future.done():
+            await asyncio.sleep(0.01)
+        return future.result()
+    except asyncio.CancelledError:
+        future.cancel()
+        raise
 
 
 def shutdown_blocking_executor(*, wait: bool = False) -> None:

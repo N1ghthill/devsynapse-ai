@@ -3,7 +3,7 @@ PIP ?= $(shell if [ -x ./venv/bin/pip ]; then printf './venv/bin/pip'; else comm
 PYTEST ?= $(shell if [ -x ./venv/bin/pytest ]; then printf './venv/bin/pytest'; else command -v pytest; fi)
 RUFF ?= $(shell if [ -x ./venv/bin/ruff ]; then printf './venv/bin/ruff'; else command -v ruff; fi)
 
-.PHONY: setup install install-dev test lint script-check verify migrate migration-status run tui-smoke
+.PHONY: setup install install-dev test lint frontend-install frontend-lint frontend-typecheck frontend-build desktop-check script-check verify migrate migration-status run tui-smoke
 
 setup:
 	python3 -m venv venv
@@ -34,11 +34,27 @@ test:
 lint:
 	$(RUFF) check .
 
+frontend-install:
+	cd frontend && if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+frontend-lint:
+	cd frontend && npm run lint
+
+frontend-typecheck:
+	cd frontend && npm run typecheck
+
+frontend-build:
+	cd frontend && npm run build
+
+desktop-check:
+	cd frontend/src-tauri && cargo check
+
 script-check:
 	bash -n scripts/install.sh
 	bash -n scripts/uninstall.sh
 	bash -n scripts/update.sh
-	$(PYTHON) -m py_compile devsynapse/cli.py devsynapse/tui.py scripts/migrate.py scripts/eval_agent.py
+	bash -n scripts/build-backend.sh
+	$(PYTHON) -m py_compile backend-entry.py devsynapse/cli.py devsynapse/tui.py scripts/migrate.py scripts/eval_agent.py
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh; \
 	else \
@@ -55,7 +71,7 @@ tui-smoke:
 	$(PYTHON) -m devsynapse.cli --help
 	$(PYTEST) -q tests/unit/test_tui_smoke.py
 
-verify: lint test script-check tui-smoke
+verify: lint frontend-lint frontend-build desktop-check test script-check tui-smoke
 
 migrate:
 	$(PYTHON) scripts/migrate.py apply
