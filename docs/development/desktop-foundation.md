@@ -106,8 +106,9 @@ Current implementation notes:
   current core and returns a desktop-specific setup message when no provider is
   configured.
 - `core/operations.py` owns the registered operation kernel. It currently
-  supports read-only project/repository evidence plus `project.register`, which
-  mutates only the local app project registry.
+  supports read-only project/repository evidence, `project.register`, which
+  mutates only the local app project registry, and `commit.preview`, which
+  builds immutable state evidence for future commit approval.
 - `scripts/desktop-smoke.sh` runs a short Tauri window smoke when a graphical
   display or `xvfb-run` is available.
 - the Projects view persists the last selected local project as a local UI

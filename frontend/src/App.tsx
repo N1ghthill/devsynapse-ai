@@ -498,6 +498,13 @@ function ProjectsPanel() {
                 </button>
                 <button
                   className="text-button"
+                  onClick={() => void inspectProject(project.name, 'commit.preview')}
+                  type="button"
+                >
+                  Preview
+                </button>
+                <button
+                  className="text-button"
                   onClick={() => void inspectProject(project.name, 'git.status')}
                   type="button"
                 >

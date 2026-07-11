@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,11 @@ def operation_definitions() -> list[dict[str, Any]]:
             "name": "project.register",
             "riskClass": "local_mutation",
             "description": "Register one local folder as a desktop project without changing it.",
+        },
+        {
+            "name": "commit.preview",
+            "riskClass": "prepare",
+            "description": "Build a read-only commit preview from the current project state.",
         },
     ]
 
@@ -113,6 +119,34 @@ def git_status_counts(porcelain: str) -> dict[str, int]:
     return counts
 
 
+def git_status_entries(porcelain: str) -> list[dict[str, str]]:
+    entries = []
+    for line in porcelain.splitlines():
+        if not line:
+            continue
+        if line.startswith("??"):
+            entries.append(
+                {
+                    "path": line[3:],
+                    "indexStatus": "untracked",
+                    "worktreeStatus": "untracked",
+                }
+            )
+            continue
+        if len(line) < 4:
+            continue
+        index_status = line[0]
+        worktree_status = line[1]
+        entries.append(
+            {
+                "path": line[3:],
+                "indexStatus": "clean" if index_status == " " else index_status,
+                "worktreeStatus": "clean" if worktree_status == " " else worktree_status,
+            }
+        )
+    return entries
+
+
 def repository_snapshot(operation_input: dict[str, Any]) -> dict[str, Any]:
     project_name = required_string(operation_input, "projectName")
     if project_name is None:
@@ -130,6 +164,37 @@ def repository_snapshot(operation_input: dict[str, Any]) -> dict[str, Any]:
         "headCommit": head or None,
         "originUrl": remote or None,
         "hasLocalChanges": bool(porcelain),
+    }
+
+
+def commit_preview(operation_input: dict[str, Any]) -> dict[str, Any]:
+    project_name = required_string(operation_input, "projectName")
+    if project_name is None:
+        raise ValueError("missing_project_name")
+    path = _project_path(project_name)
+    porcelain = _git(path, "status", "--porcelain") or ""
+    branch = _git(path, "branch", "--show-current")
+    head = _git(path, "rev-parse", "--short", "HEAD")
+    diff_stat = _git(path, "diff", "--stat") or ""
+    staged_diff_stat = _git(path, "diff", "--cached", "--stat") or ""
+    state_fingerprint = sha256(
+        f"{project_name}\0{path}\0{branch}\0{head}\0{porcelain}".encode("utf-8")
+    ).hexdigest()
+    preview_id = state_fingerprint[:16]
+    return {
+        "previewId": preview_id,
+        "projectName": project_name,
+        "path": str(path),
+        "riskClass": "prepare",
+        "proposedOperation": "commit.create",
+        "currentBranch": branch or None,
+        "headCommit": head or None,
+        "stateFingerprint": state_fingerprint,
+        "isClean": not bool(porcelain),
+        "counts": git_status_counts(porcelain),
+        "files": git_status_entries(porcelain),
+        "worktreeDiffStat": diff_stat,
+        "stagedDiffStat": staged_diff_stat,
     }
 
 
@@ -188,6 +253,7 @@ def run_operation(operation_name: str, operation_input: dict[str, Any]) -> dict[
         "repository.snapshot": lambda: repository_snapshot(operation_input),
         "git.status": lambda: git_status(operation_input),
         "project.register": lambda: project_register(operation_input),
+        "commit.preview": lambda: commit_preview(operation_input),
     }
     if operation_name not in operations:
         raise KeyError(operation_name)

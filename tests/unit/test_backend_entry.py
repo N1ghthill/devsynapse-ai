@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,6 +11,7 @@ from core.desktop_sidecar import (
 )
 from core.operations import (
     git_status_counts,
+    git_status_entries,
     operation_definitions,
     operation_risk_class,
     project_list,
@@ -151,6 +153,40 @@ def test_project_register_persists_local_project(monkeypatch, tmp_path):
     assert result["project"]["isGitRepository"] is True
 
 
+def test_commit_preview_returns_prepare_contract(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+    tracked = repo / "tracked.txt"
+    tracked.write_text("one\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "initial"], cwd=repo, check=True, capture_output=True)
+    tracked.write_text("one\ntwo\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True)
+
+    monkeypatch.setattr(
+        "core.operations._known_projects",
+        lambda: {
+            "repo": {
+                "path": str(repo),
+                "type": "project",
+                "priority": "medium",
+            }
+        },
+    )
+
+    result = run_operation("commit.preview", {"projectName": "repo"})
+
+    assert result["riskClass"] == "prepare"
+    assert result["proposedOperation"] == "commit.create"
+    assert result["isClean"] is False
+    assert result["counts"] == {"staged": 1, "unstaged": 0, "untracked": 0}
+    assert result["files"][0]["path"] == "tracked.txt"
+    assert len(result["stateFingerprint"]) == 64
+
+
 def test_project_list_operation_contract(monkeypatch, tmp_path):
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
@@ -205,3 +241,23 @@ def test_git_status_counts_parses_porcelain():
         "unstaged": 2,
         "untracked": 1,
     }
+
+
+def test_git_status_entries_normalize_porcelain():
+    assert git_status_entries(" M changed.py\nA  staged.py\n?? new.py\n") == [
+        {
+            "path": "changed.py",
+            "indexStatus": "clean",
+            "worktreeStatus": "M",
+        },
+        {
+            "path": "staged.py",
+            "indexStatus": "A",
+            "worktreeStatus": "clean",
+        },
+        {
+            "path": "new.py",
+            "indexStatus": "untracked",
+            "worktreeStatus": "untracked",
+        },
+    ]
