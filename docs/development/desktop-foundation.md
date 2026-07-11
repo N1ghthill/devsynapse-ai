@@ -111,6 +111,11 @@ Current implementation notes:
   builds immutable state evidence for future commit approval.
 - `scripts/desktop-smoke.sh` runs a short Tauri window smoke when a graphical
   display or `xvfb-run` is available.
+- GitHub connection uses OAuth Device Flow through typed operations
+  (`github.auth.start`, `github.auth.poll`, `github.account.status` and
+  `github.auth.disconnect`). It requires `GITHUB_CLIENT_ID` for an OAuth App or
+  GitHub App with Device Flow enabled. Tokens are stored through the platform
+  keyring and are never returned to the frontend.
 - the Projects view persists the last selected local project as a local UI
   preference, can choose a folder through a native dialog and reuses the
   selection when the configured project list is loaded again.

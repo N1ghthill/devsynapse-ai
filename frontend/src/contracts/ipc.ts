@@ -62,6 +62,38 @@ export type ProjectRegisterResult = {
   project: ProjectSummary
 }
 
+export type GitHubAccount = {
+  login?: string | null
+  id?: number | null
+  name?: string | null
+  avatarUrl?: string | null
+  htmlUrl?: string | null
+}
+
+export type GitHubAuthStartResult = {
+  authSessionId: string
+  verificationUri: string
+  userCode: string
+  expiresIn: number
+  interval: number
+  scopes: string
+}
+
+export type GitHubAuthPollResult = {
+  status: string
+  authenticated: boolean
+  interval?: number | null
+  account?: GitHubAccount | null
+  scopes?: string | null
+}
+
+export type GitHubAccountStatusResult = {
+  connected: boolean
+  secureStorageAvailable?: boolean | null
+  error?: string | null
+  account?: GitHubAccount | null
+}
+
 export type OperationRunResponse<T = unknown> = {
   requestId: string
   operationName: string

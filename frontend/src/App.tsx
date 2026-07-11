@@ -22,6 +22,9 @@ import type {
   AppHealth,
   ConversationEvent,
   ConversationResponse,
+  GitHubAccountStatusResult,
+  GitHubAuthPollResult,
+  GitHubAuthStartResult,
   OperationListResponse,
   OperationRunResponse,
   ProjectListResult,
@@ -562,7 +565,7 @@ function ActivityPanel({
           <div className="timeline-row">
             <ShieldCheck size={18} aria-hidden="true" />
             <div>
-              <strong>Registered read-only operations</strong>
+              <strong>Registered typed operations</strong>
               <span>{operations.join(', ')}</span>
             </div>
           </div>
@@ -605,8 +608,132 @@ function BackendStatus({ health }: { health: AppHealth }) {
 }
 
 function SettingsPanel() {
+  const [githubStatus, setGithubStatus] = useState<GitHubAccountStatusResult | null>(null)
+  const [githubAuth, setGithubAuth] = useState<GitHubAuthStartResult | null>(null)
+  const [githubMessage, setGithubMessage] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const refreshGithubStatus = useCallback(async () => {
+    try {
+      const response = await invoke<OperationRunResponse<GitHubAccountStatusResult>>('operation_run', {
+        args: {
+          requestId: requestId('github-status'),
+          operationName: 'github.account.status',
+          input: {},
+        },
+      })
+      setGithubStatus(response.result)
+      if (response.result.error) {
+        setGithubMessage(response.result.error)
+      }
+    } catch (error) {
+      setGithubMessage(error instanceof Error ? error.message : String(error))
+    }
+  }, [])
+
+  const startGithubAuth = useCallback(async () => {
+    setBusy(true)
+    try {
+      setGithubMessage(null)
+      const response = await invoke<OperationRunResponse<GitHubAuthStartResult>>('operation_run', {
+        args: {
+          requestId: requestId('github-auth-start'),
+          operationName: 'github.auth.start',
+          input: {},
+        },
+      })
+      setGithubAuth(response.result)
+      setGithubMessage('Waiting for browser authentication.')
+    } catch (error) {
+      setGithubMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(false)
+    }
+  }, [])
+
+  const pollGithubAuth = useCallback(async () => {
+    if (!githubAuth) {
+      return
+    }
+    try {
+      const response = await invoke<OperationRunResponse<GitHubAuthPollResult>>('operation_run', {
+        args: {
+          requestId: requestId('github-auth-poll'),
+          operationName: 'github.auth.poll',
+          input: { authSessionId: githubAuth.authSessionId },
+        },
+      })
+      if (response.result.authenticated) {
+        setGithubAuth(null)
+        setGithubStatus({
+          connected: true,
+          account: response.result.account,
+        })
+        setGithubMessage(`Connected as ${response.result.account?.login ?? 'GitHub user'}.`)
+      } else {
+        setGithubMessage(`GitHub authentication ${response.result.status}.`)
+      }
+    } catch (error) {
+      setGithubMessage(error instanceof Error ? error.message : String(error))
+    }
+  }, [githubAuth])
+
+  const disconnectGithub = useCallback(async () => {
+    setBusy(true)
+    try {
+      await invoke<OperationRunResponse<GitHubAccountStatusResult>>('operation_run', {
+        args: {
+          requestId: requestId('github-auth-disconnect'),
+          operationName: 'github.auth.disconnect',
+          input: {},
+        },
+      })
+      setGithubAuth(null)
+      setGithubStatus({ connected: false })
+      setGithubMessage('GitHub disconnected.')
+    } catch (error) {
+      setGithubMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => {
+      void refreshGithubStatus()
+    }, 0)
+    return () => window.clearTimeout(initialLoad)
+  }, [refreshGithubStatus])
+
   return (
     <section className="settings-list" aria-label="Settings">
+      <div>
+        <strong>GitHub account</strong>
+        <span>
+          {githubStatus?.connected
+            ? `Connected as ${githubStatus.account?.login ?? 'GitHub user'}`
+            : 'No GitHub account connected.'}
+        </span>
+        {githubAuth && (
+          <div className="auth-box">
+            <span>{githubAuth.verificationUri}</span>
+            <strong>{githubAuth.userCode}</strong>
+          </div>
+        )}
+        {githubMessage && <span>{githubMessage}</span>}
+        <div className="settings-actions">
+          <button className="text-button" disabled={busy} onClick={startGithubAuth} type="button">
+            <GitPullRequestArrow size={15} aria-hidden="true" />
+            Connect
+          </button>
+          <button className="text-button" disabled={!githubAuth} onClick={pollGithubAuth} type="button">
+            Check
+          </button>
+          <button className="text-button" onClick={disconnectGithub} type="button">
+            Disconnect
+          </button>
+        </div>
+      </div>
       <div>
         <strong>Conversation preferences</strong>
         <span>Experience, detail and guidance controls are scheduled for onboarding.</span>

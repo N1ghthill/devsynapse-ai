@@ -80,6 +80,8 @@ DEEPSEEK_API_KEY=
 OPENROUTER_API_KEY=
 OPENCODE_ZEN_API_KEY=
 OPENCODE_GO_API_KEY=
+GITHUB_CLIENT_ID=
+GITHUB_OAUTH_SCOPES=read:user read:org
 """
 
 
@@ -182,6 +184,8 @@ class AppSettings(BaseSettings):
     openrouter_api_key: Optional[str] = None
     opencode_zen_api_key: Optional[str] = None
     opencode_go_api_key: Optional[str] = None
+    github_client_id: Optional[str] = None
+    github_oauth_scopes: str = "read:user read:org"
     llm_default_provider: str = "openrouter"
     deepseek_model: str = "deepseek-v4-pro"
     openrouter_model: str = "openrouter/free"

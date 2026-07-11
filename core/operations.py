@@ -43,6 +43,26 @@ def operation_definitions() -> list[dict[str, Any]]:
             "riskClass": "prepare",
             "description": "Build a read-only commit preview from the current project state.",
         },
+        {
+            "name": "github.auth.start",
+            "riskClass": "prepare",
+            "description": "Start GitHub OAuth device flow and return the browser verification code.",
+        },
+        {
+            "name": "github.auth.poll",
+            "riskClass": "local_mutation",
+            "description": "Poll GitHub OAuth device flow and store the token in secure storage.",
+        },
+        {
+            "name": "github.account.status",
+            "riskClass": "observe",
+            "description": "Return the active GitHub account without exposing credentials.",
+        },
+        {
+            "name": "github.auth.disconnect",
+            "riskClass": "local_mutation",
+            "description": "Remove the stored GitHub token from secure storage.",
+        },
     ]
 
 
@@ -248,12 +268,23 @@ def operation_risk_class(operation_name: str) -> str:
 
 
 def run_operation(operation_name: str, operation_input: dict[str, Any]) -> dict[str, Any]:
+    from core.github_auth import (
+        github_account_status,
+        github_auth_disconnect,
+        github_auth_poll,
+        github_auth_start,
+    )
+
     operations = {
         "project.list": lambda: project_list(),
         "repository.snapshot": lambda: repository_snapshot(operation_input),
         "git.status": lambda: git_status(operation_input),
         "project.register": lambda: project_register(operation_input),
         "commit.preview": lambda: commit_preview(operation_input),
+        "github.auth.start": lambda: github_auth_start(operation_input),
+        "github.auth.poll": lambda: github_auth_poll(operation_input),
+        "github.account.status": lambda: github_account_status(operation_input),
+        "github.auth.disconnect": lambda: github_auth_disconnect(operation_input),
     }
     if operation_name not in operations:
         raise KeyError(operation_name)

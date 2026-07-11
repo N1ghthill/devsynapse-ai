@@ -390,6 +390,10 @@ h2 {
 }
 
 .text-button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
   min-height: 32px;
   padding: 0 10px;
   color: #244638;
@@ -521,6 +525,29 @@ h2 {
 
 .settings-list > div {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.auth-box {
+  display: grid;
+  gap: 6px;
+  max-width: 520px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  background: #f3f5f2;
+  border: 1px solid #d9ded9;
+  border-radius: 8px;
+}
+
+.auth-box span,
+.auth-box strong {
+  overflow-wrap: anywhere;
 }
 
 .timeline-row:last-child,

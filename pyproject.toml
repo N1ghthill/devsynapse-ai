@@ -9,6 +9,7 @@ description = "A conversational desktop copilot for GitHub and GitHub Actions"
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.33.1",
+    "keyring>=25.7.0",
     "pydantic>=2.13.3",
     "pydantic-settings>=2.14.0",
     "textual>=8.0.0",

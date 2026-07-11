@@ -118,6 +118,10 @@ def test_project_register_operation_is_local_mutation():
     assert operation_risk_class("project.register") == "local_mutation"
 
 
+def test_github_auth_poll_is_local_mutation():
+    assert operation_risk_class("github.auth.poll") == "local_mutation"
+
+
 def test_project_register_persists_local_project(monkeypatch, tmp_path):
     repo = tmp_path / "chosen"
     (repo / ".git").mkdir(parents=True)
