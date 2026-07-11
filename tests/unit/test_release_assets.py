@@ -30,6 +30,7 @@ def test_prepare_release_assets_uses_stable_platform_names(tmp_path: Path) -> No
     touch(input_dir / "devsynapse-macos-aarch64" / "DevSynapse AI.app.tar.gz.sig", "macarmsig")
     touch(input_dir / "devsynapse-macos-aarch64" / "DevSynapse AI_1.2.1_aarch64.dmg")
     touch(input_dir / "devsynapse-apt-repository" / "devsynapse-apt-repository.tar.gz")
+    touch(input_dir / "devsynapse-apt-repository" / "devsynapse-apt-signing-key.asc")
 
     subprocess.run(
         [
@@ -62,6 +63,7 @@ def test_prepare_release_assets_uses_stable_platform_names(tmp_path: Path) -> No
         "DevSynapse-AI_1.2.1_macos-aarch64.app.tar.gz.sig",
         "DevSynapse-AI_1.2.1_macos-aarch64.dmg",
         "devsynapse-apt-repository_1.2.1.tar.gz",
+        "devsynapse-apt-signing-key.asc",
         "latest.json",
     }
     assert {path.name for path in output_dir.iterdir()} == expected_assets

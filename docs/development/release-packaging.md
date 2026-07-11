@@ -17,7 +17,8 @@ The `Release Packages` GitHub Actions workflow builds:
 - macOS DMG and updater archive for Intel;
 - macOS DMG and updater archive for Apple Silicon;
 - `latest.json` for the Tauri updater;
-- an APT repository archive generated from the Linux `.deb`.
+- an APT repository archive generated from the Linux `.deb`;
+- `devsynapse-apt-signing-key.asc` when the APT repository is signed.
 
 The Python backend is bundled as a Tauri external binary. A production user
 launches one installed desktop app; the backend starts and stops with that app.
@@ -27,8 +28,8 @@ launches one installed desktop app; the backend starts and stops with that app.
 Create a version tag:
 
 ```bash
-git tag v1.2.2
-git push origin v1.2.2
+git tag v1.2.3
+git push origin v1.2.3
 ```
 
 The workflow builds packages on native operating-system runners and attaches
@@ -79,6 +80,7 @@ The repository layout is:
 
 ```text
 repository/
+  devsynapse-apt-signing-key.asc
   pool/main/*.deb
   dists/stable/Release
   dists/stable/InRelease
@@ -90,6 +92,9 @@ repository/
 `InRelease` and `Release.gpg` are present when an APT signing key is available.
 Set `DEVSYNAPSE_APT_REQUIRE_GPG=1` after configuring `APT_GPG_PRIVATE_KEY` to
 prevent unsigned APT repository artifacts from being published.
+
+When signed, the public key is also published as the release asset
+`devsynapse-apt-signing-key.asc` for repository bootstrap.
 
 ## Local Maintainer Commands
 

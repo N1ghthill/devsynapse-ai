@@ -164,7 +164,9 @@ jobs:
         with:
           name: devsynapse-apt-repository
           if-no-files-found: error
-          path: artifacts/apt/devsynapse-apt-repository.tar.gz
+          path: |
+            artifacts/apt/devsynapse-apt-repository.tar.gz
+            artifacts/apt/devsynapse-apt-signing-key.asc
 
   linux-install-smoke:
     name: Linux package install smoke

@@ -79,6 +79,9 @@ if [ -n "$SIGNING_KEY" ]; then
         --local-user "$SIGNING_KEY" \
         --output "$REPO_ROOT/dists/$CODENAME/InRelease" \
         "$REPO_ROOT/dists/$CODENAME/Release"
+    gpg --batch --yes --armor --export "$SIGNING_KEY" > \
+        "$OUTPUT_DIR/devsynapse-apt-signing-key.asc"
+    cp "$OUTPUT_DIR/devsynapse-apt-signing-key.asc" "$REPO_ROOT/devsynapse-apt-signing-key.asc"
 fi
 
 tar -C "$OUTPUT_DIR" -czf "$OUTPUT_DIR/devsynapse-apt-repository.tar.gz" repository
