@@ -29,7 +29,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["deb", "appimage", "nsis", "msi", "app", "dmg"],
+    "publisher": "DevSynapse AI",
+    "category": "DeveloperTool",
+    "shortDescription": "Conversational desktop copilot for GitHub and repository work.",
+    "longDescription": "DevSynapse AI is a packaged desktop copilot for GitHub, GitHub Actions and repository work with a bundled backend and typed desktop operations.",
+    "homepage": "https://github.com/N1ghthill/devsynapse-ai",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -39,7 +44,6 @@
     ],
     "linux": {
       "deb": {
-        "depends": [],
         "preRemoveScript": "scripts/linux-preremove.sh"
       },
       "rpm": {

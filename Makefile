@@ -3,7 +3,7 @@ PIP ?= $(shell if [ -x ./venv/bin/pip ]; then printf './venv/bin/pip'; else comm
 PYTEST ?= $(shell if [ -x ./venv/bin/pytest ]; then printf './venv/bin/pytest'; else command -v pytest; fi)
 RUFF ?= $(shell if [ -x ./venv/bin/ruff ]; then printf './venv/bin/ruff'; else command -v ruff; fi)
 
-.PHONY: setup install install-dev test lint frontend-install frontend-lint frontend-typecheck frontend-build desktop-check desktop-smoke script-check verify migrate migration-status run tui-smoke
+.PHONY: setup install install-dev test lint frontend-install frontend-lint frontend-typecheck frontend-build desktop-check desktop-smoke backend-build apt-repository script-check verify migrate migration-status run tui-smoke
 
 setup:
 	python3 -m venv venv
@@ -52,15 +52,22 @@ desktop-check:
 desktop-smoke:
 	bash scripts/desktop-smoke.sh
 
+backend-build:
+	$(PYTHON) scripts/build_backend.py
+
+apt-repository:
+	bash scripts/build-apt-repository.sh
+
 script-check:
 	bash -n scripts/install.sh
 	bash -n scripts/uninstall.sh
 	bash -n scripts/update.sh
 	bash -n scripts/build-backend.sh
+	bash -n scripts/build-apt-repository.sh
 	bash -n scripts/desktop-smoke.sh
-	$(PYTHON) -m py_compile backend-entry.py core/desktop_conversation.py core/desktop_sidecar.py core/github_auth.py core/github_client.py core/operations.py devsynapse/cli.py devsynapse/tui.py scripts/migrate.py scripts/eval_agent.py
+	$(PYTHON) -m py_compile backend-entry.py core/desktop_conversation.py core/desktop_sidecar.py core/github_auth.py core/github_client.py core/operations.py devsynapse/cli.py devsynapse/tui.py scripts/build_backend.py scripts/prepare-tauri-release-config.py scripts/prepare-release-assets.py scripts/migrate.py scripts/eval_agent.py
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh scripts/desktop-smoke.sh; \
+		shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh scripts/build-backend.sh scripts/build-apt-repository.sh scripts/desktop-smoke.sh; \
 	else \
 		echo "shellcheck not installed; skipping shell script lint"; \
 	fi

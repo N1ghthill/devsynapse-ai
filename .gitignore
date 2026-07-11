@@ -25,6 +25,7 @@ frontend/dist/
 frontend/src-tauri/target/
 frontend/src-tauri/gen/
 frontend/src-tauri/binaries/devsynapse-backend-*
+frontend/src-tauri/tauri.release.conf.json
 
 build/
 dist/
@@ -33,6 +34,7 @@ artifacts/
 .DS_Store
 Thumbs.db
 .codex
+.terminuz/
 
 TESTE_DEVSYNAPSE.md
 

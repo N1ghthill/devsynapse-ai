@@ -19,6 +19,8 @@ import {
 } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
+import { relaunch } from '@tauri-apps/plugin-process'
+import { check } from '@tauri-apps/plugin-updater'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   AppHealth,
@@ -739,7 +741,9 @@ function SettingsPanel() {
   const [githubStatus, setGithubStatus] = useState<GitHubAccountStatusResult | null>(null)
   const [githubAuth, setGithubAuth] = useState<GitHubAuthStartResult | null>(null)
   const [githubMessage, setGithubMessage] = useState<string | null>(null)
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [updateBusy, setUpdateBusy] = useState(false)
 
   const refreshGithubStatus = useCallback(async () => {
     try {
@@ -826,6 +830,27 @@ function SettingsPanel() {
     }
   }, [])
 
+  const checkForUpdate = useCallback(async () => {
+    setUpdateBusy(true)
+    try {
+      setUpdateMessage(null)
+      const update = await check()
+      if (!update) {
+        setUpdateMessage('DevSynapse AI is up to date.')
+        return
+      }
+
+      setUpdateMessage(`Installing ${update.version}.`)
+      await update.downloadAndInstall()
+      setUpdateMessage('Update installed. Restarting DevSynapse AI.')
+      await relaunch()
+    } catch (error) {
+      setUpdateMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      setUpdateBusy(false)
+    }
+  }, [])
+
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
       void refreshGithubStatus()
@@ -873,6 +898,16 @@ function SettingsPanel() {
       <div>
         <strong>Operation policy</strong>
         <span>Risk classes are deterministic and cannot be changed by model wording.</span>
+      </div>
+      <div>
+        <strong>Application updates</strong>
+        <span>{updateMessage ?? 'Production builds check signed update artifacts.'}</span>
+        <div className="settings-actions">
+          <button className="text-button" disabled={updateBusy} onClick={checkForUpdate} type="button">
+            <RotateCw size={15} aria-hidden="true" />
+            Check for updates
+          </button>
+        </div>
       </div>
     </section>
   )

@@ -53,6 +53,8 @@ Current desktop capabilities:
   `github.auth.disconnect`;
 - GitHub repository listing/search and local project to GitHub repository
   association through typed desktop operations;
+- release packaging pipeline for Linux `.deb`, Linux AppImage, Windows NSIS/MSI
+  installers and macOS DMG/app bundles with signed Tauri updater artifacts;
 - real Tauri window smoke included in `make verify` when a graphical display or
   `xvfb-run` is available.
 
@@ -62,8 +64,26 @@ is never returned to the frontend.
 
 Not yet complete:
 
-- installable release artifacts for normal users;
+- production publication requires real signing material and hosting secrets for
+  the updater and APT repository;
 - approved local or remote mutation execution.
+
+## Installation For Users
+
+Normal users should install DevSynapse AI from a release artifact. They should
+not clone the repository, install Python, start a backend or run the frontend.
+
+Supported release formats:
+
+- Linux Debian/Ubuntu: `.deb` package and signed APT repository archive;
+- Linux portable: AppImage;
+- Windows: NSIS `.exe` installer and MSI package;
+- macOS: DMG for Intel and Apple Silicon builds.
+
+Production desktop builds include the Python backend sidecar inside the app
+bundle and expose application updates through signed Tauri updater artifacts.
+The APT repository archive is generated from the Linux `.deb` package for
+hosting on the project release CDN or package host.
 
 New product work should target the packaged desktop architecture. Do not add
 new end-user workflows exclusively to the TUI, slash-command catalog or generic
@@ -170,6 +190,18 @@ Enable GitHub Device Flow in the desktop Settings screen by configuring:
 ```bash
 GITHUB_CLIENT_ID=your_oauth_app_client_id
 ```
+
+Build local desktop packages for development:
+
+```bash
+cd frontend
+npm ci
+npm run desktop:build:linux
+```
+
+Use the GitHub Actions `Release Packages` workflow for production release
+artifacts. It builds on native Linux, Windows and macOS runners so end users get
+installers instead of development setup instructions.
 
 ## Repository Structure
 

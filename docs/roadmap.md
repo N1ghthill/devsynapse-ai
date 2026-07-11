@@ -46,6 +46,8 @@ Deliverables:
 - native project-folder selection;
 - user-scoped runtime directories;
 - Linux and Windows development packages;
+- production release workflow for Linux `.deb`, Linux AppImage, Windows
+  NSIS/MSI and macOS DMG artifacts;
 - desktop CI for frontend, Rust shell and bundled backend;
 - minimal Conversation, Projects, Activity and Settings shells.
 
@@ -57,6 +59,7 @@ Exit criteria:
 - a health failure produces a visual recovery path;
 - no login, admin or provider dashboard is restored;
 - desktop smoke tests run in CI;
+- tagged releases produce installable desktop package artifacts;
 - the TUI remains development-only and receives no new product workflow.
 
 ## Phase 2: GitHub Connection and Project Portfolio
