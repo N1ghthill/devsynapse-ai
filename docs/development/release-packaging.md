@@ -42,15 +42,18 @@ GitHub repository secrets:
 - `TAURI_SIGNING_PRIVATE_KEY`: Tauri updater private key content or key path
   accepted by the Tauri CLI.
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: optional password for the updater key.
-- `TAURI_UPDATER_PUBKEY`: public key embedded into the release build.
 - `APT_GPG_PRIVATE_KEY`: optional private key for signing APT metadata.
 - `APT_GPG_KEY_ID`: optional key id used when signing APT metadata.
 
-GitHub repository variable:
+GitHub repository variables:
 
-- `TAURI_UPDATER_ENDPOINT`: updater manifest URL. Default if omitted in local
-  reasoning is the latest GitHub release asset URL:
+- `DEVSYNAPSE_UPDATER_PUBLIC_KEY`: public key embedded into the release build.
+- `DEVSYNAPSE_UPDATER_ENDPOINT`: updater manifest URL. Default if omitted in
+  local reasoning is the latest GitHub release asset URL:
   `https://github.com/N1ghthill/devsynapse-ai/releases/latest/download/latest.json`.
+
+The workflow also accepts legacy names `TAURI_UPDATER_PUBKEY` and
+`TAURI_UPDATER_ENDPOINT` for compatibility with older repository settings.
 
 Production macOS and Windows distribution also requires platform signing
 credentials before broad external distribution:

@@ -54,8 +54,8 @@ jobs:
       TAURI_TARGET_TRIPLE: ${{ matrix.target }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
-      TAURI_UPDATER_ENDPOINT: ${{ vars.TAURI_UPDATER_ENDPOINT || format('https://github.com/{0}/releases/latest/download/latest.json', github.repository) }}
+      TAURI_UPDATER_PUBKEY: ${{ vars.DEVSYNAPSE_UPDATER_PUBLIC_KEY || secrets.TAURI_UPDATER_PUBKEY }}
+      TAURI_UPDATER_ENDPOINT: ${{ vars.DEVSYNAPSE_UPDATER_ENDPOINT || vars.TAURI_UPDATER_ENDPOINT || format('https://github.com/{0}/releases/latest/download/latest.json', github.repository) }}
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       PYTHONUNBUFFERED: "1"
     steps:
