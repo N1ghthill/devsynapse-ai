@@ -23,12 +23,6 @@ def test_prepare_release_assets_uses_stable_platform_names(tmp_path: Path) -> No
     touch(input_dir / "devsynapse-windows-x86_64" / "DevSynapse AI_1.2.1_x64-setup.exe.sig", "winsig")
     touch(input_dir / "devsynapse-windows-x86_64" / "DevSynapse AI_1.2.1_x64_en-US.msi")
     touch(input_dir / "devsynapse-windows-x86_64" / "DevSynapse AI_1.2.1_x64_en-US.msi.sig")
-    touch(input_dir / "devsynapse-macos-x86_64" / "DevSynapse AI.app.tar.gz")
-    touch(input_dir / "devsynapse-macos-x86_64" / "DevSynapse AI.app.tar.gz.sig", "macxsig")
-    touch(input_dir / "devsynapse-macos-x86_64" / "DevSynapse AI_1.2.1_x64.dmg")
-    touch(input_dir / "devsynapse-macos-aarch64" / "DevSynapse AI.app.tar.gz")
-    touch(input_dir / "devsynapse-macos-aarch64" / "DevSynapse AI.app.tar.gz.sig", "macarmsig")
-    touch(input_dir / "devsynapse-macos-aarch64" / "DevSynapse AI_1.2.1_aarch64.dmg")
     touch(input_dir / "devsynapse-apt-repository" / "devsynapse-apt-repository.tar.gz")
     touch(input_dir / "devsynapse-apt-repository" / "devsynapse-apt-signing-key.asc")
 
@@ -56,12 +50,6 @@ def test_prepare_release_assets_uses_stable_platform_names(tmp_path: Path) -> No
         "DevSynapse-AI_1.2.1_windows-x86_64-setup.exe.sig",
         "DevSynapse-AI_1.2.1_windows-x86_64.msi",
         "DevSynapse-AI_1.2.1_windows-x86_64.msi.sig",
-        "DevSynapse-AI_1.2.1_macos-x86_64.app.tar.gz",
-        "DevSynapse-AI_1.2.1_macos-x86_64.app.tar.gz.sig",
-        "DevSynapse-AI_1.2.1_macos-x86_64.dmg",
-        "DevSynapse-AI_1.2.1_macos-aarch64.app.tar.gz",
-        "DevSynapse-AI_1.2.1_macos-aarch64.app.tar.gz.sig",
-        "DevSynapse-AI_1.2.1_macos-aarch64.dmg",
         "devsynapse-apt-repository_1.2.1.tar.gz",
         "devsynapse-apt-signing-key.asc",
         "latest.json",
@@ -72,8 +60,4 @@ def test_prepare_release_assets_uses_stable_platform_names(tmp_path: Path) -> No
     assert latest["version"] == "1.2.1"
     assert latest["platforms"]["linux-x86_64"]["signature"] == "linuxsig"
     assert latest["platforms"]["windows-x86_64"]["signature"] == "winsig"
-    assert latest["platforms"]["darwin-x86_64"]["signature"] == "macxsig"
-    assert latest["platforms"]["darwin-aarch64"]["signature"] == "macarmsig"
-    assert latest["platforms"]["darwin-aarch64"]["url"].endswith(
-        "/DevSynapse-AI_1.2.1_macos-aarch64.app.tar.gz"
-    )
+    assert sorted(latest["platforms"]) == ["linux-x86_64", "windows-x86_64"]

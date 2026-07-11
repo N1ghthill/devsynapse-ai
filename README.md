@@ -51,10 +51,13 @@ Current desktop capabilities:
 - GitHub OAuth Device Flow contracts in Settings:
   `github.auth.start`, `github.auth.poll`, `github.account.status` and
   `github.auth.disconnect`;
+- visual AI provider setup in Settings for OpenRouter, DeepSeek and OpenCode
+  providers, including API key entry, model selection and OpenRouter free-model
+  discovery;
 - GitHub repository listing/search and local project to GitHub repository
   association through typed desktop operations;
 - release packaging pipeline for Linux `.deb`, Linux AppImage, Windows NSIS/MSI
-  installers and macOS DMG/app bundles with signed Tauri updater artifacts;
+  installers and signed Tauri updater artifacts;
 - real Tauri window smoke included in `make verify` when a graphical display or
   `xvfb-run` is available.
 
@@ -77,8 +80,7 @@ Supported release formats:
 
 - Linux Debian/Ubuntu: `.deb` package and signed APT repository archive;
 - Linux portable: AppImage;
-- Windows: NSIS `.exe` installer and MSI package;
-- macOS: DMG for Intel and Apple Silicon builds.
+- Windows: NSIS `.exe` installer and MSI package.
 
 Production desktop builds include the Python backend sidecar inside the app
 bundle and expose application updates through signed Tauri updater artifacts.
@@ -200,8 +202,9 @@ npm run desktop:build:linux
 ```
 
 Use the GitHub Actions `Release Packages` workflow for production release
-artifacts. It builds on native Linux, Windows and macOS runners so end users get
-installers instead of development setup instructions.
+artifacts. It builds on native Linux and Windows runners so end users get
+installers instead of development setup instructions. macOS is not a supported
+distribution target.
 
 ## Repository Structure
 

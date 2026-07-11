@@ -33,22 +33,6 @@ jobs:
             paths: |
               frontend/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*
               frontend/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*
-          - name: macos-x86_64
-            os: macos-15-intel
-            target: x86_64-apple-darwin
-            bundles: app,dmg
-            artifact: devsynapse-macos-x86_64
-            paths: |
-              frontend/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
-              frontend/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app.tar.gz*
-          - name: macos-aarch64
-            os: macos-14
-            target: aarch64-apple-darwin
-            bundles: app,dmg
-            artifact: devsynapse-macos-aarch64
-            paths: |
-              frontend/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-              frontend/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz*
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
       TAURI_TARGET_TRIPLE: ${{ matrix.target }}

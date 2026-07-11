@@ -1,7 +1,7 @@
 {
   "name": "devsynapse-desktop",
   "private": true,
-  "version": "1.2.3",
+  "version": "1.2.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,8 +16,7 @@
     "desktop:dev": "npm run tauri:dev",
     "desktop:build": "npm run backend:build && npm run tauri:build -- --config src-tauri/tauri.package.conf.json",
     "desktop:build:linux": "npm run backend:build && npm run tauri:build -- --bundles deb,appimage --config src-tauri/tauri.package.conf.json",
-    "desktop:build:windows": "npm run backend:build && npm run tauri:build -- --bundles nsis,msi --config src-tauri/tauri.package.conf.json",
-    "desktop:build:macos": "npm run backend:build && npm run tauri:build -- --bundles app,dmg --config src-tauri/tauri.package.conf.json"
+    "desktop:build:windows": "npm run backend:build && npm run tauri:build -- --bundles nsis,msi --config src-tauri/tauri.package.conf.json"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

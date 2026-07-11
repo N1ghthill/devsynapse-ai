@@ -45,6 +45,38 @@ export type OperationListResponse = {
   operations: OperationDefinition[]
 }
 
+export type LlmProviderSummary = {
+  id: string
+  label: string
+  configured: boolean
+  selected: boolean
+  model: string
+  defaultModel: string
+}
+
+export type LlmModelSummary = {
+  provider: string
+  modelId: string
+  name: string
+  contextLength?: number | null
+  free: boolean
+  supportsTools: boolean
+}
+
+export type LlmProviderStatusResult = {
+  defaultProvider: string
+  activeModel: string
+  ready: boolean
+  providers: LlmProviderSummary[]
+  models: LlmModelSummary[]
+}
+
+export type LlmModelDiscoverResult = {
+  provider: string
+  discovered: number
+  models: LlmModelSummary[]
+}
+
 export type ProjectSummary = {
   name: string
   path: string

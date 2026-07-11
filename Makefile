@@ -65,7 +65,7 @@ script-check:
 	bash -n scripts/build-backend.sh
 	bash -n scripts/build-apt-repository.sh
 	bash -n scripts/desktop-smoke.sh
-	$(PYTHON) -m py_compile backend-entry.py core/desktop_conversation.py core/desktop_sidecar.py core/github_auth.py core/github_client.py core/operations.py devsynapse/cli.py devsynapse/tui.py scripts/build_backend.py scripts/prepare-tauri-release-config.py scripts/prepare-release-assets.py scripts/migrate.py scripts/eval_agent.py
+	$(PYTHON) -m py_compile backend-entry.py core/desktop_conversation.py core/desktop_sidecar.py core/github_auth.py core/github_client.py core/llm_provider_config.py core/operations.py devsynapse/cli.py devsynapse/tui.py scripts/build_backend.py scripts/prepare-tauri-release-config.py scripts/prepare-release-assets.py scripts/migrate.py scripts/eval_agent.py
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh scripts/build-backend.sh scripts/build-apt-repository.sh scripts/desktop-smoke.sh; \
 	else \

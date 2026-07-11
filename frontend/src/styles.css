@@ -210,6 +210,37 @@ h2 {
   padding-bottom: 18px;
 }
 
+.setup-callout {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 12px;
+  color: #35444b;
+  background: #fff8ea;
+  border: 1px solid #efc38a;
+  border-radius: 8px;
+}
+
+.setup-callout svg {
+  color: #a16916;
+}
+
+.setup-callout strong {
+  display: block;
+  font-size: 0.93rem;
+  line-height: 1.35;
+}
+
+.setup-callout span {
+  display: block;
+  margin-top: 2px;
+  color: #6c5944;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .message {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
@@ -591,6 +622,104 @@ h2 {
   margin-top: 10px;
 }
 
+.settings-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-pill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  color: #7b3415;
+  background: #fff3e2;
+  border: 1px solid #efc38a;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.status-pill[data-ready="true"] {
+  color: #244638;
+  background: #dcefe6;
+  border-color: #b9decd;
+}
+
+.provider-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.form-field {
+  display: grid;
+  gap: 6px;
+}
+
+.form-field > span,
+.model-toolbar label {
+  color: #557067;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.form-field input,
+.form-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 10px;
+  color: #172027;
+  background: #ffffff;
+  border: 1px solid #d9ded9;
+  border-radius: 8px;
+}
+
+.model-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.model-toolbar label {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  min-height: 32px;
+}
+
+.model-toolbar input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.model-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.model-meta span {
+  min-height: 28px;
+  padding: 5px 8px;
+  margin-top: 0;
+  color: #244638;
+  background: #f3f5f2;
+  border: 1px solid #d9ded9;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 .auth-box {
   display: grid;
   gap: 6px;
@@ -659,8 +788,18 @@ h2 {
 
   .workspace-header,
   .content-grid,
-  .projects-layout {
+  .projects-layout,
+  .provider-form {
     grid-template-columns: 1fr;
+  }
+
+  .setup-callout {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .setup-callout .text-button {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 
   .workspace-header {

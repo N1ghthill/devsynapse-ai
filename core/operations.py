@@ -78,6 +78,21 @@ def operation_definitions() -> list[dict[str, Any]]:
             "riskClass": "local_mutation",
             "description": "Remove the stored GitHub token from secure storage.",
         },
+        {
+            "name": "llm.provider.status",
+            "riskClass": "observe",
+            "description": "Return configured LLM providers and selected model without secrets.",
+        },
+        {
+            "name": "llm.provider.configure",
+            "riskClass": "local_mutation",
+            "description": "Store one provider API key and selected model in user runtime config.",
+        },
+        {
+            "name": "llm.model.discover",
+            "riskClass": "observe",
+            "description": "Discover available provider models without exposing provider credentials.",
+        },
     ]
 
 
@@ -375,6 +390,7 @@ def run_operation(operation_name: str, operation_input: dict[str, Any]) -> dict[
         github_auth_poll,
         github_auth_start,
     )
+    from core.llm_provider_config import configure_provider, discover_models, provider_status
 
     operations = {
         "project.list": lambda: project_list(),
@@ -389,6 +405,9 @@ def run_operation(operation_name: str, operation_input: dict[str, Any]) -> dict[
         "github.auth.poll": lambda: github_auth_poll(operation_input),
         "github.account.status": lambda: github_account_status(operation_input),
         "github.auth.disconnect": lambda: github_auth_disconnect(operation_input),
+        "llm.provider.status": lambda: provider_status(operation_input),
+        "llm.provider.configure": lambda: configure_provider(operation_input),
+        "llm.model.discover": lambda: discover_models(operation_input),
     }
     if operation_name not in operations:
         raise KeyError(operation_name)

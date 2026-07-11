@@ -47,9 +47,11 @@ Deliverables:
 - user-scoped runtime directories;
 - Linux and Windows development packages;
 - production release workflow for Linux `.deb`, Linux AppImage, Windows
-  NSIS/MSI and macOS DMG artifacts;
+  NSIS/MSI artifacts;
 - desktop CI for frontend, Rust shell and bundled backend;
-- minimal Conversation, Projects, Activity and Settings shells.
+- minimal Conversation, Projects, Activity and Settings shells;
+- visual AI provider setup with API key entry, model selection and OpenRouter
+  free-model discovery.
 
 Exit criteria:
 
@@ -254,7 +256,7 @@ The detailed plan is in
 
 ## Deferred Until Evidence Exists
 
-- macOS release timing and signing pipeline;
+- macOS distribution is out of scope;
 - exact OAuth deployment ownership and callback infrastructure;
 - optional offline-only mode;
 - organization and enterprise GitHub features;

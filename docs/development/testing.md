@@ -116,10 +116,10 @@ make eval-agent EVAL_AGENT_ARGS=--no-llm
 ```
 
 Release packaging is validated separately by the `Release Packages` workflow.
-It runs on native Linux, Windows and macOS runners, builds the packaged Python
-sidecar, emits Tauri bundles for each operating system, generates signed updater
-artifacts when updater signing secrets are configured and packages the Linux
-`.deb` output into an APT repository archive.
+It runs on native Linux and Windows runners, builds the packaged Python
+sidecar, emits Tauri bundles for supported operating systems, generates signed
+updater artifacts when updater signing secrets are configured and packages the
+Linux `.deb` output into an APT repository archive.
 
 ## Expectations For Contributors
 

@@ -14,8 +14,6 @@ The `Release Packages` GitHub Actions workflow builds:
 - Linux AppImage for portable installation;
 - Windows NSIS `.exe` installer;
 - Windows MSI package;
-- macOS DMG and updater archive for Intel;
-- macOS DMG and updater archive for Apple Silicon;
 - `latest.json` for the Tauri updater;
 - an APT repository archive generated from the Linux `.deb`;
 - `devsynapse-apt-signing-key.asc` when the APT repository is signed.
@@ -28,8 +26,8 @@ launches one installed desktop app; the backend starts and stops with that app.
 Create a version tag:
 
 ```bash
-git tag v1.2.3
-git push origin v1.2.3
+git tag v1.2.4
+git push origin v1.2.4
 ```
 
 The workflow builds packages on native operating-system runners and attaches
@@ -61,15 +59,13 @@ GitHub repository variables:
 The workflow also accepts legacy names `TAURI_UPDATER_PUBKEY` and
 `TAURI_UPDATER_ENDPOINT` for compatibility with older repository settings.
 
-Production macOS and Windows distribution also requires platform signing
-credentials before broad external distribution:
+Production Windows distribution also requires platform signing credentials
+before broad external distribution:
 
-- Apple Developer ID certificate and notarization credentials for macOS;
 - Windows code-signing certificate and timestamp configuration.
 
-Those credentials are intentionally not committed to the repository. The
-workflow is structured so these can be added as release secrets without changing
-the user-facing installation model.
+Those credentials are intentionally not committed to the repository. macOS is
+not a supported distribution target.
 
 ## Linux APT Repository
 

@@ -12,15 +12,11 @@ from pathlib import Path
 UPDATER_PLATFORMS = {
     "devsynapse-linux-x86_64": ("linux-x86_64", ".AppImage"),
     "devsynapse-windows-x86_64": ("windows-x86_64", ".exe"),
-    "devsynapse-macos-x86_64": ("darwin-x86_64", ".app.tar.gz"),
-    "devsynapse-macos-aarch64": ("darwin-aarch64", ".app.tar.gz"),
 }
 
 ASSET_PLATFORMS = {
     "devsynapse-linux-x86_64": "linux-x86_64",
     "devsynapse-windows-x86_64": "windows-x86_64",
-    "devsynapse-macos-x86_64": "macos-x86_64",
-    "devsynapse-macos-aarch64": "macos-aarch64",
 }
 
 PRODUCT_ASSET_PREFIX = "DevSynapse-AI"
@@ -39,15 +35,12 @@ def artifact_name(source: Path, input_dir: Path) -> str | None:
 
 def package_suffix(source_name: str) -> str | None:
     suffixes = (
-        ".app.tar.gz.sig",
-        ".app.tar.gz",
         ".AppImage.sig",
         ".AppImage",
         "-setup.exe.sig",
         "-setup.exe",
         ".msi.sig",
         ".msi",
-        ".dmg",
         ".deb",
     )
     for suffix in suffixes:
@@ -64,8 +57,6 @@ def staged_asset_name(source: Path, input_dir: Path, version: str) -> str:
     platform = ASSET_PLATFORMS.get(artifact or "")
     suffix = package_suffix(source.name)
     if platform and suffix:
-        if suffix in {".app.tar.gz", ".app.tar.gz.sig"}:
-            return f"{PRODUCT_ASSET_PREFIX}_{version}_{platform}.app.tar.gz{'.sig' if source.name.endswith('.sig') else ''}"
         if suffix in {"-setup.exe", "-setup.exe.sig"}:
             return f"{PRODUCT_ASSET_PREFIX}_{version}_{platform}-setup.exe{'.sig' if source.name.endswith('.sig') else ''}"
         return f"{PRODUCT_ASSET_PREFIX}_{version}_{platform}{suffix}"

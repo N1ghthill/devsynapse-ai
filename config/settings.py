@@ -177,7 +177,7 @@ class AppSettings(BaseSettings):
     )
 
     app_name: str = "DevSynapse AI"
-    app_version: str = "1.2.0"
+    app_version: str = "1.2.4"
     assistant_user_name: str = "the user"
 
     deepseek_api_key: Optional[str] = None

@@ -120,6 +120,10 @@ Current implementation notes:
   `github.auth.disconnect`). It requires `GITHUB_CLIENT_ID` for an OAuth App or
   GitHub App with Device Flow enabled. Tokens are stored through the platform
   keyring and are never returned to the frontend.
+- AI provider setup is a desktop Settings flow backed by typed operations
+  (`llm.provider.status`, `llm.provider.configure` and `llm.model.discover`).
+  OpenRouter is the default provider, `openrouter/free` is the default model,
+  and provider API keys are written only to the backend runtime config.
 - the Projects view persists the last selected local project as a local UI
   preference, can choose a folder through a native dialog and reuses the
   selection when the configured project list is loaded again. It can also load

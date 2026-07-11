@@ -116,8 +116,9 @@ Release artifacts must:
 - preserve user data only through an explicit, documented choice.
 
 The initial desktop stack is Tauri 2, React and TypeScript with the Python core
-bundled as a sidecar. Supported release targets and signing requirements are
-defined by the desktop-foundation roadmap phase.
+bundled as a sidecar. Provider API key and model selection belong in Settings
+and do not expose stored secrets to frontend state after saving. Supported
+release targets are Linux and Windows; macOS is not distributed.
 
 ## Current v1 Transitional Surface
 

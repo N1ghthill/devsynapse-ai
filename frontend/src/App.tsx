@@ -8,6 +8,7 @@ import {
   GitBranch,
   GitPullRequestArrow,
   HeartPulse,
+  KeyRound,
   Link2,
   MessageSquareText,
   RotateCw,
@@ -31,6 +32,8 @@ import type {
   GitHubAuthStartResult,
   GitHubRepositoryListResult,
   GitHubRepositorySummary,
+  LlmModelDiscoverResult,
+  LlmProviderStatusResult,
   OperationListResponse,
   OperationRunResponse,
   ProjectConnectResult,
@@ -71,6 +74,25 @@ const browserPreviewHealth: AppHealth = {
 }
 
 const selectedProjectStorageKey = 'devsynapse.selectedProject'
+
+const fallbackLlmProviders = [
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    configured: false,
+    selected: true,
+    model: 'openrouter/free',
+    defaultModel: 'openrouter/free',
+  },
+  {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    configured: false,
+    selected: false,
+    model: 'deepseek-v4-pro',
+    defaultModel: 'deepseek-v4-pro',
+  },
+]
 
 type ConversationMessage = {
   id: string
@@ -175,7 +197,9 @@ function App() {
           </div>
         </header>
 
-        {activeSection === 'conversation' && <ConversationPanel health={health} />}
+        {activeSection === 'conversation' && (
+          <ConversationPanel health={health} onOpenSettings={() => setActiveSection('settings')} />
+        )}
         {activeSection === 'projects' && <ProjectsPanel />}
         {activeSection === 'activity' && (
           <ActivityPanel health={health} onRestartBackend={restartBackend} />
@@ -186,7 +210,13 @@ function App() {
   )
 }
 
-function ConversationPanel({ health }: { health: AppHealth }) {
+function ConversationPanel({
+  health,
+  onOpenSettings,
+}: {
+  health: AppHealth
+  onOpenSettings: () => void
+}) {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ConversationMessage[]>([
     {
@@ -199,6 +229,7 @@ function ConversationPanel({ health }: { health: AppHealth }) {
   ])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
+  const [llmReady, setLlmReady] = useState<boolean | null>(null)
 
   const appendEvents = useCallback((events: ConversationEvent[]) => {
     for (const event of events) {
@@ -296,9 +327,45 @@ function ConversationPanel({ health }: { health: AppHealth }) {
     }
   }, [appendEvents, conversationId])
 
+  useEffect(() => {
+    let active = true
+    invoke<OperationRunResponse<LlmProviderStatusResult>>('operation_run', {
+      args: {
+        requestId: requestId('conversation-llm-status'),
+        operationName: 'llm.provider.status',
+        input: {},
+      },
+    })
+      .then((response) => {
+        if (active) {
+          setLlmReady(response.result.ready)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setLlmReady(null)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
   return (
     <div className="content-grid">
       <section className="conversation-surface" aria-label="Conversation preview">
+        {llmReady === false && (
+          <div className="setup-callout">
+            <KeyRound size={18} aria-hidden="true" />
+            <div>
+              <strong>AI provider required</strong>
+              <span>Connect OpenRouter and choose a model before asking DevSynapse to analyze repositories.</span>
+            </div>
+            <button className="text-button" onClick={onOpenSettings} type="button">
+              Open Settings
+            </button>
+          </div>
+        )}
         <div className="message-list">
           {messages.map((message) => (
             <article className={`message ${message.role}`} key={message.id}>
@@ -738,12 +805,104 @@ function BackendStatus({ health }: { health: AppHealth }) {
 }
 
 function SettingsPanel() {
+  const [llmStatus, setLlmStatus] = useState<LlmProviderStatusResult | null>(null)
+  const [selectedProvider, setSelectedProvider] = useState('openrouter')
+  const [apiKey, setApiKey] = useState('')
+  const [selectedModel, setSelectedModel] = useState('openrouter/free')
+  const [freeOnly, setFreeOnly] = useState(true)
+  const [llmMessage, setLlmMessage] = useState<string | null>(null)
+  const [llmBusy, setLlmBusy] = useState(false)
+  const [discoverBusy, setDiscoverBusy] = useState(false)
   const [githubStatus, setGithubStatus] = useState<GitHubAccountStatusResult | null>(null)
   const [githubAuth, setGithubAuth] = useState<GitHubAuthStartResult | null>(null)
   const [githubMessage, setGithubMessage] = useState<string | null>(null)
   const [updateMessage, setUpdateMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [updateBusy, setUpdateBusy] = useState(false)
+
+  const refreshLlmStatus = useCallback(async () => {
+    try {
+      const response = await invoke<OperationRunResponse<LlmProviderStatusResult>>('operation_run', {
+        args: {
+          requestId: requestId('llm-provider-status'),
+          operationName: 'llm.provider.status',
+          input: {},
+        },
+      })
+      setLlmStatus(response.result)
+      setSelectedProvider(response.result.defaultProvider)
+      setSelectedModel(response.result.activeModel)
+      setLlmMessage(response.result.ready ? 'AI provider ready.' : 'AI provider not configured.')
+    } catch (error) {
+      setLlmMessage(error instanceof Error ? error.message : String(error))
+    }
+  }, [])
+
+  const configureLlmProvider = useCallback(async () => {
+    setLlmBusy(true)
+    try {
+      const response = await invoke<OperationRunResponse<LlmProviderStatusResult>>('operation_run', {
+        args: {
+          requestId: requestId('llm-provider-configure'),
+          operationName: 'llm.provider.configure',
+          input: {
+            provider: selectedProvider,
+            apiKey,
+            model: selectedModel,
+          },
+        },
+      })
+      setApiKey('')
+      setLlmStatus(response.result)
+      setSelectedProvider(response.result.defaultProvider)
+      setSelectedModel(response.result.activeModel)
+      setLlmMessage('AI provider saved.')
+    } catch (error) {
+      setLlmMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      setLlmBusy(false)
+    }
+  }, [apiKey, selectedModel, selectedProvider])
+
+  const discoverModels = useCallback(async () => {
+    setDiscoverBusy(true)
+    try {
+      const response = await invoke<OperationRunResponse<LlmModelDiscoverResult>>('operation_run', {
+        args: {
+          requestId: requestId('llm-model-discover'),
+          operationName: 'llm.model.discover',
+          input: { provider: selectedProvider },
+        },
+      })
+      setLlmStatus((current) =>
+        current
+          ? {
+              ...current,
+              models: response.result.models,
+            }
+          : current,
+      )
+      setLlmMessage(`${response.result.discovered} models discovered.`)
+    } catch (error) {
+      setLlmMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      setDiscoverBusy(false)
+    }
+  }, [selectedProvider])
+
+  const llmProviders = llmStatus?.providers ?? fallbackLlmProviders
+  const selectedProviderInfo = llmProviders.find((provider) => provider.id === selectedProvider)
+  const modelOptions = useMemo(() => {
+    const models = llmStatus?.models ?? []
+    return models.filter((model) => {
+      if (model.provider !== selectedProvider) {
+        return false
+      }
+      return !freeOnly || model.free
+    })
+  }, [freeOnly, llmStatus?.models, selectedProvider])
+
+  const selectedModelInfo = modelOptions.find((model) => model.modelId === selectedModel)
 
   const refreshGithubStatus = useCallback(async () => {
     try {
@@ -853,13 +1012,115 @@ function SettingsPanel() {
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
+      void refreshLlmStatus()
       void refreshGithubStatus()
     }, 0)
     return () => window.clearTimeout(initialLoad)
-  }, [refreshGithubStatus])
+  }, [refreshGithubStatus, refreshLlmStatus])
 
   return (
     <section className="settings-list" aria-label="Settings">
+      <div>
+        <div className="settings-heading">
+          <div>
+            <strong>AI provider</strong>
+            <span>
+              {selectedProviderInfo?.configured
+                ? `${selectedProviderInfo.label} configured with ${selectedProviderInfo.model}.`
+                : 'No AI provider configured.'}
+            </span>
+          </div>
+          <div className="status-pill" data-ready={llmStatus?.ready ?? false}>
+            <KeyRound size={14} aria-hidden="true" />
+            <span>{llmStatus?.ready ? 'Ready' : 'Needs key'}</span>
+          </div>
+        </div>
+        <div className="provider-form">
+          <label className="form-field">
+            <span>Provider</span>
+            <select
+              value={selectedProvider}
+              onChange={(event) => {
+                const providerId = event.currentTarget.value
+                const provider = llmStatus?.providers.find((item) => item.id === providerId)
+                setSelectedProvider(providerId)
+                setSelectedModel(provider?.model || provider?.defaultModel || '')
+              }}
+            >
+              {llmProviders.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="form-field">
+            <span>API key</span>
+            <input
+              autoComplete="off"
+              placeholder={selectedProviderInfo?.configured ? 'Configured' : 'Paste API key'}
+              type="password"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.currentTarget.value)}
+            />
+          </label>
+          <div className="model-toolbar">
+            <label>
+              <input
+                checked={freeOnly}
+                type="checkbox"
+                onChange={(event) => setFreeOnly(event.currentTarget.checked)}
+              />
+              <span>Free only</span>
+            </label>
+            <button className="text-button" disabled={discoverBusy} onClick={discoverModels} type="button">
+              <Search size={15} aria-hidden="true" />
+              Discover
+            </button>
+          </div>
+          <label className="form-field">
+            <span>Model</span>
+            <select
+              value={modelOptions.some((model) => model.modelId === selectedModel) ? selectedModel : ''}
+              onChange={(event) => setSelectedModel(event.currentTarget.value)}
+            >
+              {!modelOptions.some((model) => model.modelId === selectedModel) && (
+                <option value="">{selectedModel || 'Custom model'}</option>
+              )}
+              {modelOptions.map((model) => (
+                <option key={`${model.provider}:${model.modelId}`} value={model.modelId}>
+                  {model.name} ({model.modelId})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="form-field">
+            <span>Model ID</span>
+            <input
+              value={selectedModel}
+              onChange={(event) => setSelectedModel(event.currentTarget.value)}
+            />
+          </label>
+          {selectedModelInfo && (
+            <div className="model-meta">
+              <span>{selectedModelInfo.free ? 'Free' : 'Paid'}</span>
+              <span>{selectedModelInfo.supportsTools ? 'Tools' : 'Chat'}</span>
+              <span>{selectedModelInfo.contextLength ? `${selectedModelInfo.contextLength} context` : 'Context unknown'}</span>
+            </div>
+          )}
+        </div>
+        {llmMessage && <span>{llmMessage}</span>}
+        <div className="settings-actions">
+          <button className="text-button" disabled={llmBusy} onClick={configureLlmProvider} type="button">
+            <KeyRound size={15} aria-hidden="true" />
+            Save AI provider
+          </button>
+          <button className="text-button" onClick={refreshLlmStatus} type="button">
+            <RotateCw size={15} aria-hidden="true" />
+            Refresh
+          </button>
+        </div>
+      </div>
       <div>
         <strong>GitHub account</strong>
         <span>

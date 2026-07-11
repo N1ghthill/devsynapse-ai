@@ -306,8 +306,8 @@ the first-run default.
 Release engineering must cover:
 
 - reproducible frontend and bundled-backend builds;
-- Linux and Windows artifacts first;
-- macOS after signing and runtime behavior are validated;
+- Linux and Windows artifacts;
+- no macOS distribution target;
 - code signing where the platform requires it;
 - update metadata and rollback;
 - migration compatibility;

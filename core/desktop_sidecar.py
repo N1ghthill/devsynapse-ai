@@ -50,6 +50,10 @@ class BackendState:
                 self._conversation_service = DesktopConversationService()
             return self._conversation_service
 
+    def reset_conversation_service(self) -> None:
+        with self._conversation_service_lock:
+            self._conversation_service = None
+
 
 class SidecarHandler(BaseHTTPRequestHandler):
     server_version = "DevSynapseSidecar/1.0"
@@ -180,6 +184,8 @@ class SidecarHandler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
                 return
+            if operation_name == "llm.provider.configure":
+                self.backend_state.reset_conversation_service()
             self._json_response(
                 HTTPStatus.OK,
                 {
