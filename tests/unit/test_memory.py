@@ -57,6 +57,7 @@ class TestMemorySystem:
         assert 'learning_nudge_events' in tables
         assert 'agent_runs' in tables
         assert 'agent_run_events' in tables
+        assert 'project_repository_links' in tables
 
     def test_get_user_preferences(self, tmp_path):
         db_path = tmp_path / "test_prefs.db"

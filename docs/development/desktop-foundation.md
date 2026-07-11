@@ -109,6 +109,10 @@ Current implementation notes:
   supports read-only project/repository evidence, `project.register`, which
   mutates only the local app project registry, and `commit.preview`, which
   builds immutable state evidence for future commit approval.
+- GitHub repository portfolio operations are available as typed contracts:
+  `github.repository.list` observes repositories visible to the connected
+  account, `project.connect` stores a local project to GitHub repository
+  association and `project.connection` returns the stored association.
 - `scripts/desktop-smoke.sh` runs a short Tauri window smoke when a graphical
   display or `xvfb-run` is available.
 - GitHub connection uses OAuth Device Flow through typed operations
@@ -118,7 +122,9 @@ Current implementation notes:
   keyring and are never returned to the frontend.
 - the Projects view persists the last selected local project as a local UI
   preference, can choose a folder through a native dialog and reuses the
-  selection when the configured project list is loaded again.
+  selection when the configured project list is loaded again. It can also load
+  GitHub repositories for the connected account and associate one repository
+  with the selected local project without changing Git remotes.
 
 ## IPC Contract
 

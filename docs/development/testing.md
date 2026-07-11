@@ -8,7 +8,7 @@ desktop smoke and clean-machine packaging tests.
 
 At the latest documentation refresh on `2026-07-11`, local verification produced:
 
-- `862` passing Python tests;
+- `870` passing Python tests;
 - successful Ruff lint;
 - successful frontend lint and production build;
 - successful Tauri/Rust `cargo check`;
@@ -121,6 +121,7 @@ Add or update tests when you change:
 
 - desktop IPC and operation contracts;
 - GitHub authentication, token storage and account status behavior;
+- GitHub repository listing and local project to remote association behavior;
 - project registration and native folder selection;
 - Git evidence and preview fingerprints;
 - TUI launcher and runtime configuration behavior;

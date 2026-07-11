@@ -39,9 +39,24 @@ def operation_definitions() -> list[dict[str, Any]]:
             "description": "Register one local folder as a desktop project without changing it.",
         },
         {
+            "name": "project.connect",
+            "riskClass": "local_mutation",
+            "description": "Associate one local project with a GitHub repository.",
+        },
+        {
+            "name": "project.connection",
+            "riskClass": "observe",
+            "description": "Return the GitHub repository associated with one local project.",
+        },
+        {
             "name": "commit.preview",
             "riskClass": "prepare",
             "description": "Build a read-only commit preview from the current project state.",
+        },
+        {
+            "name": "github.repository.list",
+            "riskClass": "observe",
+            "description": "List GitHub repositories available to the connected account.",
         },
         {
             "name": "github.auth.start",
@@ -80,6 +95,14 @@ def _known_projects() -> dict[str, dict[str, str]]:
 
 def project_list(known_projects: dict[str, dict[str, str]] | None = None) -> dict[str, Any]:
     projects = known_projects if known_projects is not None else _known_projects()
+    links: dict[str, dict[str, Any]] = {}
+    if known_projects is None:
+        try:
+            from core.memory import MemorySystem
+
+            links = MemorySystem().get_project_repository_links()
+        except Exception:
+            links = {}
     output = []
     for name, info in sorted(projects.items()):
         path = Path(str(info.get("path", ""))).expanduser()
@@ -91,6 +114,7 @@ def project_list(known_projects: dict[str, dict[str, str]] | None = None) -> dic
                 "priority": info.get("priority", "medium"),
                 "exists": path.exists(),
                 "isGitRepository": (path / ".git").exists(),
+                "repository": links.get(name),
             }
         )
     return {"projects": output}
@@ -168,6 +192,8 @@ def git_status_entries(porcelain: str) -> list[dict[str, str]]:
 
 
 def repository_snapshot(operation_input: dict[str, Any]) -> dict[str, Any]:
+    from core.memory import MemorySystem
+
     project_name = required_string(operation_input, "projectName")
     if project_name is None:
         raise ValueError("missing_project_name")
@@ -183,6 +209,7 @@ def repository_snapshot(operation_input: dict[str, Any]) -> dict[str, Any]:
         "currentBranch": branch or None,
         "headCommit": head or None,
         "originUrl": remote or None,
+        "repository": MemorySystem().get_project_repository_link(project_name),
         "hasLocalChanges": bool(porcelain),
     }
 
@@ -256,7 +283,81 @@ def project_register(operation_input: dict[str, Any]) -> dict[str, Any]:
             "priority": "medium",
             "exists": True,
             "isGitRepository": is_git_repository,
+            "repository": None,
         }
+    }
+
+
+def github_repository_list(operation_input: dict[str, Any]) -> dict[str, Any]:
+    from core.github_client import GitHubApiClient
+
+    query = required_string(operation_input, "query") or ""
+    limit_value = operation_input.get("limit")
+    limit = limit_value if isinstance(limit_value, int) and not isinstance(limit_value, bool) else 30
+    return GitHubApiClient().list_repositories(query=query, limit=limit)
+
+
+def _repository_identity(operation_input: dict[str, Any]) -> dict[str, Any]:
+    repository = operation_input.get("repository")
+    if isinstance(repository, dict):
+        source = repository
+    else:
+        source = operation_input
+
+    owner = required_string(source, "owner")
+    name = required_string(source, "name") or required_string(source, "repositoryName")
+    full_name = required_string(source, "fullName") or (
+        f"{owner}/{name}" if owner is not None and name is not None else None
+    )
+    if owner is None or name is None:
+        raise ValueError("missing_repository_identity")
+    return {
+        "owner": owner,
+        "name": name,
+        "fullName": full_name,
+        "htmlUrl": required_string(source, "htmlUrl"),
+        "cloneUrl": required_string(source, "cloneUrl"),
+        "defaultBranch": required_string(source, "defaultBranch"),
+        "private": bool(source.get("private")),
+    }
+
+
+def project_connect(operation_input: dict[str, Any]) -> dict[str, Any]:
+    from core.github_auth import github_account_status
+    from core.memory import MemorySystem
+
+    project_name = required_string(operation_input, "projectName")
+    if project_name is None:
+        raise ValueError("missing_project_name")
+
+    status = github_account_status({})
+    if not status.get("connected"):
+        raise ValueError("github_not_connected")
+    account = status.get("account") if isinstance(status.get("account"), dict) else {}
+    account_login = account.get("login") if isinstance(account, dict) else None
+    repository = _repository_identity(operation_input)
+    link = MemorySystem().connect_project_repository(
+        project_name,
+        repository,
+        account_login=account_login if isinstance(account_login, str) else None,
+    )
+    return {
+        "projectName": project_name,
+        "repository": link,
+    }
+
+
+def project_connection(operation_input: dict[str, Any]) -> dict[str, Any]:
+    from core.memory import MemorySystem
+
+    project_name = required_string(operation_input, "projectName")
+    if project_name is None:
+        raise ValueError("missing_project_name")
+    link = MemorySystem().get_project_repository_link(project_name)
+    return {
+        "projectName": project_name,
+        "connected": link is not None,
+        "repository": link,
     }
 
 
@@ -280,7 +381,10 @@ def run_operation(operation_name: str, operation_input: dict[str, Any]) -> dict[
         "repository.snapshot": lambda: repository_snapshot(operation_input),
         "git.status": lambda: git_status(operation_input),
         "project.register": lambda: project_register(operation_input),
+        "project.connect": lambda: project_connect(operation_input),
+        "project.connection": lambda: project_connection(operation_input),
         "commit.preview": lambda: commit_preview(operation_input),
+        "github.repository.list": lambda: github_repository_list(operation_input),
         "github.auth.start": lambda: github_auth_start(operation_input),
         "github.auth.poll": lambda: github_auth_poll(operation_input),
         "github.account.status": lambda: github_account_status(operation_input),

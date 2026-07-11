@@ -36,6 +36,8 @@ Current code:
 - Native project-folder selection and local project registration.
 - Read-only Git evidence operations and `commit.preview` prepare operation.
 - GitHub OAuth Device Flow operations using platform keyring storage.
+- GitHub repository listing/search and local project to GitHub repository
+  association through typed desktop operations.
 - Transitional Textual TUI and slash command catalog for development
   migration.
 
@@ -50,8 +52,6 @@ Historical code at commit `5019c19`:
 Missing target capabilities:
 
 - installable clean-machine desktop packages;
-- repository listing/search through the GitHub API;
-- local-folder to GitHub-repository association;
 - normalized GitHub Actions domain models;
 - visual approval binding for local and remote mutations;
 - persisted operation audit records;
@@ -174,7 +174,10 @@ Acceptance checks:
 Current implementation notes:
 
 - The sidecar registers the initial observe operations:
-  `project.list`, `repository.snapshot` and `git.status`.
+  `project.list`, `project.connection`, `repository.snapshot`, `git.status`
+  and `github.repository.list`.
+- `project.register` and `project.connect` mutate only the local application
+  registry. They do not change Git remotes or GitHub repositories.
 - Operation execution returns normalized JSON through authenticated Tauri IPC.
 - Git evidence is collected with fixed subprocess argument lists, not shell
   text supplied by the model or frontend.
@@ -198,6 +201,18 @@ Acceptance checks:
 - A user connects GitHub without manually creating a token.
 - Tokens never appear in frontend state, prompts, logs or memory.
 - Local and remote identity are visible before association.
+
+Current implementation notes:
+
+- Settings exposes Device Flow authentication and account status.
+- Projects can list repositories visible to the connected GitHub account,
+  filter them locally and associate one selected repository with the selected
+  local project.
+- Associations are stored in `project_repository_links` with owner, repository,
+  URL, default branch, privacy and account metadata only. Tokens remain in
+  platform secure storage.
+- Repository listing and project association are typed operations. They do not
+  perform remote mutation.
 
 ### Increment 6: GitHub Actions Understanding
 

@@ -52,6 +52,7 @@ export type ProjectSummary = {
   priority: string
   exists: boolean
   isGitRepository: boolean
+  repository?: ProjectRepositoryLink | null
 }
 
 export type ProjectListResult = {
@@ -60,6 +61,50 @@ export type ProjectListResult = {
 
 export type ProjectRegisterResult = {
   project: ProjectSummary
+}
+
+export type ProjectRepositoryLink = {
+  provider: string
+  owner: string
+  name: string
+  fullName: string
+  htmlUrl?: string | null
+  cloneUrl?: string | null
+  defaultBranch?: string | null
+  private: boolean
+  accountLogin?: string | null
+  connectedAt?: string | null
+  updatedAt?: string | null
+}
+
+export type GitHubRepositorySummary = {
+  id?: number | null
+  owner: string
+  name: string
+  fullName: string
+  private: boolean
+  fork: boolean
+  archived: boolean
+  defaultBranch?: string | null
+  description?: string | null
+  htmlUrl?: string | null
+  cloneUrl?: string | null
+  sshUrl?: string | null
+  permissions: Record<string, boolean>
+  updatedAt?: string | null
+  pushedAt?: string | null
+}
+
+export type GitHubRepositoryListResult = {
+  repositories: GitHubRepositorySummary[]
+  query: string
+  limit: number
+  totalReturned: number
+}
+
+export type ProjectConnectResult = {
+  projectName: string
+  repository: ProjectRepositoryLink
 }
 
 export type GitHubAccount = {

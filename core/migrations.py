@@ -421,6 +421,33 @@ MEMORY_MIGRATIONS = (
             """,
         ),
     ),
+    Migration(
+        version=14,
+        description="Project to GitHub repository associations",
+        statements=(
+            """
+            CREATE TABLE IF NOT EXISTS project_repository_links (
+                project_name TEXT PRIMARY KEY,
+                provider TEXT NOT NULL DEFAULT 'github',
+                owner TEXT NOT NULL,
+                name TEXT NOT NULL,
+                full_name TEXT NOT NULL,
+                html_url TEXT,
+                clone_url TEXT,
+                default_branch TEXT,
+                private INTEGER NOT NULL DEFAULT 0,
+                account_login TEXT,
+                connected_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(project_name) REFERENCES projects(name) ON DELETE CASCADE
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_project_repository_links_remote
+            ON project_repository_links(provider, owner, name)
+            """,
+        ),
+    ),
 )
 
 

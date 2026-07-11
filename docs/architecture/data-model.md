@@ -63,6 +63,8 @@ the frontend.
 
 Stores:
 - known project name, path, type, priority and access metadata
+- current local-project to GitHub repository association metadata in
+  `project_repository_links`
 - learned user preferences
 - historical decisions and lessons
 
@@ -203,12 +205,27 @@ These tables do not exist yet. Each must be introduced through an explicit
 migration in the phase that consumes it. The desktop foundation does not create
 unused operation tables upfront.
 
-### Target GitHub identity and evidence
+### Current GitHub identity and repository association
+
+GitHub access tokens are stored through platform secure storage and are not
+written to SQLite. The desktop backend exposes non-secret account metadata
+through typed operations.
+
+`project_repository_links` stores the current local association:
+
+- local project name;
+- provider, owner, repository name and full name;
+- repository HTML URL, clone URL, default branch and privacy flag;
+- account login used when the association was made;
+- connection and update timestamps.
+
+These rows are local app registry metadata. They do not modify Git remotes and
+do not authorize remote mutation by themselves.
+
+### Target GitHub evidence
 
 Desktop roadmap phases will add:
 
-- GitHub account identity and granted capabilities, without tokens;
-- local-project to owner/repository associations;
 - cached pull request, check, workflow and Actions-run evidence with capture
   times;
 - normalized operation targets and external object identifiers.

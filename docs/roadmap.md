@@ -68,8 +68,10 @@ Deliverables:
 - guided GitHub browser/device authentication;
 - protected credential storage;
 - account and granted-capability display;
-- repository listing and search;
-- local-folder to GitHub-repository association;
+- repository listing and search; current implementation lists repositories
+  visible to the connected account and filters the loaded page locally;
+- local-folder to GitHub-repository association; current implementation stores
+  the association in the app registry without changing Git remotes;
 - typed project, repository and Git status operations;
 - project cards with current attention reasons;
 - rate-limit, offline and permission-aware errors.

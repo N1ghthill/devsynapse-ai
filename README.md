@@ -51,6 +51,8 @@ Current desktop capabilities:
 - GitHub OAuth Device Flow contracts in Settings:
   `github.auth.start`, `github.auth.poll`, `github.account.status` and
   `github.auth.disconnect`;
+- GitHub repository listing/search and local project to GitHub repository
+  association through typed desktop operations;
 - real Tauri window smoke included in `make verify` when a graphical display or
   `xvfb-run` is available.
 
@@ -61,8 +63,6 @@ is never returned to the frontend.
 Not yet complete:
 
 - installable release artifacts for normal users;
-- repository listing/search through GitHub API;
-- local-to-remote repository association;
 - approved local or remote mutation execution.
 
 New product work should target the packaged desktop architecture. Do not add

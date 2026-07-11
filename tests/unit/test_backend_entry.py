@@ -122,6 +122,14 @@ def test_github_auth_poll_is_local_mutation():
     assert operation_risk_class("github.auth.poll") == "local_mutation"
 
 
+def test_project_connect_is_local_mutation():
+    assert operation_risk_class("project.connect") == "local_mutation"
+
+
+def test_github_repository_list_is_observe():
+    assert operation_risk_class("github.repository.list") == "observe"
+
+
 def test_project_register_persists_local_project(monkeypatch, tmp_path):
     repo = tmp_path / "chosen"
     (repo / ".git").mkdir(parents=True)
@@ -211,6 +219,7 @@ def test_project_list_operation_contract(monkeypatch, tmp_path):
     assert set(result) == {"projects"}
     assert result["projects"][0]["name"] == "repo"
     assert result["projects"][0]["isGitRepository"] is True
+    assert result["projects"][0]["repository"] is None
 
 
 def test_project_list_normalizes_known_projects(tmp_path):
@@ -235,6 +244,7 @@ def test_project_list_normalizes_known_projects(tmp_path):
             "priority": "high",
             "exists": True,
             "isGitRepository": True,
+            "repository": None,
         }
     ]
 

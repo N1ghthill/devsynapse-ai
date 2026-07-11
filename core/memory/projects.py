@@ -108,12 +108,129 @@ class ProjectRegistry:
 
         conn = connect_db(self.db_path)
         cursor = conn.cursor()
+        cursor.execute("DELETE FROM project_repository_links WHERE project_name = ?", (name,))
         cursor.execute("DELETE FROM project_permissions WHERE project_name = ?", (name,))
         cursor.execute("DELETE FROM projects WHERE name = ?", (name,))
         deleted = cursor.rowcount > 0
         conn.commit()
         conn.close()
         return deleted
+
+    @staticmethod
+    def _repository_link_from_row(row: sqlite3.Row | None) -> Dict[str, Any] | None:
+        if row is None:
+            return None
+        return {
+            "provider": row["provider"],
+            "owner": row["owner"],
+            "name": row["name"],
+            "fullName": row["full_name"],
+            "htmlUrl": row["html_url"],
+            "cloneUrl": row["clone_url"],
+            "defaultBranch": row["default_branch"],
+            "private": bool(row["private"]),
+            "accountLogin": row["account_login"],
+            "connectedAt": row["connected_at"],
+            "updatedAt": row["updated_at"],
+        }
+
+    def connect_repository(
+        self,
+        project_name: str,
+        repository: Dict[str, Any],
+        *,
+        account_login: str | None = None,
+    ) -> Dict[str, Any]:
+        """Associate one local project with a normalized GitHub repository."""
+
+        project = self.get_project(project_name, include_missing=True)
+        if project is None:
+            raise ValueError("project_not_found")
+
+        owner = str(repository.get("owner") or "").strip()
+        name = str(repository.get("name") or "").strip()
+        full_name = str(repository.get("fullName") or repository.get("full_name") or "").strip()
+        if not owner or not name:
+            raise ValueError("missing_repository_identity")
+        if not full_name:
+            full_name = f"{owner}/{name}"
+
+        now = datetime.now().isoformat()
+        conn = connect_db(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO project_repository_links
+            (
+                project_name, provider, owner, name, full_name, html_url, clone_url,
+                default_branch, private, account_login, connected_at, updated_at
+            )
+            VALUES (?, 'github', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(project_name) DO UPDATE SET
+                owner = excluded.owner,
+                name = excluded.name,
+                full_name = excluded.full_name,
+                html_url = excluded.html_url,
+                clone_url = excluded.clone_url,
+                default_branch = excluded.default_branch,
+                private = excluded.private,
+                account_login = excluded.account_login,
+                updated_at = excluded.updated_at
+            """,
+            (
+                project_name,
+                owner,
+                name,
+                full_name,
+                repository.get("htmlUrl") or repository.get("html_url"),
+                repository.get("cloneUrl") or repository.get("clone_url"),
+                repository.get("defaultBranch") or repository.get("default_branch"),
+                1 if repository.get("private") else 0,
+                account_login,
+                now,
+                now,
+            ),
+        )
+        conn.commit()
+        conn.close()
+        link = self.get_repository_link(project_name)
+        if link is None:
+            raise ValueError("repository_link_unavailable")
+        return link
+
+    def get_repository_link(self, project_name: str) -> Dict[str, Any] | None:
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT provider, owner, name, full_name, html_url, clone_url, default_branch,
+                   private, account_login, connected_at, updated_at
+            FROM project_repository_links
+            WHERE project_name = ?
+            """,
+            (project_name,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return self._repository_link_from_row(row)
+
+    def get_repository_links(self) -> Dict[str, Dict[str, Any]]:
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT project_name, provider, owner, name, full_name, html_url, clone_url,
+                   default_branch, private, account_login, connected_at, updated_at
+            FROM project_repository_links
+            """
+        )
+        links = {
+            row["project_name"]: link
+            for row in cursor.fetchall()
+            if (link := self._repository_link_from_row(row)) is not None
+        }
+        conn.close()
+        return links
 
     def get_project_lookup(self) -> Dict[str, Dict[str, str]]:
         """Return configured and persisted projects keyed by project name."""

@@ -8,8 +8,10 @@ import {
   GitBranch,
   GitPullRequestArrow,
   HeartPulse,
+  Link2,
   MessageSquareText,
   RotateCw,
+  Search,
   Send,
   Square,
   Settings,
@@ -25,8 +27,11 @@ import type {
   GitHubAccountStatusResult,
   GitHubAuthPollResult,
   GitHubAuthStartResult,
+  GitHubRepositoryListResult,
+  GitHubRepositorySummary,
   OperationListResponse,
   OperationRunResponse,
+  ProjectConnectResult,
   ProjectListResult,
   ProjectRegisterResult,
   ProjectSummary,
@@ -356,6 +361,7 @@ function ConversationPanel({ health }: { health: AppHealth }) {
 
 function ProjectsPanel() {
   const [projects, setProjects] = useState<ProjectSummary[]>([])
+  const [repositories, setRepositories] = useState<GitHubRepositorySummary[]>([])
   const [selectedProject, setSelectedProject] = useState<string | null>(() => {
     try {
       return window.localStorage.getItem(selectedProjectStorageKey)
@@ -363,8 +369,11 @@ function ProjectsPanel() {
       return null
     }
   })
+  const [selectedRepository, setSelectedRepository] = useState<string>('')
+  const [repositoryQuery, setRepositoryQuery] = useState('')
   const [projectEvidence, setProjectEvidence] = useState<string>('No project evidence loaded.')
   const [error, setError] = useState<string | null>(null)
+  const [repositoryBusy, setRepositoryBusy] = useState(false)
 
   const selectProject = useCallback((projectName: string) => {
     setSelectedProject(projectName)
@@ -408,6 +417,11 @@ function ProjectsPanel() {
       return [...current, project].sort((left, right) => left.name.localeCompare(right.name))
     })
   }, [])
+
+  const selectedProjectRecord = useMemo(
+    () => projects.find((project) => project.name === selectedProject) ?? null,
+    [projects, selectedProject],
+  )
 
   const inspectProject = useCallback(
     async (projectName: string, operationName: string) => {
@@ -455,6 +469,62 @@ function ProjectsPanel() {
     }
   }, [selectProject, upsertProject])
 
+  const loadGithubRepositories = useCallback(async () => {
+    setRepositoryBusy(true)
+    try {
+      setError(null)
+      const response = await invoke<OperationRunResponse<GitHubRepositoryListResult>>('operation_run', {
+        args: {
+          requestId: requestId('github-repository-list'),
+          operationName: 'github.repository.list',
+          input: { query: repositoryQuery, limit: 50 },
+        },
+      })
+      setRepositories(response.result.repositories)
+      const currentSelection = response.result.repositories.find(
+        (repository) => repository.fullName === selectedRepository,
+      )
+      if (!currentSelection && response.result.repositories[0]) {
+        setSelectedRepository(response.result.repositories[0].fullName)
+      }
+      setProjectEvidence(JSON.stringify(response.result, null, 2))
+    } catch (operationError) {
+      setError(operationError instanceof Error ? operationError.message : String(operationError))
+    } finally {
+      setRepositoryBusy(false)
+    }
+  }, [repositoryQuery, selectedRepository])
+
+  const connectSelectedRepository = useCallback(async () => {
+    const repository = repositories.find((item) => item.fullName === selectedRepository)
+    if (!selectedProject || !repository) {
+      return
+    }
+    setRepositoryBusy(true)
+    try {
+      setError(null)
+      const response = await invoke<OperationRunResponse<ProjectConnectResult>>('operation_run', {
+        args: {
+          requestId: requestId('project-connect'),
+          operationName: 'project.connect',
+          input: { projectName: selectedProject, repository },
+        },
+      })
+      setProjects((current) =>
+        current.map((project) =>
+          project.name === selectedProject
+            ? { ...project, repository: response.result.repository }
+            : project,
+        ),
+      )
+      setProjectEvidence(JSON.stringify(response.result, null, 2))
+    } catch (operationError) {
+      setError(operationError instanceof Error ? operationError.message : String(operationError))
+    } finally {
+      setRepositoryBusy(false)
+    }
+  }, [repositories, selectedProject, selectedRepository])
+
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
       void loadProjects()
@@ -490,6 +560,7 @@ function ProjectsPanel() {
               <div>
                 <strong>{project.name}</strong>
                 <span>{project.path}</span>
+                {project.repository && <span>{project.repository.fullName}</span>}
               </div>
               <div className="project-actions">
                 <button
@@ -523,6 +594,63 @@ function ProjectsPanel() {
         <div className="panel-header">
           <h2>Read-only evidence</h2>
           <GitBranch size={18} aria-hidden="true" />
+        </div>
+        <div className="remote-connect">
+          <div>
+            <strong>GitHub repository</strong>
+            <span>
+              {selectedProjectRecord?.repository
+                ? selectedProjectRecord.repository.fullName
+                : 'No remote repository associated.'}
+            </span>
+          </div>
+          <div className="field-row">
+            <Search size={16} aria-hidden="true" />
+            <input
+              aria-label="Repository search"
+              onChange={(event) => setRepositoryQuery(event.target.value)}
+              placeholder="owner/name"
+              type="search"
+              value={repositoryQuery}
+            />
+            <button
+              className="icon-button"
+              disabled={repositoryBusy}
+              onClick={loadGithubRepositories}
+              title="Load GitHub repositories"
+              type="button"
+            >
+              <RotateCw size={16} aria-hidden="true" />
+            </button>
+          </div>
+          <div className="field-row">
+            <GitPullRequestArrow size={16} aria-hidden="true" />
+            <select
+              aria-label="GitHub repository"
+              disabled={repositories.length === 0}
+              onChange={(event) => setSelectedRepository(event.target.value)}
+              value={selectedRepository}
+            >
+              {repositories.length === 0 ? (
+                <option value="">Load repositories</option>
+              ) : (
+                repositories.map((repository) => (
+                  <option key={repository.fullName} value={repository.fullName}>
+                    {repository.fullName}
+                  </option>
+                ))
+              )}
+            </select>
+            <button
+              className="icon-button"
+              disabled={!selectedProject || !selectedRepository || repositoryBusy}
+              onClick={connectSelectedRepository}
+              title="Associate selected repository"
+              type="button"
+            >
+              <Link2 size={16} aria-hidden="true" />
+            </button>
+          </div>
         </div>
         <pre>{projectEvidence}</pre>
       </div>

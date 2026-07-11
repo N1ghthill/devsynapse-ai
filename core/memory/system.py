@@ -122,6 +122,25 @@ class MemorySystem:
     def get_project_lookup(self) -> Dict[str, Dict[str, str]]:
         return self.projects.get_project_lookup()
 
+    def connect_project_repository(
+        self,
+        project_name: str,
+        repository: Dict[str, Any],
+        *,
+        account_login: str | None = None,
+    ) -> Dict[str, Any]:
+        return self.projects.connect_repository(
+            project_name,
+            repository,
+            account_login=account_login,
+        )
+
+    def get_project_repository_link(self, project_name: str) -> Optional[Dict[str, Any]]:
+        return self.projects.get_repository_link(project_name)
+
+    def get_project_repository_links(self) -> Dict[str, Dict[str, Any]]:
+        return self.projects.get_repository_links()
+
     def get_projects_context(self) -> str:
         return self.projects.get_projects_context()
 
