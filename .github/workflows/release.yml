@@ -23,32 +23,32 @@ jobs:
             bundles: deb,appimage
             artifact: devsynapse-linux-x86_64
             paths: |
-              frontend/src-tauri/target/release/bundle/deb/*.deb
-              frontend/src-tauri/target/release/bundle/appimage/*.AppImage*
+              frontend/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+              frontend/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage*
           - name: windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
             bundles: nsis,msi
             artifact: devsynapse-windows-x86_64
             paths: |
-              frontend/src-tauri/target/release/bundle/nsis/*
-              frontend/src-tauri/target/release/bundle/msi/*
+              frontend/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*
+              frontend/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*
           - name: macos-x86_64
             os: macos-13
             target: x86_64-apple-darwin
             bundles: app,dmg
             artifact: devsynapse-macos-x86_64
             paths: |
-              frontend/src-tauri/target/release/bundle/dmg/*.dmg
-              frontend/src-tauri/target/release/bundle/macos/*.app.tar.gz*
+              frontend/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+              frontend/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app.tar.gz*
           - name: macos-aarch64
             os: macos-14
             target: aarch64-apple-darwin
             bundles: app,dmg
             artifact: devsynapse-macos-aarch64
             paths: |
-              frontend/src-tauri/target/release/bundle/dmg/*.dmg
-              frontend/src-tauri/target/release/bundle/macos/*.app.tar.gz*
+              frontend/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+              frontend/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz*
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
       TAURI_TARGET_TRIPLE: ${{ matrix.target }}
