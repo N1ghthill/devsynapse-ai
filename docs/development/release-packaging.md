@@ -27,12 +27,14 @@ launches one installed desktop app; the backend starts and stops with that app.
 Create a version tag:
 
 ```bash
-git tag v1.2.1
-git push origin v1.2.1
+git tag v1.2.2
+git push origin v1.2.2
 ```
 
 The workflow builds packages on native operating-system runners and attaches
-the release assets to the GitHub release. Manual dispatch is available for
+the release assets to the GitHub release. Publication also depends on a Linux
+install smoke test that installs the generated `.deb` and verifies the desktop
+binary, backend sidecar and desktop entry. Manual dispatch is available for
 release dry runs, but production publication is tag-driven.
 
 ## Required Secrets And Variables
@@ -43,7 +45,8 @@ GitHub repository secrets:
   accepted by the Tauri CLI.
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: optional password for the updater key.
 - `APT_GPG_PRIVATE_KEY`: optional private key for signing APT metadata.
-- `APT_GPG_KEY_ID`: optional key id used when signing APT metadata.
+- `APT_GPG_KEY_ID`: optional key id used when signing APT metadata. If omitted,
+  the packaging script derives the first imported secret-key fingerprint.
 
 GitHub repository variables:
 
@@ -51,6 +54,8 @@ GitHub repository variables:
 - `DEVSYNAPSE_UPDATER_ENDPOINT`: updater manifest URL. Default if omitted in
   local reasoning is the latest GitHub release asset URL:
   `https://github.com/N1ghthill/devsynapse-ai/releases/latest/download/latest.json`.
+- `DEVSYNAPSE_APT_REQUIRE_GPG`: set to `1` to fail release builds when the APT
+  repository cannot be signed.
 
 The workflow also accepts legacy names `TAURI_UPDATER_PUBKEY` and
 `TAURI_UPDATER_ENDPOINT` for compatibility with older repository settings.
@@ -82,8 +87,9 @@ repository/
   dists/stable/main/binary-amd64/Packages.gz
 ```
 
-`InRelease` and `Release.gpg` are present when `APT_GPG_PRIVATE_KEY` and
-`APT_GPG_KEY_ID` are configured.
+`InRelease` and `Release.gpg` are present when an APT signing key is available.
+Set `DEVSYNAPSE_APT_REQUIRE_GPG=1` after configuring `APT_GPG_PRIVATE_KEY` to
+prevent unsigned APT repository artifacts from being published.
 
 ## Local Maintainer Commands
 

@@ -1,6 +1,6 @@
 [package]
 name = "devsynapse-ai"
-version = "1.2.1"
+version = "1.2.2"
 description = "DevSynapse AI desktop shell"
 authors = ["Irving Ruas <n1ghthill@proton.me>"]
 edition = "2021"

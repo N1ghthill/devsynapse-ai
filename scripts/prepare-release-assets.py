@@ -9,7 +9,6 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-
 UPDATER_PLATFORMS = {
     "devsynapse-linux-x86_64": ("linux-x86_64", ".AppImage"),
     "devsynapse-windows-x86_64": ("windows-x86_64", ".exe"),
@@ -17,13 +16,64 @@ UPDATER_PLATFORMS = {
     "devsynapse-macos-aarch64": ("darwin-aarch64", ".app.tar.gz"),
 }
 
+ASSET_PLATFORMS = {
+    "devsynapse-linux-x86_64": "linux-x86_64",
+    "devsynapse-windows-x86_64": "windows-x86_64",
+    "devsynapse-macos-x86_64": "macos-x86_64",
+    "devsynapse-macos-aarch64": "macos-aarch64",
+}
+
+PRODUCT_ASSET_PREFIX = "DevSynapse-AI"
+
 
 def release_url(repository: str, tag: str, asset_name: str) -> str:
     return f"https://github.com/{repository}/releases/download/{tag}/{asset_name}"
 
 
-def copy_asset(source: Path, output_dir: Path, used_names: set[str]) -> Path:
-    name = source.name
+def artifact_name(source: Path, input_dir: Path) -> str | None:
+    try:
+        return source.relative_to(input_dir).parts[0]
+    except ValueError:
+        return None
+
+
+def package_suffix(source_name: str) -> str | None:
+    suffixes = (
+        ".app.tar.gz.sig",
+        ".app.tar.gz",
+        ".AppImage.sig",
+        ".AppImage",
+        "-setup.exe.sig",
+        "-setup.exe",
+        ".msi.sig",
+        ".msi",
+        ".dmg",
+        ".deb",
+    )
+    for suffix in suffixes:
+        if source_name.endswith(suffix):
+            return suffix
+    return None
+
+
+def staged_asset_name(source: Path, input_dir: Path, version: str) -> str:
+    artifact = artifact_name(source, input_dir)
+    if artifact == "devsynapse-apt-repository" and source.name == "devsynapse-apt-repository.tar.gz":
+        return f"devsynapse-apt-repository_{version}.tar.gz"
+
+    platform = ASSET_PLATFORMS.get(artifact or "")
+    suffix = package_suffix(source.name)
+    if platform and suffix:
+        if suffix in {".app.tar.gz", ".app.tar.gz.sig"}:
+            return f"{PRODUCT_ASSET_PREFIX}_{version}_{platform}.app.tar.gz{'.sig' if source.name.endswith('.sig') else ''}"
+        if suffix in {"-setup.exe", "-setup.exe.sig"}:
+            return f"{PRODUCT_ASSET_PREFIX}_{version}_{platform}-setup.exe{'.sig' if source.name.endswith('.sig') else ''}"
+        return f"{PRODUCT_ASSET_PREFIX}_{version}_{platform}{suffix}"
+
+    return source.name.replace(" ", ".")
+
+
+def copy_named_asset(source: Path, output_dir: Path, name: str, used_names: set[str]) -> Path:
     if name in used_names:
         candidate = f"{source.parent.name}-{name}"
         counter = 2
@@ -60,9 +110,15 @@ def main() -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     used_names: set[str] = set()
     copied_by_source: dict[Path, Path] = {}
+    version = args.tag.removeprefix("v")
 
     for source in sorted(path for path in args.input_dir.rglob("*") if path.is_file()):
-        staged = copy_asset(source, args.output_dir, used_names)
+        staged = copy_named_asset(
+            source,
+            args.output_dir,
+            staged_asset_name(source, args.input_dir, version),
+            used_names,
+        )
         copied_by_source[source.resolve()] = staged
 
     platforms: dict[str, dict[str, str]] = {}
@@ -86,7 +142,7 @@ def main() -> int:
         raise SystemExit("No updater platforms were discovered")
 
     latest = {
-        "version": args.tag.removeprefix("v"),
+        "version": version,
         "notes": args.notes,
         "pub_date": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "platforms": platforms,

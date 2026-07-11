@@ -7,7 +7,6 @@ import json
 import os
 from pathlib import Path
 
-
 ROOT_DIR = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT_DIR / "frontend" / "src-tauri" / "tauri.release.conf.json"
 

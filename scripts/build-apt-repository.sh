@@ -9,6 +9,7 @@ COMPONENT="${APT_COMPONENT:-main}"
 ARCHITECTURE="${APT_ARCHITECTURE:-amd64}"
 ORIGIN="${APT_ORIGIN:-DevSynapse AI}"
 LABEL="${APT_LABEL:-DevSynapse AI}"
+REQUIRE_GPG="${APT_REQUIRE_GPG:-0}"
 
 if ! command -v dpkg-scanpackages >/dev/null 2>&1; then
     echo "dpkg-scanpackages is required. Install dpkg-dev on Debian/Ubuntu." >&2
@@ -55,13 +56,27 @@ SHA256:
  $PACKAGES_GZ_SHA256 $PACKAGES_GZ_SIZE $COMPONENT/binary-$ARCHITECTURE/Packages.gz
 EOF
 
-if [ -n "${APT_GPG_KEY_ID:-}" ]; then
+SIGNING_KEY="${APT_GPG_KEY_ID:-}"
+if [ -n "${APT_GPG_PRIVATE_KEY:-}" ]; then
+    printf '%s' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+fi
+
+if [ -z "$SIGNING_KEY" ] && gpg --batch --list-secret-keys >/dev/null 2>&1; then
+    SIGNING_KEY="$(gpg --batch --list-secret-keys --with-colons | awk -F: '$1 == "fpr" {print $10; exit}')"
+fi
+
+if [ "$REQUIRE_GPG" = "1" ] && [ -z "$SIGNING_KEY" ]; then
+    echo "APT signing is required, but no signing key is available." >&2
+    exit 1
+fi
+
+if [ -n "$SIGNING_KEY" ]; then
     gpg --batch --yes --armor --detach-sign \
-        --local-user "$APT_GPG_KEY_ID" \
+        --local-user "$SIGNING_KEY" \
         --output "$REPO_ROOT/dists/$CODENAME/Release.gpg" \
         "$REPO_ROOT/dists/$CODENAME/Release"
     gpg --batch --yes --clearsign \
-        --local-user "$APT_GPG_KEY_ID" \
+        --local-user "$SIGNING_KEY" \
         --output "$REPO_ROOT/dists/$CODENAME/InRelease" \
         "$REPO_ROOT/dists/$CODENAME/Release"
 fi

@@ -137,6 +137,7 @@ jobs:
       APT_ARCHITECTURE: amd64
       APT_GPG_KEY_ID: ${{ secrets.APT_GPG_KEY_ID }}
       APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+      APT_REQUIRE_GPG: ${{ vars.DEVSYNAPSE_APT_REQUIRE_GPG || '0' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -152,11 +153,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y dpkg-dev gnupg
 
-      - name: Import APT signing key
-        if: env.APT_GPG_PRIVATE_KEY != ''
-        run: |
-          printf '%s' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
-
       - name: Build APT repository archive
         run: |
           mkdir -p artifacts/linux/debs
@@ -170,12 +166,38 @@ jobs:
           if-no-files-found: error
           path: artifacts/apt/devsynapse-apt-repository.tar.gz
 
+  linux-install-smoke:
+    name: Linux package install smoke
+    runs-on: ubuntu-24.04
+    needs: package
+    steps:
+      - name: Download Linux package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: devsynapse-linux-x86_64
+          path: artifacts/linux
+
+      - name: Install Debian package
+        run: |
+          sudo apt-get update
+          deb="$(find artifacts/linux -name '*.deb' -print -quit)"
+          test -n "$deb" || { echo "::error::No Debian package found"; exit 1; }
+          sudo apt-get install -y "./$deb"
+
+      - name: Verify installed desktop package
+        run: |
+          test -x /usr/bin/devsynapse-ai
+          test -x /usr/bin/devsynapse-backend
+          test -f "/usr/share/applications/DevSynapse AI.desktop"
+          dpkg -L dev-synapse-ai | grep -E '/usr/bin/devsynapse-(ai|backend)$'
+
   publish:
     name: Publish GitHub release assets
     runs-on: ubuntu-24.04
     needs:
       - package
       - apt-repository
+      - linux-install-smoke
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout repository
