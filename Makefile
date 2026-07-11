@@ -54,7 +54,7 @@ script-check:
 	bash -n scripts/uninstall.sh
 	bash -n scripts/update.sh
 	bash -n scripts/build-backend.sh
-	$(PYTHON) -m py_compile backend-entry.py devsynapse/cli.py devsynapse/tui.py scripts/migrate.py scripts/eval_agent.py
+	$(PYTHON) -m py_compile backend-entry.py core/desktop_sidecar.py core/operations.py devsynapse/cli.py devsynapse/tui.py scripts/migrate.py scripts/eval_agent.py
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh; \
 	else \

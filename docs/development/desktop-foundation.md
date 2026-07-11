@@ -97,6 +97,15 @@ scripts/
 Frontend contracts must be generated from or tested against backend schemas.
 Do not maintain unrelated handwritten payload definitions in both languages.
 
+Current implementation notes:
+
+- `backend-entry.py` is only the packaged sidecar entry point.
+- `core/desktop_sidecar.py` owns the private authenticated loopback HTTP
+  lifecycle used by the Tauri shell.
+- `core/operations.py` owns the registered read-only operation kernel.
+- the Projects view persists the last selected local project as a local UI
+  preference and reuses it when the configured project list is loaded again.
+
 ## IPC Contract
 
 Minimum messages:

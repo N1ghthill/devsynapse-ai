@@ -1,22 +1,14 @@
-import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location("backend_entry", ROOT_DIR / "backend-entry.py")
-assert SPEC is not None
-backend_entry = importlib.util.module_from_spec(SPEC)
-assert SPEC.loader is not None
-SPEC.loader.exec_module(backend_entry)
-
-BackendState = backend_entry.BackendState
-SidecarHandler = backend_entry.SidecarHandler
-conversation_cancel_events = backend_entry.conversation_cancel_events
-conversation_send_events = backend_entry.conversation_send_events
-conversation_started_events = backend_entry.conversation_started_events
-git_status_counts = backend_entry.git_status_counts
-operation_definitions = backend_entry.operation_definitions
-project_list = backend_entry.project_list
+from core.desktop_sidecar import (
+    BackendState,
+    SidecarHandler,
+    conversation_cancel_events,
+    conversation_send_events,
+    conversation_started_events,
+)
+from core.operations import git_status_counts, operation_definitions, project_list, run_operation
 
 
 def _handler(token: str, header: str | None) -> SidecarHandler:
@@ -47,6 +39,19 @@ def test_conversation_start_events_are_typed():
     ]
     assert all(event["requestId"] == "req-1" for event in events)
     assert all(event["conversationId"] == "conv-1" for event in events)
+
+
+def test_conversation_event_contract_has_required_identity_fields():
+    events = [
+        *conversation_started_events("req-start", "conv-1"),
+        *conversation_send_events("req-send", "conv-1", "hello"),
+        *conversation_cancel_events("req-cancel", "conv-1"),
+    ]
+
+    for event in events:
+        assert isinstance(event["type"], str)
+        assert event["requestId"].startswith("req-")
+        assert event["conversationId"] == "conv-1"
 
 
 def test_conversation_send_events_return_delta():
@@ -82,6 +87,28 @@ def test_operation_definitions_are_read_only():
         "git.status",
     ]
     assert {definition["riskClass"] for definition in definitions} == {"observe"}
+
+
+def test_project_list_operation_contract(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+
+    monkeypatch.setattr(
+        "core.operations._known_projects",
+        lambda: {
+            "repo": {
+                "path": str(repo),
+                "type": "project",
+                "priority": "high",
+            }
+        },
+    )
+
+    result = run_operation("project.list", {})
+
+    assert set(result) == {"projects"}
+    assert result["projects"][0]["name"] == "repo"
+    assert result["projects"][0]["isGitRepository"] is True
 
 
 def test_project_list_normalizes_known_projects(tmp_path):

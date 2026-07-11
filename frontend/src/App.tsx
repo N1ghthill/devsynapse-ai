@@ -57,6 +57,8 @@ const browserPreviewHealth: AppHealth = {
   },
 }
 
+const selectedProjectStorageKey = 'devsynapse.selectedProject'
+
 type ConversationMessage = {
   id: string
   role: 'assistant' | 'user' | 'system'
@@ -348,9 +350,24 @@ function ConversationPanel({ health }: { health: AppHealth }) {
 
 function ProjectsPanel() {
   const [projects, setProjects] = useState<ProjectSummary[]>([])
-  const [selectedProject, setSelectedProject] = useState<string | null>(null)
+  const [selectedProject, setSelectedProject] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem(selectedProjectStorageKey)
+    } catch {
+      return null
+    }
+  })
   const [projectEvidence, setProjectEvidence] = useState<string>('No project evidence loaded.')
   const [error, setError] = useState<string | null>(null)
+
+  const selectProject = useCallback((projectName: string) => {
+    setSelectedProject(projectName)
+    try {
+      window.localStorage.setItem(selectedProjectStorageKey, projectName)
+    } catch {
+      // Local storage can be unavailable in restricted browser contexts.
+    }
+  }, [])
 
   const loadProjects = useCallback(async () => {
     try {
@@ -363,30 +380,38 @@ function ProjectsPanel() {
         },
       })
       setProjects(response.result.projects)
-      if (!selectedProject && response.result.projects[0]) {
-        setSelectedProject(response.result.projects[0].name)
+      const storedSelection = response.result.projects.find(
+        (project) => project.name === selectedProject,
+      )
+      if (storedSelection) {
+        selectProject(storedSelection.name)
+      } else if (response.result.projects[0]) {
+        selectProject(response.result.projects[0].name)
       }
     } catch (operationError) {
       setError(operationError instanceof Error ? operationError.message : String(operationError))
     }
-  }, [selectedProject])
+  }, [selectProject, selectedProject])
 
-  const inspectProject = useCallback(async (projectName: string, operationName: string) => {
-    try {
-      setError(null)
-      const response = await invoke<OperationRunResponse<Record<string, unknown>>>('operation_run', {
-        args: {
-          requestId: requestId(operationName),
-          operationName,
-          input: { projectName },
-        },
-      })
-      setSelectedProject(projectName)
-      setProjectEvidence(JSON.stringify(response.result, null, 2))
-    } catch (operationError) {
-      setError(operationError instanceof Error ? operationError.message : String(operationError))
-    }
-  }, [])
+  const inspectProject = useCallback(
+    async (projectName: string, operationName: string) => {
+      try {
+        setError(null)
+        const response = await invoke<OperationRunResponse<Record<string, unknown>>>('operation_run', {
+          args: {
+            requestId: requestId(operationName),
+            operationName,
+            input: { projectName },
+          },
+        })
+        selectProject(projectName)
+        setProjectEvidence(JSON.stringify(response.result, null, 2))
+      } catch (operationError) {
+        setError(operationError instanceof Error ? operationError.message : String(operationError))
+      }
+    },
+    [selectProject],
+  )
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
