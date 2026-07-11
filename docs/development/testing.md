@@ -6,11 +6,15 @@ desktop smoke and clean-machine packaging tests.
 
 ## Current Verification Baseline
 
-At the latest documentation refresh on `2026-05-05`, local verification produced:
+At the latest documentation refresh on `2026-07-11`, local verification produced:
 
-- `319` passing tests;
+- `862` passing Python tests;
 - successful Ruff lint;
-- successful shell script syntax checks, ShellCheck and Python script compilation.
+- successful frontend lint and production build;
+- successful Tauri/Rust `cargo check`;
+- successful shell script syntax checks, ShellCheck and Python script compilation;
+- successful transitional TUI smoke;
+- successful Tauri desktop window smoke.
 
 ## Test Layout
 
@@ -61,6 +65,16 @@ Run repository verification:
 make verify
 ```
 
+Run only the desktop shell smoke:
+
+```bash
+make desktop-smoke
+```
+
+`desktop-smoke` opens the Tauri application briefly and treats a healthy app
+that remains alive until timeout as success. It runs when a graphical display
+or `xvfb-run` is available and skips explicitly otherwise.
+
 Script validation:
 
 ```bash
@@ -105,6 +119,10 @@ make eval-agent EVAL_AGENT_ARGS=--no-llm
 
 Add or update tests when you change:
 
+- desktop IPC and operation contracts;
+- GitHub authentication, token storage and account status behavior;
+- project registration and native folder selection;
+- Git evidence and preview fingerprints;
 - TUI launcher and runtime configuration behavior;
 - migration behavior;
 - execution authorization;

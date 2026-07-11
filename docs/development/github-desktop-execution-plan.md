@@ -29,9 +29,15 @@ surfaces only.
 Current code:
 
 - Python conversation core, memory, routing and provider transport.
-- Transitional Textual TUI and slash command catalog.
-- Generic command bridge for development migration.
-- Documentation describing the desktop target architecture.
+- Tauri 2 + React/TypeScript desktop shell with Conversation, Projects,
+  Activity and Settings.
+- Python sidecar lifecycle with authenticated private loopback IPC.
+- Typed conversation contracts and initial operation registry.
+- Native project-folder selection and local project registration.
+- Read-only Git evidence operations and `commit.preview` prepare operation.
+- GitHub OAuth Device Flow operations using platform keyring storage.
+- Transitional Textual TUI and slash command catalog for development
+  migration.
 
 Historical code at commit `5019c19`:
 
@@ -43,13 +49,13 @@ Historical code at commit `5019c19`:
 
 Missing target capabilities:
 
-- Current `frontend/` workspace.
-- Private typed desktop IPC.
-- Operation kernel and registry.
-- GitHub authentication and protected credential storage.
-- Normalized Git/GitHub domain models.
-- Visual previews, approvals and audit records.
-- Desktop smoke, accessibility, Rust and frontend CI coverage.
+- installable clean-machine desktop packages;
+- repository listing/search through the GitHub API;
+- local-folder to GitHub-repository association;
+- normalized GitHub Actions domain models;
+- visual approval binding for local and remote mutations;
+- persisted operation audit records;
+- accessibility and packaging coverage beyond the current smoke/build checks.
 
 ## Delivery Strategy
 

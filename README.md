@@ -34,14 +34,36 @@ Read:
 
 ## Current Status
 
-The current `main` branch contains the Python core and a transitional Textual
-TUI. It does not yet ship the new desktop product or complete GitHub
-integration.
+The current `main` branch contains the Python core, the transitional Textual
+TUI and the recovered desktop foundation for the target product.
 
-The repository history contains a previous Tauri 2/React/TypeScript desktop
-application with bundled backend and Windows/Linux packaging. The roadmap
-recovers that foundation selectively without restoring its former admin,
-multi-user and generic dashboard surfaces.
+Current desktop capabilities:
+
+- Tauri 2 + React/TypeScript shell with Conversation, Projects, Activity and
+  Settings;
+- bundled Python sidecar lifecycle in development and packaged-sidecar build
+  support;
+- authenticated private loopback IPC for typed conversation and operations;
+- native project-folder picker and local project registry;
+- read-only repository evidence operations: `project.list`,
+  `repository.snapshot` and `git.status`;
+- `commit.preview` prepare operation with state fingerprint evidence;
+- GitHub OAuth Device Flow contracts in Settings:
+  `github.auth.start`, `github.auth.poll`, `github.account.status` and
+  `github.auth.disconnect`;
+- real Tauri window smoke included in `make verify` when a graphical display or
+  `xvfb-run` is available.
+
+GitHub connection requires `GITHUB_CLIENT_ID` from an OAuth App or GitHub App
+with Device Flow enabled. The token is stored through the platform keyring and
+is never returned to the frontend.
+
+Not yet complete:
+
+- installable release artifacts for normal users;
+- repository listing/search through GitHub API;
+- local-to-remote repository association;
+- approved local or remote mutation execution.
 
 New product work should target the packaged desktop architecture. Do not add
 new end-user workflows exclusively to the TUI, slash-command catalog or generic
@@ -113,6 +135,8 @@ security or confirmation requirements.
 Current backend prerequisites:
 
 - Python 3.10 or newer;
+- Node.js and npm for the desktop frontend;
+- Rust toolchain for the Tauri shell;
 - Linux or another Unix-like development environment;
 - Git.
 
@@ -133,6 +157,20 @@ make run
 
 This is a contributor workflow, not the target end-user installation.
 
+Run the desktop shell in development:
+
+```bash
+cd frontend
+npm install
+npm run tauri:dev
+```
+
+Enable GitHub Device Flow in the desktop Settings screen by configuring:
+
+```bash
+GITHUB_CLIENT_ID=your_oauth_app_client_id
+```
+
 ## Repository Structure
 
 ```text
@@ -140,12 +178,11 @@ config/            current runtime settings
 core/              conversation, memory, policy and transitional tools
 devsynapse/        transitional Textual interface
 docs/              product, architecture, security and implementation plans
+frontend/          Tauri 2 + React/TypeScript desktop shell
 plugins/           existing extension example; not target product UI
 scripts/           current installation, migration and evaluation utilities
 tests/             unit and integration tests
 ```
-
-The roadmap will restore a minimal `frontend/` Tauri/React workspace.
 
 ## Verification
 
@@ -155,8 +192,10 @@ Current baseline:
 make verify
 ```
 
-Desktop work will add frontend lint/typecheck, Rust tests, IPC contracts,
-desktop smoke tests and clean-machine package installation checks.
+The verification surface currently includes Python tests and Ruff, frontend
+lint/build, Rust `cargo check`, script checks, TUI smoke and a short Tauri
+window smoke. Clean-machine package installation checks remain future release
+work.
 
 ## Contribution Contract
 
