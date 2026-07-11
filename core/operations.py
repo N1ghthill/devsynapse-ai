@@ -32,13 +32,24 @@ def operation_definitions() -> list[dict[str, Any]]:
             "riskClass": "observe",
             "description": "Return normalized read-only Git status counts for one project.",
         },
+        {
+            "name": "project.register",
+            "riskClass": "local_mutation",
+            "description": "Register one local folder as a desktop project without changing it.",
+        },
     ]
 
 
 def _known_projects() -> dict[str, dict[str, str]]:
     from config.settings import get_settings
+    from core.memory import MemorySystem
 
-    return get_settings().build_known_projects()
+    projects = get_settings().build_known_projects()
+    try:
+        projects.update(MemorySystem().get_project_lookup())
+    except Exception:
+        pass
+    return projects
 
 
 def project_list(known_projects: dict[str, dict[str, str]] | None = None) -> dict[str, Any]:
@@ -138,11 +149,45 @@ def git_status(operation_input: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def project_register(operation_input: dict[str, Any]) -> dict[str, Any]:
+    from core.memory import MemorySystem
+
+    path_value = required_string(operation_input, "path")
+    if path_value is None:
+        raise ValueError("missing_project_path")
+    path = Path(path_value).expanduser().resolve()
+    if not path.exists() or not path.is_dir():
+        raise ValueError("project_path_unavailable")
+
+    project_name = required_string(operation_input, "projectName") or path.name
+    memory = MemorySystem()
+    memory.add_project(project_name, str(path), "project", "medium")
+    is_git_repository = (path / ".git").exists()
+    return {
+        "project": {
+            "name": project_name,
+            "path": str(path),
+            "type": "project",
+            "priority": "medium",
+            "exists": True,
+            "isGitRepository": is_git_repository,
+        }
+    }
+
+
+def operation_risk_class(operation_name: str) -> str:
+    for definition in operation_definitions():
+        if definition["name"] == operation_name:
+            return str(definition["riskClass"])
+    raise KeyError(operation_name)
+
+
 def run_operation(operation_name: str, operation_input: dict[str, Any]) -> dict[str, Any]:
     operations = {
         "project.list": lambda: project_list(),
         "repository.snapshot": lambda: repository_snapshot(operation_input),
         "git.status": lambda: git_status(operation_input),
+        "project.register": lambda: project_register(operation_input),
     }
     if operation_name not in operations:
         raise KeyError(operation_name)

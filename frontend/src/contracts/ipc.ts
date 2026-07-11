@@ -58,6 +58,10 @@ export type ProjectListResult = {
   projects: ProjectSummary[]
 }
 
+export type ProjectRegisterResult = {
+  project: ProjectSummary
+}
+
 export type OperationRunResponse<T = unknown> = {
   requestId: string
   operationName: string

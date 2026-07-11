@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default capabilities for DevSynapse AI",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:default"]
 }

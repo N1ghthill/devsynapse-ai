@@ -102,9 +102,17 @@ Current implementation notes:
 - `backend-entry.py` is only the packaged sidecar entry point.
 - `core/desktop_sidecar.py` owns the private authenticated loopback HTTP
   lifecycle used by the Tauri shell.
-- `core/operations.py` owns the registered read-only operation kernel.
+- `core/desktop_conversation.py` adapts desktop conversation requests to the
+  current core and returns a desktop-specific setup message when no provider is
+  configured.
+- `core/operations.py` owns the registered operation kernel. It currently
+  supports read-only project/repository evidence plus `project.register`, which
+  mutates only the local app project registry.
+- `scripts/desktop-smoke.sh` runs a short Tauri window smoke when a graphical
+  display or `xvfb-run` is available.
 - the Projects view persists the last selected local project as a local UI
-  preference and reuses it when the configured project list is loaded again.
+  preference, can choose a folder through a native dialog and reuses the
+  selection when the configured project list is loaded again.
 
 ## IPC Contract
 

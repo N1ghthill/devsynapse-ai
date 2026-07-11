@@ -3,7 +3,7 @@ PIP ?= $(shell if [ -x ./venv/bin/pip ]; then printf './venv/bin/pip'; else comm
 PYTEST ?= $(shell if [ -x ./venv/bin/pytest ]; then printf './venv/bin/pytest'; else command -v pytest; fi)
 RUFF ?= $(shell if [ -x ./venv/bin/ruff ]; then printf './venv/bin/ruff'; else command -v ruff; fi)
 
-.PHONY: setup install install-dev test lint frontend-install frontend-lint frontend-typecheck frontend-build desktop-check script-check verify migrate migration-status run tui-smoke
+.PHONY: setup install install-dev test lint frontend-install frontend-lint frontend-typecheck frontend-build desktop-check desktop-smoke script-check verify migrate migration-status run tui-smoke
 
 setup:
 	python3 -m venv venv
@@ -49,14 +49,18 @@ frontend-build:
 desktop-check:
 	cd frontend/src-tauri && cargo check
 
+desktop-smoke:
+	bash scripts/desktop-smoke.sh
+
 script-check:
 	bash -n scripts/install.sh
 	bash -n scripts/uninstall.sh
 	bash -n scripts/update.sh
 	bash -n scripts/build-backend.sh
-	$(PYTHON) -m py_compile backend-entry.py core/desktop_sidecar.py core/operations.py devsynapse/cli.py devsynapse/tui.py scripts/migrate.py scripts/eval_agent.py
+	bash -n scripts/desktop-smoke.sh
+	$(PYTHON) -m py_compile backend-entry.py core/desktop_conversation.py core/desktop_sidecar.py core/operations.py devsynapse/cli.py devsynapse/tui.py scripts/migrate.py scripts/eval_agent.py
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh; \
+		shellcheck scripts/install.sh scripts/uninstall.sh scripts/update.sh scripts/desktop-smoke.sh; \
 	else \
 		echo "shellcheck not installed; skipping shell script lint"; \
 	fi
@@ -71,7 +75,7 @@ tui-smoke:
 	$(PYTHON) -m devsynapse.cli --help
 	$(PYTEST) -q tests/unit/test_tui_smoke.py
 
-verify: lint frontend-lint frontend-build desktop-check test script-check tui-smoke
+verify: lint frontend-lint frontend-build desktop-check test script-check tui-smoke desktop-smoke
 
 migrate:
 	$(PYTHON) scripts/migrate.py apply

@@ -14,17 +14,15 @@ npm run lint
 npm run typecheck
 npm run build
 npm run tauri:dev
+../scripts/desktop-smoke.sh
 ```
-
-The backend sidecar lifecycle is planned for the next increment. Until then,
-the desktop shell exposes only local app health/version commands.
 
 ## Backend Sidecar
 
 The desktop shell starts `backend-entry.py` in development and checks
 authenticated `/health` and `/version` endpoints on a private loopback port.
-The endpoint surface is lifecycle-only; it does not expose shell execution or
-Git/GitHub operations.
+The sidecar also exposes typed conversation and read-only operation contracts.
+It does not expose shell execution or raw Git/GitHub responses.
 
 For packaged builds, create the sidecar binary first:
 

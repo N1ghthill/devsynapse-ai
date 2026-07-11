@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   CircleAlert,
   FolderGit2,
+  FolderPlus,
   GitBranch,
   GitPullRequestArrow,
   HeartPulse,
@@ -15,6 +16,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-dialog'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   AppHealth,
@@ -23,6 +25,7 @@ import type {
   OperationListResponse,
   OperationRunResponse,
   ProjectListResult,
+  ProjectRegisterResult,
   ProjectSummary,
 } from './contracts/ipc'
 
@@ -158,7 +161,7 @@ function App() {
           </div>
           <div className="risk-badge">
             <ShieldCheck size={17} aria-hidden="true" />
-            <span>No mutation surface</span>
+            <span>No repository mutation</span>
           </div>
         </header>
 
@@ -393,6 +396,16 @@ function ProjectsPanel() {
     }
   }, [selectProject, selectedProject])
 
+  const upsertProject = useCallback((project: ProjectSummary) => {
+    setProjects((current) => {
+      const existing = current.find((item) => item.name === project.name)
+      if (existing) {
+        return current.map((item) => (item.name === project.name ? project : item))
+      }
+      return [...current, project].sort((left, right) => left.name.localeCompare(right.name))
+    })
+  }, [])
+
   const inspectProject = useCallback(
     async (projectName: string, operationName: string) => {
       try {
@@ -413,6 +426,32 @@ function ProjectsPanel() {
     [selectProject],
   )
 
+  const chooseProjectFolder = useCallback(async () => {
+    try {
+      setError(null)
+      const selectedPath = await open({
+        directory: true,
+        multiple: false,
+        title: 'Choose project folder',
+      })
+      if (typeof selectedPath !== 'string') {
+        return
+      }
+      const response = await invoke<OperationRunResponse<ProjectRegisterResult>>('operation_run', {
+        args: {
+          requestId: requestId('project-register'),
+          operationName: 'project.register',
+          input: { path: selectedPath },
+        },
+      })
+      upsertProject(response.result.project)
+      selectProject(response.result.project.name)
+      setProjectEvidence(JSON.stringify(response.result.project, null, 2))
+    } catch (operationError) {
+      setError(operationError instanceof Error ? operationError.message : String(operationError))
+    }
+  }, [selectProject, upsertProject])
+
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
       void loadProjects()
@@ -425,9 +464,14 @@ function ProjectsPanel() {
       <div className="project-list">
         <div className="panel-header">
           <h2>Local projects</h2>
-          <button className="icon-button" onClick={loadProjects} title="Refresh projects" type="button">
-            <RotateCw size={16} aria-hidden="true" />
-          </button>
+          <div className="panel-actions">
+            <button className="icon-button" onClick={chooseProjectFolder} title="Add project folder" type="button">
+              <FolderPlus size={16} aria-hidden="true" />
+            </button>
+            <button className="icon-button" onClick={loadProjects} title="Refresh projects" type="button">
+              <RotateCw size={16} aria-hidden="true" />
+            </button>
+          </div>
         </div>
 
         {error && <p className="inline-error">{error}</p>}

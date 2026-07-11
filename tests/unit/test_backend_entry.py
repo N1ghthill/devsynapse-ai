@@ -8,7 +8,13 @@ from core.desktop_sidecar import (
     conversation_send_events,
     conversation_started_events,
 )
-from core.operations import git_status_counts, operation_definitions, project_list, run_operation
+from core.operations import (
+    git_status_counts,
+    operation_definitions,
+    operation_risk_class,
+    project_list,
+    run_operation,
+)
 
 
 def _handler(token: str, header: str | None) -> SidecarHandler:
@@ -55,14 +61,31 @@ def test_conversation_event_contract_has_required_identity_fields():
 
 
 def test_conversation_send_events_return_delta():
-    events = conversation_send_events("req-2", "conv-1", "hello")
+    events = conversation_send_events("req-2", "conv-1", "Core response")
 
     assert [event["type"] for event in events] == [
         "response.started",
         "response.delta",
         "response.completed",
     ]
-    assert "Desktop IPC is connected" in events[1]["delta"]
+    assert events[1]["delta"] == "Core response"
+
+
+def test_conversation_send_events_disclose_pending_core_command():
+    events = conversation_send_events(
+        "req-2",
+        "conv-1",
+        "Core response",
+        command_pending=True,
+    )
+
+    assert [event["type"] for event in events] == [
+        "response.started",
+        "response.delta",
+        "operation.progress",
+        "response.completed",
+    ]
+    assert "not executed" in events[2]["delta"]
 
 
 def test_conversation_cancel_event_is_terminal_failure():
@@ -81,12 +104,51 @@ def test_conversation_cancel_event_is_terminal_failure():
 def test_operation_definitions_are_read_only():
     definitions = operation_definitions()
 
-    assert [definition["name"] for definition in definitions] == [
+    assert [definition["name"] for definition in definitions[:3]] == [
         "project.list",
         "repository.snapshot",
         "git.status",
     ]
-    assert {definition["riskClass"] for definition in definitions} == {"observe"}
+    assert {definition["riskClass"] for definition in definitions[:3]} == {"observe"}
+
+
+def test_project_register_operation_is_local_mutation():
+    assert operation_risk_class("project.register") == "local_mutation"
+
+
+def test_project_register_persists_local_project(monkeypatch, tmp_path):
+    repo = tmp_path / "chosen"
+    (repo / ".git").mkdir(parents=True)
+    saved: dict[str, str] = {}
+
+    class FakeMemory:
+        def add_project(
+            self,
+            name: str,
+            path: str,
+            project_type: str,
+            priority: str,
+        ) -> None:
+            saved.update(
+                {
+                    "name": name,
+                    "path": path,
+                    "project_type": project_type,
+                    "priority": priority,
+                }
+            )
+
+    monkeypatch.setattr("core.memory.MemorySystem", FakeMemory)
+
+    result = run_operation("project.register", {"path": str(repo)})
+
+    assert saved == {
+        "name": "chosen",
+        "path": str(repo.resolve()),
+        "project_type": "project",
+        "priority": "medium",
+    }
+    assert result["project"]["isGitRepository"] is True
 
 
 def test_project_list_operation_contract(monkeypatch, tmp_path):

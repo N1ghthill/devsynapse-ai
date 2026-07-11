@@ -6,13 +6,22 @@ import argparse
 import json
 import os
 import signal
+import threading
 import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from core.operations import operation_definitions, required_string, run_operation
+from core.operations import (
+    operation_definitions,
+    operation_risk_class,
+    required_string,
+    run_operation,
+)
+
+if TYPE_CHECKING:
+    from core.desktop_conversation import DesktopConversationService
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -30,6 +39,16 @@ class BackendState:
         self.version = version
         self.auth_token = auth_token
         self.conversations: set[str] = set()
+        self._conversation_service: "DesktopConversationService | None" = None
+        self._conversation_service_lock = threading.Lock()
+
+    def conversation_service(self) -> DesktopConversationService:
+        from core.desktop_conversation import DesktopConversationService
+
+        with self._conversation_service_lock:
+            if self._conversation_service is None:
+                self._conversation_service = DesktopConversationService()
+            return self._conversation_service
 
 
 class SidecarHandler(BaseHTTPRequestHandler):
@@ -102,11 +121,27 @@ class SidecarHandler(BaseHTTPRequestHandler):
             if conversation_id not in self.backend_state.conversations:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": "conversation_not_found"})
                 return
+            try:
+                result = self.backend_state.conversation_service().send_message(
+                    conversation_id=conversation_id,
+                    message=message,
+                )
+            except Exception:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "conversation_core_failed"},
+                )
+                return
             self._json_response(
                 HTTPStatus.OK,
                 {
                     "conversationId": conversation_id,
-                    "events": conversation_send_events(request_id, conversation_id, message),
+                    "events": conversation_send_events(
+                        request_id,
+                        conversation_id,
+                        result.text,
+                        command_pending=result.command_pending,
+                    ),
                 },
             )
             return
@@ -150,7 +185,7 @@ class SidecarHandler(BaseHTTPRequestHandler):
                 {
                     "requestId": request_id,
                     "operationName": operation_name,
-                    "riskClass": "observe",
+                    "riskClass": operation_risk_class(operation_name),
                     "status": "completed",
                     "result": result,
                 },
@@ -215,10 +250,11 @@ def conversation_started_events(request_id: str, conversation_id: str) -> list[d
 def conversation_send_events(
     request_id: str,
     conversation_id: str,
-    message: str,
+    response_text: str,
+    *,
+    command_pending: bool = False,
 ) -> list[dict[str, Any]]:
-    del message
-    return [
+    events = [
         {
             "type": "response.started",
             "requestId": request_id,
@@ -228,17 +264,26 @@ def conversation_send_events(
             "type": "response.delta",
             "requestId": request_id,
             "conversationId": conversation_id,
-            "delta": (
-                "Desktop IPC is connected. The next milestone will route this "
-                "message through the conversation core and registered operations."
-            ),
+            "delta": response_text,
         },
+    ]
+    if command_pending:
+        events.append(
+            {
+                "type": "operation.progress",
+                "requestId": request_id,
+                "conversationId": conversation_id,
+                "delta": "A core command was proposed but not executed in the desktop shell.",
+            }
+        )
+    events.append(
         {
             "type": "response.completed",
             "requestId": request_id,
             "conversationId": conversation_id,
         },
-    ]
+    )
+    return events
 
 
 def conversation_cancel_events(request_id: str, conversation_id: str) -> list[dict[str, Any]]:
@@ -278,7 +323,7 @@ def main(argv: list[str] | None = None) -> int:
     server = SidecarServer((args.host, args.port), state)
 
     def stop(_signum: int, _frame: object) -> None:
-        server.shutdown()
+        threading.Thread(target=server.shutdown, daemon=True).start()
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)

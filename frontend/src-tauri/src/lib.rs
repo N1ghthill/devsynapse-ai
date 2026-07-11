@@ -550,6 +550,7 @@ pub fn run() {
     let setup_state = backend_state.clone();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(backend_state)
         .invoke_handler(tauri::generate_handler![
             app_health,
