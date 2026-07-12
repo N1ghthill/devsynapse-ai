@@ -68,6 +68,15 @@ def _mkdir_best_effort(path: Path) -> None:
         logger.debug("Could not create runtime directory %s: %s", path, exc)
 
 
+def _chmod_private_best_effort(path: Path) -> None:
+    if os.name == "nt":
+        return
+    try:
+        path.chmod(0o600)
+    except OSError as exc:
+        logger.debug("Could not restrict runtime config permissions %s: %s", path, exc)
+
+
 _mkdir_best_effort(CONFIG_DIR)
 _mkdir_best_effort(CONFIG_FILE.parent)
 _mkdir_best_effort(DATA_DIR)
@@ -119,6 +128,7 @@ def _set_env_values(path: Path, updates: dict[str, str | Path]) -> None:
         output.append(f"{key}={value}")
 
     path.write_text("\n".join(output).rstrip() + "\n", encoding="utf-8")
+    _chmod_private_best_effort(path)
 
 
 def _ensure_initial_runtime_config() -> None:
@@ -132,6 +142,7 @@ def _ensure_initial_runtime_config() -> None:
         )
         try:
             CONFIG_FILE.write_text(template_text, encoding="utf-8")
+            _chmod_private_best_effort(CONFIG_FILE)
         except OSError as exc:
             logger.debug("Could not create runtime config %s: %s", CONFIG_FILE, exc)
             return
@@ -177,7 +188,7 @@ class AppSettings(BaseSettings):
     )
 
     app_name: str = "DevSynapse AI"
-    app_version: str = "1.2.4"
+    app_version: str = "1.2.5"
     assistant_user_name: str = "the user"
 
     deepseek_api_key: Optional[str] = None

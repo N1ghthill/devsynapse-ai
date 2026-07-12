@@ -36,6 +36,15 @@ def _serialize_value(value: str | Path) -> str:
     return text
 
 
+def _chmod_private(path: Path) -> None:
+    if os.name == "nt":
+        return
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+
+
 def set_runtime_config_values(
     updates: dict[str, str | Path],
     path: Path | None = None,
@@ -63,6 +72,7 @@ def set_runtime_config_values(
         output.append(f"{key}={value}")
 
     path.write_text("\n".join(output).rstrip() + "\n", encoding="utf-8")
+    _chmod_private(path)
     os.environ.update(serialized_updates)
 
 
@@ -81,6 +91,7 @@ def ensure_runtime_config_file(path: Path | None = None) -> None:
             else DEFAULT_RUNTIME_CONFIG_TEMPLATE
         )
         path.write_text(template_text, encoding="utf-8")
+        _chmod_private(path)
 
     updates: dict[str, str | Path] = {
         "MEMORY_DB_PATH": DATA_DIR / "devsynapse_memory.db",
