@@ -95,8 +95,19 @@ Manual `.deb` upgrade:
 sudo apt install ./DevSynapse-AI_<version>_linux-x86_64.deb
 ```
 
-The APT repository archive is generated from the Linux `.deb` package for
-hosting on the project release CDN or package host.
+APT repository setup, after the first `gh-pages` release deployment:
+
+```bash
+curl -fsSL https://n1ghthill.github.io/devsynapse-ai/apt/devsynapse-apt-signing-key.asc \
+  | sudo gpg --dearmor -o /usr/share/keyrings/devsynapse-archive-keyring.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/devsynapse-archive-keyring.gpg] https://n1ghthill.github.io/devsynapse-ai/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/devsynapse.list
+sudo apt update
+sudo apt install dev-synapse-ai
+```
+
+The APT repository archive is generated from the Linux `.deb` package and
+published to GitHub Pages by the release workflow.
 
 New product work should target the packaged desktop architecture. Do not add
 new end-user workflows exclusively to the TUI, slash-command catalog or generic

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 1.2.6 - 2026-07-13
+
+### Desktop
+
+- Refined the desktop layout with DevSynapse and Ruas.dev visual assets.
+- Removed risky Copilot wording from product copy and package metadata.
+- Added distribution-aware update messaging so Debian package installs use APT
+  or a newer `.deb` instead of the AppImage updater path.
+- Added structured Git evidence and stale-state validation for commit previews.
+
+### Release
+
+- Added GitHub Pages deployment for the generated APT repository.
+- Documented APT setup, manual `.deb` upgrades and updater verification.
+- Refreshed compatible Rust lockfile dependencies.
+
 ### Product direction
 
 - Repositioned DevSynapse as a packaged conversational desktop assistant for

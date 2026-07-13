@@ -207,3 +207,39 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             release-publish/*
+
+      - name: Publish APT repository to GitHub Pages
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tarball="$(find release-publish -name 'devsynapse-apt-repository_*.tar.gz' -print -quit)"
+          test -n "$tarball" || { echo "::error::No APT repository archive found"; exit 1; }
+
+          rm -rf apt-pages
+          mkdir -p apt-pages/apt
+          tar -xzf "$tarball" -C apt-pages/apt --strip-components=1 repository
+          touch apt-pages/.nojekyll
+          cat > apt-pages/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>DevSynapse AI APT Repository</title>
+            </head>
+            <body>
+              <h1>DevSynapse AI APT Repository</h1>
+              <p>APT repository root: <code>/apt</code></p>
+            </body>
+          </html>
+          HTML
+
+          git -C apt-pages init
+          git -C apt-pages checkout -b gh-pages
+          git -C apt-pages config user.name "github-actions[bot]"
+          git -C apt-pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C apt-pages add .
+          git -C apt-pages commit -m "deploy apt repository for ${{ github.ref_name }}"
+          git -C apt-pages -c "http.https://github.com/.extraheader=AUTHORIZATION: bearer ${GITHUB_TOKEN}" \
+            push --force "https://github.com/${{ github.repository }}.git" gh-pages

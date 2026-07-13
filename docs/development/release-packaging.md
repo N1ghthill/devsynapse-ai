@@ -26,8 +26,8 @@ launches one installed desktop app; the backend starts and stops with that app.
 Create a version tag:
 
 ```bash
-git tag v1.2.5
-git push origin v1.2.5
+git tag v1.2.6
+git push origin v1.2.6
 ```
 
 The workflow builds packages on native operating-system runners and attaches
@@ -69,8 +69,12 @@ not a supported distribution target.
 
 ## Linux APT Repository
 
-The workflow uploads `devsynapse-apt-repository.tar.gz`. Host the extracted
-`repository/` directory on the package CDN or GitHub Pages-backed package host.
+The workflow uploads `devsynapse-apt-repository.tar.gz` and, on tag releases,
+publishes the extracted repository to GitHub Pages at:
+
+```text
+https://n1ghthill.github.io/devsynapse-ai/apt
+```
 
 The repository layout is:
 
@@ -91,6 +95,17 @@ prevent unsigned APT repository artifacts from being published.
 
 When signed, the public key is also published as the release asset
 `devsynapse-apt-signing-key.asc` for repository bootstrap.
+
+End-user APT setup:
+
+```bash
+curl -fsSL https://n1ghthill.github.io/devsynapse-ai/apt/devsynapse-apt-signing-key.asc \
+  | sudo gpg --dearmor -o /usr/share/keyrings/devsynapse-archive-keyring.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/devsynapse-archive-keyring.gpg] https://n1ghthill.github.io/devsynapse-ai/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/devsynapse.list
+sudo apt update
+sudo apt install dev-synapse-ai
+```
 
 ## Updater Verification Checklist
 
@@ -144,7 +159,7 @@ Manual Debian/Ubuntu smoke:
 3. Install the latest release `.deb` manually with
    `sudo apt install ./DevSynapse-AI_<version>_linux-x86_64.deb`.
 4. Confirm the desktop app launches with the new version.
-5. After the APT repository is hosted, add the repository and signing key.
+5. After the `gh-pages` deployment finishes, add the repository and signing key.
 6. Run `apt update`.
 7. Confirm `apt policy dev-synapse-ai` sees the latest release.
 8. Run `apt install dev-synapse-ai` and confirm the desktop app launches with
