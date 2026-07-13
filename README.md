@@ -79,9 +79,13 @@ not clone the repository, install Python, start a backend or run the frontend.
 
 Supported release formats:
 
-- Linux Debian/Ubuntu: `.deb` package and signed APT repository archive;
-- Linux portable: AppImage;
-- Windows: NSIS `.exe` installer and MSI package.
+- Linux Debian/Ubuntu: use the signed APT repository for normal installs and
+  updates; use the direct `.deb` only for first install fallback or manual
+  recovery.
+- Linux portable: use the AppImage when the app should run without installing a
+  system package; updates use the signed Tauri updater.
+- Windows: use the NSIS `.exe` installer for the normal desktop install path;
+  MSI remains available for managed installation scenarios.
 
 Production desktop builds include the Python backend sidecar inside the app
 bundle. AppImage and Windows installer builds expose application updates

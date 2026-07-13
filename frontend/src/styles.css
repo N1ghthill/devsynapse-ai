@@ -863,8 +863,14 @@ h2 {
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-top: 10px;
+}
+
+.settings-actions > span {
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .settings-heading {

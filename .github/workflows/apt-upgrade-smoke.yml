@@ -1,0 +1,65 @@
+name: APT Upgrade Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      old_version:
+        description: "Release version to install before upgrading"
+        required: true
+        default: "1.2.5"
+      expected_version:
+        description: "Version expected after APT upgrade"
+        required: true
+        default: "1.2.9"
+      ubuntu_image:
+        description: "Ubuntu container image"
+        required: true
+        default: "ubuntu:24.04"
+
+permissions:
+  contents: read
+
+jobs:
+  apt-upgrade:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Upgrade old Debian package through hosted APT repository
+        env:
+          OLD_VERSION: ${{ inputs.old_version }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          UBUNTU_IMAGE: ${{ inputs.ubuntu_image }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -e OLD_VERSION \
+            -e EXPECTED_VERSION \
+            "$UBUNTU_IMAGE" bash -s <<'SMOKE'
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          old_version="${OLD_VERSION}"
+          expected_version="${EXPECTED_VERSION}"
+          apt_opts=(
+            -o Acquire::ForceIPv4=true
+            -o Acquire::Retries=2
+            -o Acquire::http::Timeout=20
+          )
+
+          apt-get "${apt_opts[@]}" update >/dev/null
+          apt-get install -y --no-install-recommends ca-certificates curl gnupg >/dev/null
+          curl -fsSLo /tmp/devsynapse-old.deb \
+            "https://github.com/N1ghthill/devsynapse-ai/releases/download/v${old_version}/DevSynapse-AI_${old_version}_linux-x86_64.deb"
+          apt-get install -y /tmp/devsynapse-old.deb >/dev/null
+          installed_version="$(dpkg-query -W -f='${Version}' dev-synapse-ai)"
+          test "$installed_version" = "$old_version"
+
+          curl -fsSL https://n1ghthill.github.io/devsynapse-ai/apt/devsynapse-apt-signing-key.asc \
+            | gpg --dearmor -o /usr/share/keyrings/devsynapse-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/devsynapse-archive-keyring.gpg] https://n1ghthill.github.io/devsynapse-ai/apt stable main" \
+            > /etc/apt/sources.list.d/devsynapse.list
+          apt-get "${apt_opts[@]}" update >/dev/null
+          apt-cache policy dev-synapse-ai
+          apt-get install -y --only-upgrade dev-synapse-ai >/dev/null
+          upgraded_version="$(dpkg-query -W -f='${Version}' dev-synapse-ai)"
+          echo "upgraded=${upgraded_version}"
+          test "$upgraded_version" = "$expected_version"
+          SMOKE

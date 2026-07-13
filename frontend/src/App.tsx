@@ -3,6 +3,7 @@ import {
   Bot,
   CheckCircle2,
   CircleAlert,
+  Copy,
   FolderGit2,
   FolderPlus,
   GitBranch,
@@ -1105,6 +1106,7 @@ function SettingsPanel() {
   const [githubMessage, setGithubMessage] = useState<string | null>(null)
   const [appDistribution, setAppDistribution] = useState<AppDistribution | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>(() => initialUpdateStatus())
+  const [aptCopyMessage, setAptCopyMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [updateBusy, setUpdateBusy] = useState(false)
 
@@ -1383,6 +1385,15 @@ function SettingsPanel() {
     }
   }, [appDistribution])
 
+  const copyAptCommands = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(aptSetupCommands.join('\n'))
+      setAptCopyMessage('APT commands copied.')
+    } catch (error) {
+      setAptCopyMessage(error instanceof Error ? error.message : 'Could not copy APT commands.')
+    }
+  }, [])
+
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
       void refreshLlmStatus()
@@ -1580,6 +1591,13 @@ function SettingsPanel() {
               {aptSetupCommands.map((command) => (
                 <code key={command}>{command}</code>
               ))}
+            </div>
+            <div className="settings-actions">
+              <button className="text-button" onClick={copyAptCommands} type="button">
+                <Copy size={15} aria-hidden="true" />
+                Copy APT commands
+              </button>
+              {aptCopyMessage && <span>{aptCopyMessage}</span>}
             </div>
           </>
         )}

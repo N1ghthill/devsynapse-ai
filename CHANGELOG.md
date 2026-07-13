@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 1.2.8 - 2026-07-13
+## 1.2.9 - 2026-07-13
 
 ### Desktop
 
@@ -11,6 +11,7 @@
 - Added distribution-aware update messaging so Debian package installs use APT
   or a newer `.deb` instead of the AppImage updater path.
 - Added in-app APT setup commands for Debian package installs.
+- Added a copy button for Debian/Ubuntu APT setup commands.
 - Added structured Git evidence and stale-state validation for commit previews.
 
 ### Release
@@ -19,6 +20,7 @@
 - Fixed release workflow authentication for publishing the APT repository.
 - Normalized APT package filenames to Debian-style names without spaces.
 - Added test coverage for APT repository package filename normalization.
+- Added a manual APT upgrade smoke workflow.
 - Documented APT setup, manual `.deb` upgrades and updater verification.
 - Refreshed compatible Rust lockfile dependencies.
 

@@ -26,8 +26,8 @@ launches one installed desktop app; the backend starts and stops with that app.
 Create a version tag:
 
 ```bash
-git tag v1.2.8
-git push origin v1.2.8
+git tag v1.2.9
+git push origin v1.2.9
 ```
 
 The workflow builds packages on native operating-system runners and attaches
@@ -156,14 +156,19 @@ Manual Debian/Ubuntu smoke:
 1. Install the previous `.deb`.
 2. Confirm Settings reports `APT or manual .deb` instead of enabling the Tauri
    updater button.
-3. Install the latest release `.deb` manually with
+3. Confirm Settings shows the APT setup commands and copy button.
+4. Install the latest release `.deb` manually with
    `sudo apt install ./DevSynapse-AI_<version>_linux-x86_64.deb`.
-4. Confirm the desktop app launches with the new version.
-5. After the `gh-pages` deployment finishes, add the repository and signing key.
-6. Run `apt update`.
-7. Confirm `apt policy dev-synapse-ai` sees the latest release.
-8. Run `apt install dev-synapse-ai` and confirm the desktop app launches with
+5. Confirm the desktop app launches with the new version.
+6. After the `gh-pages` deployment finishes, add the repository and signing key.
+7. Run `apt update`.
+8. Confirm `apt policy dev-synapse-ai` sees the latest release.
+9. Run `apt install dev-synapse-ai` and confirm the desktop app launches with
    the new version.
+
+The manual GitHub Actions workflow `APT Upgrade Smoke` validates the hosted APT
+repository by installing an older `.deb` in an Ubuntu container and upgrading it
+to an expected release version through `apt`.
 
 ## Local Maintainer Commands
 
