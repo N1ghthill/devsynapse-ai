@@ -32,12 +32,22 @@ jobs:
             requirements*.lock
             pyproject.toml
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
           python -m venv venv
           ./venv/bin/python -m pip install --upgrade pip
           make install-dev
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
 
       - name: Install script lint dependencies
         run: |
