@@ -44,6 +44,16 @@ pub struct AppHealth {
     pub backend: BackendHealth,
 }
 
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppDistribution {
+    pub os: String,
+    pub package_type: String,
+    pub updater_supported: bool,
+    pub update_channel: String,
+    pub message: String,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationStartArgs {
@@ -474,6 +484,60 @@ fn app_version(app: tauri::AppHandle) -> String {
 }
 
 #[tauri::command]
+fn app_distribution() -> AppDistribution {
+    let current_exe = std::env::current_exe().ok();
+
+    if cfg!(target_os = "linux") {
+        if std::env::var_os("APPIMAGE").is_some() {
+            return AppDistribution {
+                os: "linux".to_string(),
+                package_type: "appimage".to_string(),
+                updater_supported: true,
+                update_channel: "Tauri updater".to_string(),
+                message: "AppImage builds can install signed updates in the app.".to_string(),
+            };
+        }
+
+        let exe_path = current_exe
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
+        let package_type = if exe_path.starts_with("/usr/") || exe_path.starts_with("/opt/") {
+            "debian_package"
+        } else {
+            "development"
+        };
+
+        return AppDistribution {
+            os: "linux".to_string(),
+            package_type: package_type.to_string(),
+            updater_supported: false,
+            update_channel: "APT or manual .deb".to_string(),
+            message: "Debian package installs should update through APT or a newer .deb package."
+                .to_string(),
+        };
+    }
+
+    if cfg!(target_os = "windows") {
+        return AppDistribution {
+            os: "windows".to_string(),
+            package_type: "windows_installer".to_string(),
+            updater_supported: true,
+            update_channel: "Tauri updater".to_string(),
+            message: "Windows installer builds can install signed updates in the app.".to_string(),
+        };
+    }
+
+    AppDistribution {
+        os: std::env::consts::OS.to_string(),
+        package_type: "unsupported".to_string(),
+        updater_supported: false,
+        update_channel: "Manual install".to_string(),
+        message: "This distribution does not support in-app updates.".to_string(),
+    }
+}
+
+#[tauri::command]
 fn restart_backend(
     app: tauri::AppHandle,
     state: tauri::State<'_, BackendState>,
@@ -557,6 +621,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_health,
             app_version,
+            app_distribution,
             restart_backend,
             conversation_start,
             conversation_send,

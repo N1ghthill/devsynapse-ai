@@ -26,6 +26,7 @@ import { check } from '@tauri-apps/plugin-updater'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
+  AppDistribution,
   AppHealth,
   CommitPreviewResult,
   CommitPreviewValidationResult,
@@ -84,6 +85,7 @@ const selectedProjectStorageKey = 'devsynapse.selectedProject'
 const contributionUrl = 'https://github.com/sponsors/N1ghthill'
 const productionUpdateEndpoint =
   'https://github.com/N1ghthill/devsynapse-ai/releases/latest/download/latest.json'
+const latestReleaseUrl = 'https://github.com/N1ghthill/devsynapse-ai/releases/latest'
 
 const fallbackLlmProviders = [
   {
@@ -119,6 +121,7 @@ type UpdateStatusKind =
   | 'idle'
   | 'checking'
   | 'current'
+  | 'manual'
   | 'available'
   | 'downloading'
   | 'installing'
@@ -1093,6 +1096,7 @@ function SettingsPanel() {
   const [githubStatus, setGithubStatus] = useState<GitHubAccountStatusResult | null>(null)
   const [githubAuth, setGithubAuth] = useState<GitHubAuthStartResult | null>(null)
   const [githubMessage, setGithubMessage] = useState<string | null>(null)
+  const [appDistribution, setAppDistribution] = useState<AppDistribution | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>(() => initialUpdateStatus())
   const [busy, setBusy] = useState(false)
   const [updateBusy, setUpdateBusy] = useState(false)
@@ -1199,6 +1203,22 @@ function SettingsPanel() {
     }
   }, [])
 
+  const refreshAppDistribution = useCallback(async () => {
+    try {
+      const distribution = await invoke<AppDistribution>('app_distribution')
+      setAppDistribution(distribution)
+      if (!distribution.updaterSupported) {
+        setUpdateStatus({
+          kind: 'manual',
+          currentVersion: __APP_VERSION__,
+          message: distribution.message,
+        })
+      }
+    } catch {
+      setAppDistribution(null)
+    }
+  }, [])
+
   const startGithubAuth = useCallback(async () => {
     setBusy(true)
     try {
@@ -1267,6 +1287,15 @@ function SettingsPanel() {
   }, [])
 
   const checkForUpdate = useCallback(async () => {
+    if (appDistribution && !appDistribution.updaterSupported) {
+      setUpdateStatus({
+        kind: 'manual',
+        currentVersion: __APP_VERSION__,
+        message: appDistribution.message,
+      })
+      return
+    }
+
     setUpdateBusy(true)
     try {
       setUpdateStatus({
@@ -1345,15 +1374,16 @@ function SettingsPanel() {
     } finally {
       setUpdateBusy(false)
     }
-  }, [])
+  }, [appDistribution])
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
       void refreshLlmStatus()
       void refreshGithubStatus()
+      void refreshAppDistribution()
     }, 0)
     return () => window.clearTimeout(initialLoad)
-  }, [refreshGithubStatus, refreshLlmStatus])
+  }, [refreshAppDistribution, refreshGithubStatus, refreshLlmStatus])
 
   return (
     <section className="settings-list" aria-label="Settings">
@@ -1503,8 +1533,8 @@ function SettingsPanel() {
             <strong>Application updates</strong>
             <span>{updateStatus.message}</span>
           </div>
-          <div className="status-pill" data-ready={updateStatus.kind !== 'failed'}>
-            {updateStatus.kind === 'failed' ? (
+          <div className="status-pill" data-ready={!['failed', 'manual'].includes(updateStatus.kind)}>
+            {['failed', 'manual'].includes(updateStatus.kind) ? (
               <CircleAlert size={14} aria-hidden="true" />
             ) : (
               <CheckCircle2 size={14} aria-hidden="true" />
@@ -1523,18 +1553,42 @@ function SettingsPanel() {
           </div>
           <div>
             <span>Channel</span>
-            <strong>GitHub latest</strong>
+            <strong>{appDistribution?.updateChannel ?? 'GitHub latest'}</strong>
+          </div>
+          <div>
+            <span>Package</span>
+            <strong>{appDistribution?.packageType.replaceAll('_', ' ') ?? 'Unknown'}</strong>
           </div>
         </div>
+        {appDistribution && !appDistribution.updaterSupported && (
+          <div className="update-note">
+            <CircleAlert size={16} aria-hidden="true" />
+            <span>
+              Installed Debian packages cannot be replaced by the Tauri updater. Install the
+              newest .deb from Releases or use the APT repository when it is hosted.
+            </span>
+          </div>
+        )}
         <div className="auth-box">
           <span>Manifest</span>
           <strong>{productionUpdateEndpoint}</strong>
         </div>
         <div className="settings-actions">
-          <button className="text-button" disabled={updateBusy} onClick={checkForUpdate} type="button">
+          <button
+            className="text-button"
+            disabled={updateBusy || appDistribution?.updaterSupported === false}
+            onClick={checkForUpdate}
+            type="button"
+          >
             <RotateCw size={15} aria-hidden="true" />
             {updateBusy ? 'Checking' : 'Check for updates'}
           </button>
+          {appDistribution?.updaterSupported === false && (
+            <a className="text-button" href={latestReleaseUrl} target="_blank" rel="noreferrer">
+              <Link2 size={15} aria-hidden="true" />
+              Latest release
+            </a>
+          )}
         </div>
       </div>
     </section>

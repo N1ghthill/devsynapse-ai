@@ -99,6 +99,11 @@ and Windows NSIS installer artifacts. Debian/Ubuntu `.deb` installations should
 receive updates through the published APT repository instead of relying on the
 in-app updater.
 
+Do not present the in-app updater as supported for Debian package installs.
+The Tauri Linux updater artifact is the AppImage; a `.deb` install should show
+APT/manual package guidance and link users to the latest release until a hosted
+APT repository is available.
+
 Before declaring a release channel healthy, verify:
 
 - the release contains `latest.json`;
@@ -134,10 +139,15 @@ Manual Windows NSIS smoke:
 Manual Debian/Ubuntu smoke:
 
 1. Install the previous `.deb`.
-2. Add the hosted DevSynapse APT repository and signing key.
-3. Run `apt update`.
-4. Confirm `apt policy dev-synapse-ai` sees the latest release.
-5. Run `apt install dev-synapse-ai` and confirm the desktop app launches with
+2. Confirm Settings reports `APT or manual .deb` instead of enabling the Tauri
+   updater button.
+3. Install the latest release `.deb` manually with
+   `sudo apt install ./DevSynapse-AI_<version>_linux-x86_64.deb`.
+4. Confirm the desktop app launches with the new version.
+5. After the APT repository is hosted, add the repository and signing key.
+6. Run `apt update`.
+7. Confirm `apt policy dev-synapse-ai` sees the latest release.
+8. Run `apt install dev-synapse-ai` and confirm the desktop app launches with
    the new version.
 
 ## Local Maintainer Commands

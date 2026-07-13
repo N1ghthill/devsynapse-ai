@@ -12,6 +12,14 @@ export type AppHealth = {
   backend: BackendHealth
 }
 
+export type AppDistribution = {
+  os: string
+  packageType: string
+  updaterSupported: boolean
+  updateChannel: string
+  message: string
+}
+
 export type ConversationEventType =
   | 'response.started'
   | 'response.delta'

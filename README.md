@@ -84,7 +84,17 @@ Supported release formats:
 - Windows: NSIS `.exe` installer and MSI package.
 
 Production desktop builds include the Python backend sidecar inside the app
-bundle and expose application updates through signed Tauri updater artifacts.
+bundle. AppImage and Windows installer builds expose application updates
+through signed Tauri updater artifacts. Debian/Ubuntu `.deb` installs update
+through APT once the repository is hosted, or by installing a newer `.deb`
+package from the latest GitHub release.
+
+Manual `.deb` upgrade:
+
+```bash
+sudo apt install ./DevSynapse-AI_<version>_linux-x86_64.deb
+```
+
 The APT repository archive is generated from the Linux `.deb` package for
 hosting on the project release CDN or package host.
 
