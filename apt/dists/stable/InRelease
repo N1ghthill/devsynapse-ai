@@ -1,0 +1,30 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: DevSynapse AI
+Label: DevSynapse AI
+Suite: stable
+Codename: stable
+Date: Mon, 13 Jul 2026 15:39:12 +0000
+Architectures: amd64
+Components: main
+Description: DevSynapse AI desktop APT repository
+SHA256:
+ bb964ccabdaa1c316fe4f1c14db9ab697559936cb66ee4313caa2a8b0d1cff8b 693 main/binary-amd64/Packages
+ 3f138ddad6c25fc2dd8b322e8d8192ddef8d101fb967166e0a48643a9bbe570a 468 main/binary-amd64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEtE8EhFd1+jZRGxutGUqbSblQbugFAmpVBqAACgkQGUqbSblQ
+buiW3w//aXRkGVz0fLvkooyPvv3x1epj5Nm3d9rJypOF7Va2zP9L40CMVw/cd5lj
+rgarmtAPdW3Dp4DqlbrzlSGeqGjCsABIKwHQV9beOC2e/Jeq6ZV40DUpwxYJKpcL
+TGjo/rZO2Kh1sUzaW7HfmWPp9OO9dZOGjAJD8PB+4qWol+s9lMnviRNjofKZmmBM
+VtLNqzoEeYZPdH5KOm+F3taZljjx/heAjcoxbZIv5o+JWDX4Ca0Z6/7wUv0T5hcn
+BLbQQ+Uvlh4UCnu6HKZeU/kkHWJfyr7J7+6lZ9GUeBZdS0lYI3AkOIEOw34AnWJt
+vch5i/zPWfyBIMcetOBYOwsXyNb0Wq7ej1iuqAwDQEg6d2Pm3XuVUtVWoN14Ueyp
+6YPD7AUEX9e7Sp5cVXGPzg+/CKY21oDgalnXl9E2f+QQMYNhYtxlWIeNc1aYoHpB
+s304i0GGTSZcbM7gqQU20x4M4Iv3AreTaKGoY+y9uvKKe/Kw8iOAKEwsXU745MrF
+Lik/j7BQbHpU6nkL/ERMSSXdgLy7wHSk9/0INrvxMuJsNFs1ekzNwM8DkSunWqGp
+C0HSY3PZgb9SQ+rf8p+JzaPa+HN2oHJxSjpGJn5jFzifZ4IEOmcPxddMpdaJQWy2
+cWQsF3cBn6EQVG0i/zP/YzuHs63wpfTLGYvs14SzHmReF4mwH80=
+=XHT6
+-----END PGP SIGNATURE-----

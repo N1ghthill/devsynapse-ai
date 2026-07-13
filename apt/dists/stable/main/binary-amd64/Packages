@@ -1,0 +1,16 @@
+Package: dev-synapse-ai
+Version: 1.2.9
+Architecture: amd64
+Maintainer: Irving Ruas <n1ghthill@proton.me>
+Installed-Size: 54725
+Depends: libwebkit2gtk-4.1-0, libgtk-3-0
+Filename: pool/main/dev-synapse-ai_1.2.9_amd64.deb
+Size: 44165634
+MD5sum: d4c78cf041f19fdfb96a3b82170f2c12
+SHA1: 4fd50ab1e0c38b48df9e00ca9cf8b4812e5ec08c
+SHA256: e53bcb5838f59cd4fdad10a9030ab4f6f0827c7635c3dc07827fa6e687f67702
+Priority: optional
+Homepage: https://github.com/N1ghthill/devsynapse-ai
+Description: Conversational desktop assistant for GitHub and repository work.
+ DevSynapse AI is a packaged desktop assistant for GitHub, GitHub Actions and repository work with a bundled backend and typed desktop operations.
+
