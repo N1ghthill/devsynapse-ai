@@ -26,7 +26,12 @@ REPO_ROOT="$OUTPUT_DIR/repository"
 POOL_DIR="$REPO_ROOT/pool/$COMPONENT"
 BINARY_DIR="$REPO_ROOT/dists/$CODENAME/$COMPONENT/binary-$ARCHITECTURE"
 mkdir -p "$POOL_DIR" "$BINARY_DIR"
-cp "${DEBS[@]}" "$POOL_DIR/"
+for DEB in "${DEBS[@]}"; do
+    PACKAGE_NAME="$(dpkg-deb -f "$DEB" Package)"
+    PACKAGE_VERSION="$(dpkg-deb -f "$DEB" Version)"
+    PACKAGE_ARCHITECTURE="$(dpkg-deb -f "$DEB" Architecture)"
+    cp "$DEB" "$POOL_DIR/${PACKAGE_NAME}_${PACKAGE_VERSION}_${PACKAGE_ARCHITECTURE}.deb"
+done
 
 (
     cd "$REPO_ROOT"

@@ -560,7 +560,7 @@ dependencies = [
 
 [[package]]
 name = "devsynapse-ai"
-version = "1.2.6"
+version = "1.2.7"
 dependencies = [
  "getrandom 0.3.4",
  "serde",

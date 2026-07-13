@@ -241,5 +241,5 @@ jobs:
           git -C apt-pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C apt-pages add .
           git -C apt-pages commit -m "deploy apt repository for ${{ github.ref_name }}"
-          git -C apt-pages -c "http.https://github.com/.extraheader=AUTHORIZATION: bearer ${GITHUB_TOKEN}" \
-            push --force "https://github.com/${{ github.repository }}.git" gh-pages
+          git -C apt-pages push --force \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" gh-pages

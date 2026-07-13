@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 1.2.6 - 2026-07-13
+## 1.2.7 - 2026-07-13
 
 ### Desktop
 
@@ -15,6 +15,8 @@
 ### Release
 
 - Added GitHub Pages deployment for the generated APT repository.
+- Fixed release workflow authentication for publishing the APT repository.
+- Normalized APT package filenames to Debian-style names without spaces.
 - Documented APT setup, manual `.deb` upgrades and updater verification.
 - Refreshed compatible Rust lockfile dependencies.
 
