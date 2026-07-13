@@ -130,6 +130,10 @@ def test_github_repository_list_is_observe():
     assert operation_risk_class("github.repository.list") == "observe"
 
 
+def test_commit_preview_validate_is_observe():
+    assert operation_risk_class("commit.preview.validate") == "observe"
+
+
 def test_project_register_persists_local_project(monkeypatch, tmp_path):
     repo = tmp_path / "chosen"
     (repo / ".git").mkdir(parents=True)
@@ -197,6 +201,99 @@ def test_commit_preview_returns_prepare_contract(monkeypatch, tmp_path):
     assert result["counts"] == {"staged": 1, "unstaged": 0, "untracked": 0}
     assert result["files"][0]["path"] == "tracked.txt"
     assert len(result["stateFingerprint"]) == 64
+    assert result["isStale"] is False
+
+
+def test_commit_preview_validate_detects_stale_state(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+    tracked = repo / "tracked.txt"
+    tracked.write_text("one\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "initial"], cwd=repo, check=True, capture_output=True)
+    tracked.write_text("one\ntwo\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "core.operations._known_projects",
+        lambda: {
+            "repo": {
+                "path": str(repo),
+                "type": "project",
+                "priority": "medium",
+            }
+        },
+    )
+
+    preview = run_operation("commit.preview", {"projectName": "repo"})
+    valid = run_operation(
+        "commit.preview.validate",
+        {
+            "projectName": "repo",
+            "stateFingerprint": preview["stateFingerprint"],
+        },
+    )
+
+    assert valid["valid"] is True
+    assert valid["isStale"] is False
+    assert valid["currentPreviewId"] == preview["previewId"]
+
+    tracked.write_text("one\ntwo\nthree\n", encoding="utf-8")
+    stale = run_operation(
+        "commit.preview.validate",
+        {
+            "projectName": "repo",
+            "stateFingerprint": preview["stateFingerprint"],
+        },
+    )
+
+    assert stale["valid"] is False
+    assert stale["isStale"] is True
+    assert stale["expectedPreviewId"] == preview["previewId"]
+    assert stale["currentPreviewId"] != preview["previewId"]
+    assert stale["files"][0]["path"] == "tracked.txt"
+
+
+def test_commit_preview_fingerprint_tracks_untracked_file_content(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    (repo / "new.txt").write_text("draft one\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "core.operations._known_projects",
+        lambda: {
+            "repo": {
+                "path": str(repo),
+                "type": "project",
+                "priority": "medium",
+            }
+        },
+    )
+
+    preview = run_operation("commit.preview", {"projectName": "repo"})
+    (repo / "new.txt").write_text("draft two\n", encoding="utf-8")
+    validation = run_operation(
+        "commit.preview.validate",
+        {
+            "projectName": "repo",
+            "stateFingerprint": preview["stateFingerprint"],
+        },
+    )
+
+    assert validation["isStale"] is True
+    assert validation["currentStateFingerprint"] != preview["stateFingerprint"]
+
+
+def test_commit_preview_validate_requires_fingerprint():
+    try:
+        run_operation("commit.preview.validate", {"projectName": "repo"})
+    except ValueError as exc:
+        assert str(exc) == "missing_state_fingerprint"
+    else:
+        raise AssertionError("commit.preview.validate should require stateFingerprint")
 
 
 def test_project_list_operation_contract(monkeypatch, tmp_path):
@@ -275,3 +372,35 @@ def test_git_status_entries_normalize_porcelain():
             "worktreeStatus": "untracked",
         },
     ]
+
+
+def test_git_status_returns_files_and_fingerprint(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+    (repo / "new.py").write_text("print('new')\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "core.operations._known_projects",
+        lambda: {
+            "repo": {
+                "path": str(repo),
+                "type": "project",
+                "priority": "medium",
+            }
+        },
+    )
+
+    result = run_operation("git.status", {"projectName": "repo"})
+
+    assert result["counts"] == {"staged": 0, "unstaged": 0, "untracked": 1}
+    assert result["files"] == [
+        {
+            "path": "new.py",
+            "indexStatus": "untracked",
+            "worktreeStatus": "untracked",
+        }
+    ]
+    assert len(result["stateFingerprint"]) == 64

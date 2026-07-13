@@ -139,6 +139,62 @@ export type ProjectConnectResult = {
   repository: ProjectRepositoryLink
 }
 
+export type GitStatusCounts = {
+  staged: number
+  unstaged: number
+  untracked: number
+}
+
+export type GitStatusFile = {
+  path: string
+  indexStatus: string
+  worktreeStatus: string
+}
+
+export type GitStatusResult = {
+  projectName: string
+  path: string
+  branch?: string | null
+  headCommit?: string | null
+  stateFingerprint: string
+  counts: GitStatusCounts
+  files: GitStatusFile[]
+  isClean: boolean
+}
+
+export type CommitPreviewResult = {
+  previewId: string
+  projectName: string
+  path: string
+  riskClass: 'prepare'
+  proposedOperation: 'commit.create'
+  currentBranch?: string | null
+  headCommit?: string | null
+  stateFingerprint: string
+  isStale: boolean
+  isClean: boolean
+  counts: GitStatusCounts
+  files: GitStatusFile[]
+  worktreeDiffStat: string
+  stagedDiffStat: string
+}
+
+export type CommitPreviewValidationResult = {
+  projectName: string
+  path: string
+  valid: boolean
+  isStale: boolean
+  expectedStateFingerprint: string
+  currentStateFingerprint: string
+  expectedPreviewId: string
+  currentPreviewId: string
+  currentBranch?: string | null
+  headCommit?: string | null
+  isClean: boolean
+  counts: GitStatusCounts
+  files: GitStatusFile[]
+}
+
 export type GitHubAccount = {
   login?: string | null
   id?: number | null

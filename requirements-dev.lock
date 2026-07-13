@@ -11,7 +11,7 @@ cryptography==49.0.0
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
-hypothesis==6.155.2
+hypothesis==6.155.7
 idna==3.13
 iniconfig==2.3.0
 jaraco.classes==3.4.0
@@ -33,11 +33,11 @@ pydantic_core==2.46.3
 pytest-asyncio==1.4.0
 pytest-cov==7.1.0
 pytest-mock==3.15.1
-pytest==9.1.0
+pytest==9.1.1
 python-dotenv==1.2.2
 requests==2.33.1
 rich==15.0.0
-ruff==0.15.17
+ruff==0.15.20
 SecretStorage==3.5.0
 sortedcontainers==2.4.0
 textual==8.2.5

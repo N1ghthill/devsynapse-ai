@@ -109,6 +109,8 @@ Current implementation notes:
   supports read-only project/repository evidence, `project.register`, which
   mutates only the local app project registry, and `commit.preview`, which
   builds immutable state evidence for future commit approval.
+  `commit.preview.validate` rechecks the current state fingerprint before any
+  later commit approval path can trust a preview.
 - GitHub repository portfolio operations are available as typed contracts:
   `github.repository.list` observes repositories visible to the connected
   account, `project.connect` stores a local project to GitHub repository
@@ -128,7 +130,9 @@ Current implementation notes:
   preference, can choose a folder through a native dialog and reuses the
   selection when the configured project list is loaded again. It can also load
   GitHub repositories for the connected account and associate one repository
-  with the selected local project without changing Git remotes.
+  with the selected local project without changing Git remotes. Git status and
+  commit preview evidence are rendered as structured counts, file lists and
+  freshness indicators rather than raw shell output.
 
 ## IPC Contract
 

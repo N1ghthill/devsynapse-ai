@@ -158,6 +158,7 @@ git.branches
 git.remotes
 commit.propose_groups
 commit.preview
+commit.preview.validate
 commit.stage
 commit.create
 pull_request.inspect
@@ -252,6 +253,11 @@ Required inputs include:
 
 Consequential operations create immutable previews. Execution fails closed if
 the local or remote state changed, the account changed or the preview expired.
+
+The current desktop foundation implements `commit.preview` and
+`commit.preview.validate` as non-mutating contracts. The fingerprint includes
+branch, head commit, porcelain status, staged and unstaged diffs and untracked
+file content so a preview is invalidated when relevant local state changes.
 
 ## Desktop Information Architecture
 

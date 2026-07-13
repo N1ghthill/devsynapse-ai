@@ -7,6 +7,7 @@ import {
   FolderPlus,
   GitBranch,
   GitPullRequestArrow,
+  HeartHandshake,
   HeartPulse,
   KeyRound,
   Link2,
@@ -22,11 +23,17 @@ import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check } from '@tauri-apps/plugin-updater'
+import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   AppHealth,
+  CommitPreviewResult,
+  CommitPreviewValidationResult,
   ConversationEvent,
   ConversationResponse,
+  GitStatusCounts,
+  GitStatusFile,
+  GitStatusResult,
   GitHubAccountStatusResult,
   GitHubAuthPollResult,
   GitHubAuthStartResult,
@@ -74,6 +81,9 @@ const browserPreviewHealth: AppHealth = {
 }
 
 const selectedProjectStorageKey = 'devsynapse.selectedProject'
+const contributionUrl = 'https://github.com/sponsors/N1ghthill'
+const productionUpdateEndpoint =
+  'https://github.com/N1ghthill/devsynapse-ai/releases/latest/download/latest.json'
 
 const fallbackLlmProviders = [
   {
@@ -100,11 +110,42 @@ type ConversationMessage = {
   text: string
 }
 
+type ProjectEvidence = {
+  operationName: string
+  result: Record<string, unknown>
+}
+
+type UpdateStatusKind =
+  | 'idle'
+  | 'checking'
+  | 'current'
+  | 'available'
+  | 'downloading'
+  | 'installing'
+  | 'failed'
+
+type UpdateStatus = {
+  kind: UpdateStatusKind
+  currentVersion: string
+  availableVersion?: string | null
+  message: string
+  downloadedBytes?: number
+  totalBytes?: number | null
+}
+
 function requestId(prefix: string) {
   if (globalThis.crypto?.randomUUID) {
     return `${prefix}-${globalThis.crypto.randomUUID()}`
   }
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function initialUpdateStatus(): UpdateStatus {
+  return {
+    kind: 'idle',
+    currentVersion: __APP_VERSION__,
+    message: 'Production builds check signed update artifacts.',
+  }
 }
 
 function App() {
@@ -147,9 +188,7 @@ function App() {
     <main className="app-shell">
       <aside className="sidebar" aria-label="Primary">
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true">
-            <Bot size={22} strokeWidth={2.2} />
-          </div>
+          <img className="brand-mark" src="/devsynapse-icon.png" alt="" aria-hidden="true" />
           <div>
             <strong>DevSynapse AI</strong>
             <span>GitHub copilot</span>
@@ -176,11 +215,21 @@ function App() {
           })}
         </nav>
 
-        <div className="shell-status">
-          <HeartPulse size={17} aria-hidden="true" />
-          <div>
-            <strong>Backend {health.backend.status.replaceAll('_', ' ')}</strong>
-            <span>Version {health.version}</span>
+        <div className="sidebar-footer">
+          <div className="shell-status">
+            <HeartPulse size={17} aria-hidden="true" />
+            <div>
+              <strong>Backend {health.backend.status.replaceAll('_', ' ')}</strong>
+              <span>Version {health.version}</span>
+            </div>
+          </div>
+
+          <div className="creator-panel">
+            <img src="/ruas-logo.webp" alt="Ruas.dev" />
+            <a className="support-button" href={contributionUrl} target="_blank" rel="noreferrer">
+              <HeartHandshake size={16} aria-hidden="true" />
+              <span>Contribuir</span>
+            </a>
           </div>
         </div>
       </aside>
@@ -440,7 +489,7 @@ function ProjectsPanel() {
   })
   const [selectedRepository, setSelectedRepository] = useState<string>('')
   const [repositoryQuery, setRepositoryQuery] = useState('')
-  const [projectEvidence, setProjectEvidence] = useState<string>('No project evidence loaded.')
+  const [projectEvidence, setProjectEvidence] = useState<ProjectEvidence | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [repositoryBusy, setRepositoryBusy] = useState(false)
 
@@ -504,7 +553,7 @@ function ProjectsPanel() {
           },
         })
         selectProject(projectName)
-        setProjectEvidence(JSON.stringify(response.result, null, 2))
+        setProjectEvidence({ operationName, result: response.result })
       } catch (operationError) {
         setError(operationError instanceof Error ? operationError.message : String(operationError))
       }
@@ -532,7 +581,10 @@ function ProjectsPanel() {
       })
       upsertProject(response.result.project)
       selectProject(response.result.project.name)
-      setProjectEvidence(JSON.stringify(response.result.project, null, 2))
+      setProjectEvidence({
+        operationName: 'project.register',
+        result: response.result.project as unknown as Record<string, unknown>,
+      })
     } catch (operationError) {
       setError(operationError instanceof Error ? operationError.message : String(operationError))
     }
@@ -556,7 +608,10 @@ function ProjectsPanel() {
       if (!currentSelection && response.result.repositories[0]) {
         setSelectedRepository(response.result.repositories[0].fullName)
       }
-      setProjectEvidence(JSON.stringify(response.result, null, 2))
+      setProjectEvidence({
+        operationName: 'github.repository.list',
+        result: response.result as unknown as Record<string, unknown>,
+      })
     } catch (operationError) {
       setError(operationError instanceof Error ? operationError.message : String(operationError))
     } finally {
@@ -586,13 +641,38 @@ function ProjectsPanel() {
             : project,
         ),
       )
-      setProjectEvidence(JSON.stringify(response.result, null, 2))
+      setProjectEvidence({
+        operationName: 'project.connect',
+        result: response.result as unknown as Record<string, unknown>,
+      })
     } catch (operationError) {
       setError(operationError instanceof Error ? operationError.message : String(operationError))
     } finally {
       setRepositoryBusy(false)
     }
   }, [repositories, selectedProject, selectedRepository])
+
+  const validateCommitPreview = useCallback(async (preview: CommitPreviewResult) => {
+    try {
+      setError(null)
+      const response = await invoke<OperationRunResponse<CommitPreviewValidationResult>>('operation_run', {
+        args: {
+          requestId: requestId('commit-preview-validate'),
+          operationName: 'commit.preview.validate',
+          input: {
+            projectName: preview.projectName,
+            stateFingerprint: preview.stateFingerprint,
+          },
+        },
+      })
+      setProjectEvidence({
+        operationName: 'commit.preview.validate',
+        result: response.result as unknown as Record<string, unknown>,
+      })
+    } catch (operationError) {
+      setError(operationError instanceof Error ? operationError.message : String(operationError))
+    }
+  }, [])
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
@@ -721,9 +801,206 @@ function ProjectsPanel() {
             </button>
           </div>
         </div>
-        <pre>{projectEvidence}</pre>
+        <ProjectEvidenceView evidence={projectEvidence} onValidatePreview={validateCommitPreview} />
       </div>
     </section>
+  )
+}
+
+function ProjectEvidenceView({
+  evidence,
+  onValidatePreview,
+}: {
+  evidence: ProjectEvidence | null
+  onValidatePreview: (preview: CommitPreviewResult) => void
+}) {
+  if (!evidence) {
+    return (
+      <div className="evidence-empty">
+        <GitBranch size={24} aria-hidden="true" />
+        <span>No project evidence loaded.</span>
+      </div>
+    )
+  }
+
+  if (evidence.operationName === 'git.status') {
+    const status = evidence.result as unknown as GitStatusResult
+    return (
+      <GitEvidenceCard
+        branch={status.branch}
+        counts={status.counts}
+        files={status.files}
+        fingerprint={status.stateFingerprint}
+        headCommit={status.headCommit}
+        isClean={status.isClean}
+        path={status.path}
+        title="Git status"
+      />
+    )
+  }
+
+  if (evidence.operationName === 'commit.preview') {
+    const preview = evidence.result as unknown as CommitPreviewResult
+    return (
+      <GitEvidenceCard
+        action={
+          <button className="text-button" onClick={() => onValidatePreview(preview)} type="button">
+            Recheck
+          </button>
+        }
+        branch={preview.currentBranch}
+        counts={preview.counts}
+        files={preview.files}
+        fingerprint={preview.stateFingerprint}
+        headCommit={preview.headCommit}
+        isClean={preview.isClean}
+        path={preview.path}
+        previewId={preview.previewId}
+        stagedDiffStat={preview.stagedDiffStat}
+        stale={preview.isStale}
+        title="Commit preview"
+        worktreeDiffStat={preview.worktreeDiffStat}
+      />
+    )
+  }
+
+  if (evidence.operationName === 'commit.preview.validate') {
+    const validation = evidence.result as unknown as CommitPreviewValidationResult
+    return (
+      <GitEvidenceCard
+        branch={validation.currentBranch}
+        counts={validation.counts}
+        files={validation.files}
+        fingerprint={validation.currentStateFingerprint}
+        headCommit={validation.headCommit}
+        isClean={validation.isClean}
+        path={validation.path}
+        previewId={validation.currentPreviewId}
+        stale={validation.isStale}
+        title="Preview validation"
+      />
+    )
+  }
+
+  return <pre>{JSON.stringify(evidence.result, null, 2)}</pre>
+}
+
+function GitEvidenceCard({
+  action,
+  branch,
+  counts,
+  files,
+  fingerprint,
+  headCommit,
+  isClean,
+  path,
+  previewId,
+  stagedDiffStat,
+  stale,
+  title,
+  worktreeDiffStat,
+}: {
+  action?: ReactNode
+  branch?: string | null
+  counts: GitStatusCounts
+  files: GitStatusFile[]
+  fingerprint: string
+  headCommit?: string | null
+  isClean: boolean
+  path: string
+  previewId?: string
+  stagedDiffStat?: string
+  stale?: boolean
+  title: string
+  worktreeDiffStat?: string
+}) {
+  return (
+    <div className="git-evidence-card">
+      <div className="git-evidence-header">
+        <div>
+          <strong>{title}</strong>
+          <span>{path}</span>
+        </div>
+        <div className="evidence-actions">
+          {typeof stale === 'boolean' && (
+            <div className="status-pill" data-ready={!stale}>
+              {stale ? <CircleAlert size={14} aria-hidden="true" /> : <CheckCircle2 size={14} aria-hidden="true" />}
+              <span>{stale ? 'Stale' : 'Fresh'}</span>
+            </div>
+          )}
+          {action}
+        </div>
+      </div>
+
+      <div className="evidence-meta">
+        <span>Branch {branch ?? 'unknown'}</span>
+        <span>Head {headCommit ?? 'unknown'}</span>
+        {previewId && <span>Preview {previewId}</span>}
+        <span>{isClean ? 'Clean' : 'Changed'}</span>
+      </div>
+
+      <CountStrip counts={counts} />
+
+      <div className="fingerprint-row">
+        <span>State</span>
+        <code>{fingerprint}</code>
+      </div>
+
+      <FileList files={files} />
+
+      {(stagedDiffStat || worktreeDiffStat) && (
+        <div className="diff-stat-grid">
+          {stagedDiffStat && (
+            <pre aria-label="Staged diff stat">{stagedDiffStat || 'No staged diff.'}</pre>
+          )}
+          {worktreeDiffStat && (
+            <pre aria-label="Worktree diff stat">{worktreeDiffStat || 'No worktree diff.'}</pre>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CountStrip({ counts }: { counts: GitStatusCounts }) {
+  return (
+    <div className="count-strip">
+      <div>
+        <strong>{counts.staged}</strong>
+        <span>Staged</span>
+      </div>
+      <div>
+        <strong>{counts.unstaged}</strong>
+        <span>Unstaged</span>
+      </div>
+      <div>
+        <strong>{counts.untracked}</strong>
+        <span>Untracked</span>
+      </div>
+    </div>
+  )
+}
+
+function FileList({ files }: { files: GitStatusFile[] }) {
+  if (files.length === 0) {
+    return (
+      <div className="file-list-empty">
+        <CheckCircle2 size={16} aria-hidden="true" />
+        <span>No changed files.</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="file-list">
+      {files.map((file) => (
+        <div className="file-row" key={`${file.indexStatus}:${file.worktreeStatus}:${file.path}`}>
+          <code>{file.path}</code>
+          <span>{file.indexStatus}</span>
+          <span>{file.worktreeStatus}</span>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -816,7 +1093,7 @@ function SettingsPanel() {
   const [githubStatus, setGithubStatus] = useState<GitHubAccountStatusResult | null>(null)
   const [githubAuth, setGithubAuth] = useState<GitHubAuthStartResult | null>(null)
   const [githubMessage, setGithubMessage] = useState<string | null>(null)
-  const [updateMessage, setUpdateMessage] = useState<string | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>(() => initialUpdateStatus())
   const [busy, setBusy] = useState(false)
   const [updateBusy, setUpdateBusy] = useState(false)
 
@@ -992,19 +1269,79 @@ function SettingsPanel() {
   const checkForUpdate = useCallback(async () => {
     setUpdateBusy(true)
     try {
-      setUpdateMessage(null)
-      const update = await check()
+      setUpdateStatus({
+        kind: 'checking',
+        currentVersion: __APP_VERSION__,
+        message: 'Checking the signed updater manifest.',
+      })
+      const update = await check({ timeout: 15000 })
       if (!update) {
-        setUpdateMessage('DevSynapse AI is up to date.')
+        setUpdateStatus({
+          kind: 'current',
+          currentVersion: __APP_VERSION__,
+          message: 'DevSynapse AI is up to date.',
+        })
         return
       }
 
-      setUpdateMessage(`Installing ${update.version}.`)
-      await update.downloadAndInstall()
-      setUpdateMessage('Update installed. Restarting DevSynapse AI.')
+      setUpdateStatus({
+        kind: 'available',
+        currentVersion: update.currentVersion,
+        availableVersion: update.version,
+        message: `Version ${update.version} is available.`,
+      })
+      let downloadedBytes = 0
+      let totalBytes: number | null = null
+      await update.downloadAndInstall((event) => {
+        if (event.event === 'Started') {
+          downloadedBytes = 0
+          totalBytes = event.data.contentLength ?? null
+          setUpdateStatus({
+            kind: 'downloading',
+            currentVersion: update.currentVersion,
+            availableVersion: update.version,
+            downloadedBytes,
+            totalBytes,
+            message: totalBytes
+              ? `Downloading ${Math.round(totalBytes / 1024 / 1024)} MB update.`
+              : 'Downloading update.',
+          })
+        }
+        if (event.event === 'Progress') {
+          downloadedBytes += event.data.chunkLength
+          setUpdateStatus({
+            kind: 'downloading',
+            currentVersion: update.currentVersion,
+            availableVersion: update.version,
+            downloadedBytes,
+            totalBytes,
+            message: totalBytes
+              ? `Downloaded ${Math.round(downloadedBytes / 1024 / 1024)} of ${Math.round(totalBytes / 1024 / 1024)} MB.`
+              : `Downloaded ${Math.round(downloadedBytes / 1024 / 1024)} MB.`,
+          })
+        }
+        if (event.event === 'Finished') {
+          setUpdateStatus({
+            kind: 'installing',
+            currentVersion: update.currentVersion,
+            availableVersion: update.version,
+            message: 'Download complete. Installing update.',
+          })
+        }
+      })
+      setUpdateStatus({
+        kind: 'installing',
+        currentVersion: update.currentVersion,
+        availableVersion: update.version,
+        message: 'Update installed. Restarting DevSynapse AI.',
+      })
       await relaunch()
     } catch (error) {
-      setUpdateMessage(error instanceof Error ? error.message : String(error))
+      setUpdateStatus({
+        kind: 'failed',
+        currentVersion: __APP_VERSION__,
+        message: error instanceof Error ? error.message : String(error),
+      })
     } finally {
       setUpdateBusy(false)
     }
@@ -1161,12 +1498,42 @@ function SettingsPanel() {
         <span>Risk classes are deterministic and cannot be changed by model wording.</span>
       </div>
       <div>
-        <strong>Application updates</strong>
-        <span>{updateMessage ?? 'Production builds check signed update artifacts.'}</span>
+        <div className="settings-heading">
+          <div>
+            <strong>Application updates</strong>
+            <span>{updateStatus.message}</span>
+          </div>
+          <div className="status-pill" data-ready={updateStatus.kind !== 'failed'}>
+            {updateStatus.kind === 'failed' ? (
+              <CircleAlert size={14} aria-hidden="true" />
+            ) : (
+              <CheckCircle2 size={14} aria-hidden="true" />
+            )}
+            <span>{updateStatus.kind.replaceAll('_', ' ')}</span>
+          </div>
+        </div>
+        <div className="update-grid">
+          <div>
+            <span>Current</span>
+            <strong>{updateStatus.currentVersion}</strong>
+          </div>
+          <div>
+            <span>Available</span>
+            <strong>{updateStatus.availableVersion ?? 'None'}</strong>
+          </div>
+          <div>
+            <span>Channel</span>
+            <strong>GitHub latest</strong>
+          </div>
+        </div>
+        <div className="auth-box">
+          <span>Manifest</span>
+          <strong>{productionUpdateEndpoint}</strong>
+        </div>
         <div className="settings-actions">
           <button className="text-button" disabled={updateBusy} onClick={checkForUpdate} type="button">
             <RotateCw size={15} aria-hidden="true" />
-            Check for updates
+            {updateBusy ? 'Checking' : 'Check for updates'}
           </button>
         </div>
       </div>

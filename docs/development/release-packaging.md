@@ -92,6 +92,54 @@ prevent unsigned APT repository artifacts from being published.
 When signed, the public key is also published as the release asset
 `devsynapse-apt-signing-key.asc` for repository bootstrap.
 
+## Updater Verification Checklist
+
+The Tauri updater is the supported in-app update path for the Linux AppImage
+and Windows NSIS installer artifacts. Debian/Ubuntu `.deb` installations should
+receive updates through the published APT repository instead of relying on the
+in-app updater.
+
+Before declaring a release channel healthy, verify:
+
+- the release contains `latest.json`;
+- `latest.json` lists `linux-x86_64` and `windows-x86_64`;
+- each updater platform points to the staged release asset, not an Actions
+  artifact URL;
+- each updater asset has a matching `.sig` file;
+- a production build embeds the expected updater public key and endpoint through
+  `frontend/src-tauri/tauri.release.conf.json`;
+- Settings shows the current application version and reports "up to date" when
+  no newer signed release exists;
+- Settings reports a clear failure when the manifest URL or signature is
+  invalid.
+
+Manual AppImage smoke:
+
+1. Download the previous release AppImage, for example `v1.2.4`.
+2. Mark it executable and launch it from a clean temporary app data directory.
+3. Open Settings and select `Check for updates`.
+4. Confirm the app detects the latest release, downloads the signed AppImage,
+   installs it and relaunches.
+5. Confirm Settings shows the new version after relaunch.
+
+Manual Windows NSIS smoke:
+
+1. Install the previous release NSIS `.exe` in a disposable Windows VM.
+2. Launch DevSynapse AI and open Settings.
+3. Select `Check for updates`.
+4. Confirm the updater downloads the latest signed NSIS package, installs it
+   passively and relaunches.
+5. Confirm Windows Apps and DevSynapse Settings both show the new version.
+
+Manual Debian/Ubuntu smoke:
+
+1. Install the previous `.deb`.
+2. Add the hosted DevSynapse APT repository and signing key.
+3. Run `apt update`.
+4. Confirm `apt policy dev-synapse-ai` sees the latest release.
+5. Run `apt install dev-synapse-ai` and confirm the desktop app launches with
+   the new version.
+
 ## Local Maintainer Commands
 
 Build the backend sidecar for the current host:

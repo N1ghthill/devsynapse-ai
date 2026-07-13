@@ -54,6 +54,11 @@ def operation_definitions() -> list[dict[str, Any]]:
             "description": "Build a read-only commit preview from the current project state.",
         },
         {
+            "name": "commit.preview.validate",
+            "riskClass": "observe",
+            "description": "Check whether a commit preview still matches current project state.",
+        },
+        {
             "name": "github.repository.list",
             "riskClass": "observe",
             "description": "List GitHub repositories available to the connected account.",
@@ -159,7 +164,32 @@ def _git(project_path: Path, *args: str) -> str | None:
         return None
     if result.returncode != 0:
         return None
-    return result.stdout.strip()
+    return result.stdout.rstrip("\n")
+
+
+def _untracked_content_fingerprint(project_path: Path, entries: list[dict[str, str]]) -> str:
+    digest = sha256()
+    for entry in sorted(entries, key=lambda item: item["path"]):
+        if entry["indexStatus"] != "untracked":
+            continue
+        relative_path = entry["path"]
+        file_path = (project_path / relative_path).resolve()
+        try:
+            file_path.relative_to(project_path)
+        except ValueError:
+            continue
+        if not file_path.is_file():
+            continue
+        digest.update(relative_path.encode("utf-8", errors="surrogateescape"))
+        digest.update(b"\0")
+        try:
+            with file_path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        except OSError:
+            continue
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def git_status_counts(porcelain: str) -> dict[str, int]:
@@ -206,6 +236,37 @@ def git_status_entries(porcelain: str) -> list[dict[str, str]]:
     return entries
 
 
+def _repository_state(project_name: str) -> dict[str, Any]:
+    path = _project_path(project_name)
+    porcelain = _git(path, "status", "--porcelain", "-uall") or ""
+    branch = _git(path, "branch", "--show-current")
+    head = _git(path, "rev-parse", "--short", "HEAD")
+    worktree_diff = _git(path, "diff", "--no-ext-diff") or ""
+    staged_diff = _git(path, "diff", "--cached", "--no-ext-diff") or ""
+    files = git_status_entries(porcelain)
+    untracked_fingerprint = _untracked_content_fingerprint(path, files)
+    state_fingerprint = sha256(
+        (
+            f"{project_name}\0{path}\0{branch}\0{head}\0{porcelain}\0"
+            f"{worktree_diff}\0{staged_diff}\0{untracked_fingerprint}"
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        "projectName": project_name,
+        "path": path,
+        "porcelain": porcelain,
+        "worktreeDiff": worktree_diff,
+        "stagedDiff": staged_diff,
+        "currentBranch": branch or None,
+        "headCommit": head or None,
+        "stateFingerprint": state_fingerprint,
+        "previewId": state_fingerprint[:16],
+        "isClean": not bool(porcelain),
+        "counts": git_status_counts(porcelain),
+        "files": files,
+    }
+
+
 def repository_snapshot(operation_input: dict[str, Any]) -> dict[str, Any]:
     from core.memory import MemorySystem
 
@@ -233,30 +294,53 @@ def commit_preview(operation_input: dict[str, Any]) -> dict[str, Any]:
     project_name = required_string(operation_input, "projectName")
     if project_name is None:
         raise ValueError("missing_project_name")
-    path = _project_path(project_name)
-    porcelain = _git(path, "status", "--porcelain") or ""
-    branch = _git(path, "branch", "--show-current")
-    head = _git(path, "rev-parse", "--short", "HEAD")
+    state = _repository_state(project_name)
+    path = state["path"]
     diff_stat = _git(path, "diff", "--stat") or ""
     staged_diff_stat = _git(path, "diff", "--cached", "--stat") or ""
-    state_fingerprint = sha256(
-        f"{project_name}\0{path}\0{branch}\0{head}\0{porcelain}".encode("utf-8")
-    ).hexdigest()
-    preview_id = state_fingerprint[:16]
     return {
-        "previewId": preview_id,
+        "previewId": state["previewId"],
         "projectName": project_name,
         "path": str(path),
         "riskClass": "prepare",
         "proposedOperation": "commit.create",
-        "currentBranch": branch or None,
-        "headCommit": head or None,
-        "stateFingerprint": state_fingerprint,
-        "isClean": not bool(porcelain),
-        "counts": git_status_counts(porcelain),
-        "files": git_status_entries(porcelain),
+        "currentBranch": state["currentBranch"],
+        "headCommit": state["headCommit"],
+        "stateFingerprint": state["stateFingerprint"],
+        "isStale": False,
+        "isClean": state["isClean"],
+        "counts": state["counts"],
+        "files": state["files"],
         "worktreeDiffStat": diff_stat,
         "stagedDiffStat": staged_diff_stat,
+    }
+
+
+def commit_preview_validate(operation_input: dict[str, Any]) -> dict[str, Any]:
+    project_name = required_string(operation_input, "projectName")
+    expected_fingerprint = required_string(operation_input, "stateFingerprint")
+    if project_name is None:
+        raise ValueError("missing_project_name")
+    if expected_fingerprint is None:
+        raise ValueError("missing_state_fingerprint")
+
+    state = _repository_state(project_name)
+    current_fingerprint = state["stateFingerprint"]
+    valid = expected_fingerprint == current_fingerprint
+    return {
+        "projectName": project_name,
+        "path": str(state["path"]),
+        "valid": valid,
+        "isStale": not valid,
+        "expectedStateFingerprint": expected_fingerprint,
+        "currentStateFingerprint": current_fingerprint,
+        "expectedPreviewId": expected_fingerprint[:16],
+        "currentPreviewId": state["previewId"],
+        "currentBranch": state["currentBranch"],
+        "headCommit": state["headCommit"],
+        "isClean": state["isClean"],
+        "counts": state["counts"],
+        "files": state["files"],
     }
 
 
@@ -264,15 +348,16 @@ def git_status(operation_input: dict[str, Any]) -> dict[str, Any]:
     project_name = required_string(operation_input, "projectName")
     if project_name is None:
         raise ValueError("missing_project_name")
-    path = _project_path(project_name)
-    porcelain = _git(path, "status", "--porcelain") or ""
-    branch = _git(path, "branch", "--show-current")
+    state = _repository_state(project_name)
     return {
         "projectName": project_name,
-        "path": str(path),
-        "branch": branch or None,
-        "counts": git_status_counts(porcelain),
-        "isClean": not bool(porcelain),
+        "path": str(state["path"]),
+        "branch": state["currentBranch"],
+        "headCommit": state["headCommit"],
+        "stateFingerprint": state["stateFingerprint"],
+        "counts": state["counts"],
+        "files": state["files"],
+        "isClean": state["isClean"],
     }
 
 
@@ -400,6 +485,7 @@ def run_operation(operation_name: str, operation_input: dict[str, Any]) -> dict[
         "project.connect": lambda: project_connect(operation_input),
         "project.connection": lambda: project_connection(operation_input),
         "commit.preview": lambda: commit_preview(operation_input),
+        "commit.preview.validate": lambda: commit_preview_validate(operation_input),
         "github.repository.list": lambda: github_repository_list(operation_input),
         "github.auth.start": lambda: github_auth_start(operation_input),
         "github.auth.poll": lambda: github_auth_poll(operation_input),

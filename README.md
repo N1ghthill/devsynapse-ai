@@ -47,7 +47,8 @@ Current desktop capabilities:
 - native project-folder picker and local project registry;
 - read-only repository evidence operations: `project.list`,
   `repository.snapshot` and `git.status`;
-- `commit.preview` prepare operation with state fingerprint evidence;
+- `commit.preview` prepare operation with state fingerprint evidence and
+  `commit.preview.validate` stale-state checks before future approval;
 - GitHub OAuth Device Flow contracts in Settings:
   `github.auth.start`, `github.auth.poll`, `github.account.status` and
   `github.auth.disconnect`;
