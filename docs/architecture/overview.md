@@ -2,7 +2,7 @@
 
 ## Product Direction
 
-DevSynapse is a packaged conversational desktop copilot for GitHub, GitHub
+DevSynapse is a packaged conversational desktop assistant for GitHub, GitHub
 Actions and repository work.
 
 The target end-user system is:

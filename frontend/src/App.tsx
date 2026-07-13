@@ -191,7 +191,7 @@ function App() {
           <img className="brand-mark" src="/devsynapse-icon.png" alt="" aria-hidden="true" />
           <div>
             <strong>DevSynapse AI</strong>
-            <span>GitHub copilot</span>
+            <span>Repository assistant</span>
           </div>
         </div>
 

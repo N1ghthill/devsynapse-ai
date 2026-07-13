@@ -4,7 +4,7 @@
 
 ### Product direction
 
-- Repositioned DevSynapse as a packaged conversational desktop copilot for
+- Repositioned DevSynapse as a packaged conversational desktop assistant for
   GitHub, GitHub Actions and repository work.
 - Made GitHub expertise and adaptive dialogue core product capabilities.
 - Defined Tauri 2 + React/TypeScript with a bundled Python backend as the

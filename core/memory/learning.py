@@ -1,5 +1,5 @@
 """
-Persistent learning signals for the DevSynapse repository operations copilot.
+Persistent learning signals for the DevSynapse repository operations assistant.
 """
 
 from __future__ import annotations

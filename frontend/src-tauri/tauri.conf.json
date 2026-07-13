@@ -32,8 +32,8 @@
     "targets": ["deb", "appimage", "nsis", "msi"],
     "publisher": "DevSynapse AI",
     "category": "DeveloperTool",
-    "shortDescription": "Conversational desktop copilot for GitHub and repository work.",
-    "longDescription": "DevSynapse AI is a packaged desktop copilot for GitHub, GitHub Actions and repository work with a bundled backend and typed desktop operations.",
+    "shortDescription": "Conversational desktop assistant for GitHub and repository work.",
+    "longDescription": "DevSynapse AI is a packaged desktop assistant for GitHub, GitHub Actions and repository work with a bundled backend and typed desktop operations.",
     "homepage": "https://github.com/N1ghthill/devsynapse-ai",
     "icon": [
       "icons/32x32.png",

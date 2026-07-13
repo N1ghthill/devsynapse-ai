@@ -3,7 +3,7 @@
 ## Purpose
 
 Reduce DevSynapse to the components required for a packaged conversational
-GitHub copilot while keeping `main` usable during migration.
+GitHub assistant while keeping `main` usable during migration.
 
 Removal follows replacement. A legacy component is deleted after its target
 capability works in the packaged desktop application and its data or developer

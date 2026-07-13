@@ -1,4 +1,4 @@
-# Desktop GitHub Copilot Roadmap
+# Desktop GitHub Assistant Roadmap
 
 ## Objective
 

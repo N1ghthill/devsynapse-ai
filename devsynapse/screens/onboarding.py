@@ -28,7 +28,7 @@ ONBOARDING_STEPS = [
     {
         "id": "welcome",
         "title": "Bem-vindo ao DevSynapse AI!",
-        "description": "Seu copiloto local para projetos e repositórios.",
+        "description": "Seu assistente local para projetos e repositórios.",
     },
     {
         "id": "provider",
@@ -190,7 +190,7 @@ class OnboardingScreen(Screen):
     def _welcome_content(self) -> Static:
         return Static(
             "\n".join([
-                "DevSynapse AI é um copiloto de operações de repositório que roda localmente no seu terminal.",
+                "DevSynapse AI é um assistente de operações de repositório que roda localmente no seu terminal.",
                 "",
                 "✦ Orquestração inteligente de LLMs",
                 "✦ Execução segura de comandos locais",

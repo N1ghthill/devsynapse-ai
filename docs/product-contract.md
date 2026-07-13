@@ -2,7 +2,7 @@
 
 ## Identity
 
-DevSynapse AI is a packaged, conversational desktop copilot for GitHub, GitHub
+DevSynapse AI is a packaged, conversational desktop assistant for GitHub, GitHub
 Actions and repository work.
 
 Its product value is GitHub expertise delivered through natural dialogue,

@@ -19,7 +19,7 @@ DevSynapse desktop product and its transitional Python/TUI implementation.
 ## Decisions
 
 - [ADR 0001: repository operations
-  copilot](decisions/0001-repository-operations-copilot.md)
+  assistant](decisions/0001-repository-operations-assistant.md)
 - [ADR 0002: packaged desktop and GitHub
   first](decisions/0002-packaged-desktop-github-first.md)
 

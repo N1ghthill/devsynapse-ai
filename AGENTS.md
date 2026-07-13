@@ -2,7 +2,7 @@
 
 ## Project Structure & Architecture
 
-DevSynapse AI is a packaged conversational desktop copilot for GitHub, GitHub
+DevSynapse AI is a packaged conversational desktop assistant for GitHub, GitHub
 Actions and repository work. The target stack is Tauri 2 + React/TypeScript
 with a bundled Python backend. `core/` holds current conversation,
 persistence, routing and transitional execution logic; `devsynapse/` is the

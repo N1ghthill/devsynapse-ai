@@ -3,7 +3,7 @@
 ## Purpose
 
 This plan turns the DevSynapse product direction into an implementation track
-for a packaged desktop GitHub copilot.
+for a packaged desktop GitHub assistant.
 
 The target product is a Tauri 2 + React/TypeScript desktop application with a
 bundled Python backend. Users converse with the assistant, inspect evidence,

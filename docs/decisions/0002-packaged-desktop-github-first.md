@@ -7,7 +7,7 @@
 ## Context
 
 ADR 0001 narrowed DevSynapse from a general coding agent to a repository
-operations copilot, but it retained the Textual TUI as the canonical interface
+operations assistant, but it retained the Textual TUI as the canonical interface
 and treated GitHub as optional. That still assumes terminal familiarity and
 understates the product's main differentiation.
 

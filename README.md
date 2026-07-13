@@ -1,6 +1,6 @@
 # DevSynapse AI
 
-DevSynapse AI is a conversational desktop copilot for GitHub, GitHub Actions
+DevSynapse AI is a conversational desktop assistant for GitHub, GitHub Actions
 and repository work.
 
 It helps new and experienced developers understand projects, diagnose

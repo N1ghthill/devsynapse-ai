@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "devsynapse-ai"
 version = "1.2.5"
-description = "A conversational desktop copilot for GitHub and GitHub Actions"
+description = "A conversational desktop assistant for GitHub and GitHub Actions"
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.33.1",

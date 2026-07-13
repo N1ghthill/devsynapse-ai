@@ -1,4 +1,4 @@
-# ADR 0001: Reposition DevSynapse as a Repository Operations Copilot
+# ADR 0001: Reposition DevSynapse as a Repository Operations Assistant
 
 - Status: accepted, superseded in part by ADR 0002
 - Date: 2026-07-08
@@ -16,7 +16,7 @@ pull requests and releases.
 
 ## Decision
 
-DevSynapse will become a local-first repository operations copilot.
+DevSynapse will become a local-first repository operations assistant.
 
 This decision originally retained the Textual TUI as canonical and treated
 GitHub as optional. ADR 0002 supersedes those interface and integration
