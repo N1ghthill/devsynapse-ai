@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 1.2.7 - 2026-07-13
+## 1.2.8 - 2026-07-13
 
 ### Desktop
 
@@ -10,6 +10,7 @@
 - Removed risky Copilot wording from product copy and package metadata.
 - Added distribution-aware update messaging so Debian package installs use APT
   or a newer `.deb` instead of the AppImage updater path.
+- Added in-app APT setup commands for Debian package installs.
 - Added structured Git evidence and stale-state validation for commit previews.
 
 ### Release
@@ -17,6 +18,7 @@
 - Added GitHub Pages deployment for the generated APT repository.
 - Fixed release workflow authentication for publishing the APT repository.
 - Normalized APT package filenames to Debian-style names without spaces.
+- Added test coverage for APT repository package filename normalization.
 - Documented APT setup, manual `.deb` upgrades and updater verification.
 - Refreshed compatible Rust lockfile dependencies.
 

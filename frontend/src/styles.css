@@ -1010,6 +1010,28 @@ h2 {
   color: var(--muted);
 }
 
+.update-commands {
+  display: grid;
+  gap: 7px;
+  max-width: 820px;
+  padding: 12px;
+  margin-top: 10px;
+  background: rgba(4, 10, 18, 0.84);
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: 8px;
+}
+
+.update-commands code {
+  padding: 8px 9px;
+  overflow-wrap: anywhere;
+  color: var(--text-soft);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 7px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .model-meta span {
   min-height: 28px;
   padding: 5px 8px;

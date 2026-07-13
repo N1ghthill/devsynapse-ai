@@ -26,8 +26,8 @@ launches one installed desktop app; the backend starts and stops with that app.
 Create a version tag:
 
 ```bash
-git tag v1.2.7
-git push origin v1.2.7
+git tag v1.2.8
+git push origin v1.2.8
 ```
 
 The workflow builds packages on native operating-system runners and attaches

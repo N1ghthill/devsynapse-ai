@@ -86,6 +86,13 @@ const contributionUrl = 'https://github.com/sponsors/N1ghthill'
 const productionUpdateEndpoint =
   'https://github.com/N1ghthill/devsynapse-ai/releases/latest/download/latest.json'
 const latestReleaseUrl = 'https://github.com/N1ghthill/devsynapse-ai/releases/latest'
+const aptRepositoryUrl = 'https://n1ghthill.github.io/devsynapse-ai/apt'
+const aptSetupCommands = [
+  `curl -fsSL ${aptRepositoryUrl}/devsynapse-apt-signing-key.asc | sudo gpg --dearmor -o /usr/share/keyrings/devsynapse-archive-keyring.gpg`,
+  `echo "deb [arch=amd64 signed-by=/usr/share/keyrings/devsynapse-archive-keyring.gpg] ${aptRepositoryUrl} stable main" | sudo tee /etc/apt/sources.list.d/devsynapse.list`,
+  'sudo apt update',
+  'sudo apt install dev-synapse-ai',
+]
 
 const fallbackLlmProviders = [
   {
@@ -1561,13 +1568,20 @@ function SettingsPanel() {
           </div>
         </div>
         {appDistribution && !appDistribution.updaterSupported && (
-          <div className="update-note">
-            <CircleAlert size={16} aria-hidden="true" />
-            <span>
-              Installed Debian packages cannot be replaced by the Tauri updater. Install the
-              newest .deb from Releases or use the APT repository when it is hosted.
-            </span>
-          </div>
+          <>
+            <div className="update-note">
+              <CircleAlert size={16} aria-hidden="true" />
+              <span>
+                Installed Debian packages cannot be replaced by the Tauri updater. Use the
+                APT repository below or install the newest .deb from Releases.
+              </span>
+            </div>
+            <div className="update-commands" aria-label="APT update commands">
+              {aptSetupCommands.map((command) => (
+                <code key={command}>{command}</code>
+              ))}
+            </div>
+          </>
         )}
         <div className="auth-box">
           <span>Manifest</span>
