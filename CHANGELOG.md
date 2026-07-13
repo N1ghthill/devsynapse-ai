@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Maintenance
+
+- Updated GitHub Actions artifact and release publishing actions.
+- Synchronized development dependency constraints for CI installs.
+
 ## 1.2.9 - 2026-07-13
 
 ### Desktop
